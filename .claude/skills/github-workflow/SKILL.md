@@ -22,6 +22,9 @@ Ne jamais lancer `gh auth switch` : cela change le compte actif pour tous les au
 - Projet : `gh project list --owner benjamin-callonnec`, `gh project item-add <numero> --owner benjamin-callonnec --url <url-issue>`.
   Le scope `project` est déjà accordé au compte personnel.
 - PR : `gh pr create -R "$REPO" --title ... --body ...` (le corps se termine par la ligne d'attribution Claude Code).
+- Gitflow : commits sur `develop` (aucune Action ne se déclenche). Fin d'étape : `git checkout main`,
+  `git merge --no-ff develop`, retour sur `develop`, puis demander l'accord avant `git push origin main`
+  (c'est ce push qui déclenche la CI et le déploiement Pages).
 - Commits : autorisés dans ce repo. Jamais de `git push` sans accord de l'auteur.
 
 ## Conventions
