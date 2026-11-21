@@ -4,6 +4,7 @@ repos:
     hooks:
       - id: check-yaml
       - id: check-toml
+      - id: check-json
       - id: end-of-file-fixer
       - id: trailing-whitespace
       - id: detect-private-key
@@ -23,7 +24,7 @@ repos:
   - repo: local
     hooks:
       - id: forbid-private-files
-        name: forbid private files (subscribers.txt, .env)
+        name: forbid private files (subscribers.txt, .env*)
         entry: subscribers.txt and .env must never be committed
         language: fail
-        files: (^|/)(subscribers\.txt|\.env)$
+        files: (^|/)(subscribers\.txt|\.env(?!\.example$)(\..+)?)$

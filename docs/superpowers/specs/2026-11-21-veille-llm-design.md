@@ -54,7 +54,9 @@ Public : l'auteur et 2 à 3 amis. Le projet ne coûte rien d'autre que l'abonnem
 - Modèle : Sonnet 5.5 (`claude-sonnet-5-5`) pour la classification et les hooks.
 - Envoi des mails : SMTP (Gmail avec mot de passe d'application), identifiants en GitHub Secrets.
 - **Sécurité (repo public)** :
-  - Les workflows ne se déclenchent que par `schedule` et `workflow_dispatch`. Jamais
+  - Les workflows qui ont accès aux secrets ne se déclenchent que par `schedule` et `workflow_dispatch`.
+    Seul le workflow de contrôle `ci.yml` (sans secret, permissions en lecture seule) se déclenche aussi
+    sur `push` et `pull_request`. Jamais
     `pull_request_target`, ni `issues` ou `issue_comment` sur un workflow qui a accès aux secrets.
   - Aucun collaborateur avec droit d'écriture (un workflow peut lire les secrets).
   - Approbation manuelle activée pour les workflows de contributeurs extérieurs
@@ -64,7 +66,8 @@ Public : l'auteur et 2 à 3 amis. Le projet ne coûte rien d'autre que l'abonnem
   - Les résumés de papiers et d'actualités viennent d'Internet (risque d'injection de prompt) :
     l'agent LLM tourne **sans outil** (pas de fichiers, pas de shell, pas de réseau) et ne
     renvoie que du JSON structuré, qui est validé avant d'être utilisé.
-- Pas de `git commit` par l'assistant en développement : l'auteur commit lui-même. Les commits
+- Dans ce repo, l'auteur autorise l'assistant à commiter (exception à sa règle globale) ; le push
+  demande toujours son accord. Les commits
   automatiques du pipeline sur la branche `data` sont faits par le workflow.
 
 ## 4. Approches envisagées

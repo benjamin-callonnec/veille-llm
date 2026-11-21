@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop hook: run `make check` when Python files changed.
+# Stop hook: run `make check` when Python, JSON, TOML or Makefile files changed.
 # Exit 2 blocks the stop and feeds stderr back to Claude.
 set -u
 
@@ -12,7 +12,7 @@ fi
 
 cd "${CLAUDE_PROJECT_DIR:-$PWD}" || exit 0
 
-changed="$(git status --porcelain --untracked-files=all 2>/dev/null | awk '{print $NF}' | grep -E '\.py$' || true)"
+changed="$(git status --porcelain --untracked-files=all 2>/dev/null | awk '{print $NF}' | grep -E '(\.(py|json|toml)|(^|/)Makefile)$' || true)"
 if [ -z "$changed" ]; then
   exit 0
 fi

@@ -82,3 +82,10 @@ def test_untracked_python_file_triggers_check(repo, tmp_path):
     (repo / "pkg" / "new.py").write_text("y = 1\n")
     result = _run(repo, _fake_make(tmp_path, 1, "LINT ERROR"))
     assert result.returncode == 2
+
+
+def test_modified_settings_json_triggers_check(repo, tmp_path):
+    (repo / ".claude").mkdir()
+    (repo / ".claude" / "settings.json").write_text("{}")
+    result = _run(repo, _fake_make(tmp_path, 1, "LINT ERROR"))
+    assert result.returncode == 2

@@ -23,3 +23,5 @@ def test_gitignore_blocks_private_files():
     lines = (ROOT / ".gitignore").read_text().splitlines()
     assert "subscribers.txt" in lines
     assert ".env" in lines
+    assert ".env.*" in lines
+    assert "!.env.example" in lines

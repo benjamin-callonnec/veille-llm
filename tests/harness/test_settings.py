@@ -29,7 +29,16 @@ def test_force_push_and_private_files_are_denied():
     deny = set(_load()["permissions"]["deny"])
     assert {
         "Bash(git push --force:*)",
-        "Read(./.env)",
-        "Read(./subscribers.txt)",
+        "Bash(git push -f:*)",
+        "Bash(git push --force-with-lease:*)",
+        "Bash(git commit --no-verify:*)",
+        "Bash(git commit -n:*)",
+        "Read(**/.env)",
+        "Read(**/.env.*)",
+        "Read(**/subscribers.txt)",
         "Bash(gh secret list:*)",
     } <= deny
+
+
+def test_every_git_push_asks_for_approval():
+    assert "Bash(git push:*)" in _load()["permissions"]["ask"]

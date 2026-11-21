@@ -31,6 +31,9 @@ Le code v0 actuel est dans `src/veille_llm` et `site/` ; il sera repris dans les
   `GH_TOKEN="$(gh auth token --user benjamin-callonnec)" gh ... -R benjamin-callonnec/veille-llm`.
 - Messages de commit : `type(scope): sujet` court (`feat`, `fix`, `chore`, `docs`, `ci`, `test`).
 
+- Les règles `deny` de `.claude/settings.json` ne sont qu'un garde-fou, pas une barrière : la
+  vraie protection est la protection de branche `main` sur GitHub (pas de force push).
+
 ## Tests
 
 - TDD : test qui échoue d'abord, code minimal ensuite.

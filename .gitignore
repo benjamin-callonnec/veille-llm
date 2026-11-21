@@ -6,4 +6,6 @@ __pycache__/
 site/data.json
 subscribers.txt
 .env
+.env.*
+!.env.example
 .superpowers/
