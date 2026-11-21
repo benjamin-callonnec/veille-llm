@@ -1,11 +1,17 @@
+import asyncio
+
 import pytest
 
 from veille_llm.llm import (
     LlmAuthError,
     LlmError,
     LlmLimitError,
+    LlmOptions,
+    LlmResult,
+    RawReply,
     assert_subscription_auth,
     classify_error,
+    complete_json,
     is_retryable,
     redact,
 )
@@ -50,3 +56,86 @@ def test_redact_masks_oauth_tokens():
     text = "failed with token sk-ant-oat01-AbC_dEf-123 in header"
     assert "sk-ant" not in redact(text)
     assert "[REDACTED]" in redact(text)
+
+
+# --- complete_json ---------------------------------------------------------
+
+SCHEMA = {
+    "type": "object",
+    "properties": {"interesting": {"type": "boolean"}},
+    "required": ["interesting"],
+}
+
+
+def _runner(text="", error=None, seen=None):
+    async def run(prompt, options):
+        if seen is not None:
+            seen.append(options)
+        if error is not None:
+            raise error
+        return RawReply(text=text, input_tokens=12, output_tokens=5, cost_usd=0.001)
+
+    return run
+
+
+def _call(runner):
+    return asyncio.run(complete_json("classify", SCHEMA, runner=runner))
+
+
+@pytest.fixture(autouse=True)
+def _no_api_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+
+def test_returns_validated_json_and_usage():
+    result = _call(_runner('{"interesting": true}'))
+    assert result == LlmResult(
+        data={"interesting": True}, input_tokens=12, output_tokens=5, cost_usd=0.001
+    )
+
+
+def test_accepts_fenced_json_block():
+    assert _call(_runner('```json\n{"interesting": false}\n```')).data == {"interesting": False}
+
+
+def test_rejects_prose_around_json():
+    with pytest.raises(LlmError):
+        _call(_runner('Sure! Here it is: {"interesting": true}'))
+
+
+def test_rejects_json_that_violates_schema():
+    with pytest.raises(LlmError):
+        _call(_runner('{"interesting": "yes"}'))
+
+
+def test_rejects_empty_reply():
+    with pytest.raises(LlmError):
+        _call(_runner(""))
+
+
+def test_runs_with_no_tools_and_one_turn():
+    seen = []
+    _call(_runner('{"interesting": true}', seen=seen))
+    assert isinstance(seen[0], LlmOptions)
+    assert seen[0].tools == []
+    assert seen[0].max_turns == 1
+    assert seen[0].model == "claude-sonnet-5-5"
+
+
+def test_runner_limit_error_becomes_llm_limit_error():
+    with pytest.raises(LlmLimitError):
+        _call(_runner(error=RuntimeError("Claude usage limit reached")))
+
+
+def test_token_in_runner_error_is_redacted():
+    with pytest.raises(LlmError) as info:
+        _call(_runner(error=RuntimeError("boom sk-ant-oat01-SECRET123")))
+    assert "SECRET123" not in str(info.value)
+
+
+def test_refuses_before_calling_runner_when_api_key_set(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-x")
+    seen = []
+    with pytest.raises(LlmError):
+        _call(_runner('{"interesting": true}', seen=seen))
+    assert seen == []
