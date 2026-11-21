@@ -125,7 +125,9 @@ Séquence d'étapes. Chaque étape a une interface commune (entrée, sortie, ét
 
 1. **Collecte** (déterministe, en parallèle) : arXiv (cs.CL, cs.LG, cs.AI), Hugging Face Papers,
    flux RSS des blogs (Anthropic, OpenAI, Hugging Face, Meta AI, Google DeepMind quand ils existent).
-   On préfère les RSS au scraping HTML. Une source sans flux est ignorée en v1.
+   On préfère les RSS au scraping HTML. Une source sans flux est ignorée en v1
+   (vérifié le 2026-11-21 : OpenAI, Hugging Face et DeepMind ont un flux ; Anthropic et Meta AI n'en ont
+   pas d'officiel, voir l'issue « Étendre les sources de données »).
 2. **Filtre déterministe** : fenêtre de dates, mots-clés larges, dédoublonnage, sources de confiance.
 3. **Classification LLM** : par lots (environ 15 items par appel). Sortie structurée :
    intéressant ou non, score, type (papier, actualité, benchmark), catégorie proposée.

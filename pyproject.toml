@@ -3,10 +3,13 @@ name = "veille-llm"
 version = "0.1.0"
 description = "Personal tech watch on LLM architecture papers (arXiv + Hugging Face), published as a static site"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "feedparser>=6.0.14",
+]
 
 [project.scripts]
 veille-llm = "veille_llm.build:main"
+veille-core = "veille_llm.pipeline.run:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6"]
