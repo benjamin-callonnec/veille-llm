@@ -33,7 +33,11 @@ class LlmOutputError(LlmError):
 
 _TOKEN = re.compile(r"sk-ant-[A-Za-z0-9_-]+")
 # Status codes use word boundaries so digits inside a timestamp ("...|1764014010") never match.
-_LIMIT = re.compile(r"usage limit|rate limit|limit reached|too many requests|\b429\b", re.I)
+_LIMIT = re.compile(
+    r"usage limit|rate limit|limit reached|too many requests|\b429\b"
+    r"|hit your[\w\s-]{0,30}\blimit\b",  # "You've hit your 5-hour limit" (observed)
+    re.I,
+)
 _AUTH = re.compile(
     r"\b401\b|invalid bearer token|invalid api key|oauth token|/login|unauthori[sz]ed"
     r"|token has expired|authentication",

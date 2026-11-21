@@ -332,3 +332,21 @@ def test_prompt_without_data_is_unchanged():
     seen = []
     asyncio.run(complete_json("Classify.", SCHEMA, runner=_capture_runner(seen)))
     assert seen[0] == "Classify."
+
+
+def test_real_cli_limit_messages_are_limit_errors():
+    # Observed in a real run (2026-11-21): the CLI reports the 5-hour window like this.
+    assert (
+        classify_error(
+            "ResultError: Claude Code returned an error result: "
+            "You've hit your 5-hour limit · resets 12am (Europe/Paris) (exit code: 1)"
+        )
+        is LlmLimitError
+    )
+    assert classify_error("You've hit your weekly limit") is LlmLimitError
+    assert classify_error("You've hit your usage limit") is LlmLimitError
+    assert not is_retryable(LlmLimitError("hit your 5-hour limit"))
+
+
+def test_unrelated_text_with_the_word_limit_is_not_a_limit_error():
+    assert classify_error("The context window limit of the model is 200k tokens") is LlmError

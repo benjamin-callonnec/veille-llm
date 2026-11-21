@@ -12,6 +12,24 @@ make build       # writes site/data.json (about 35 s: arXiv asks for 3 s between
 make serve       # http://localhost:8000
 ```
 
+## Core pipeline (work in progress)
+
+`veille-core` collects arXiv, Hugging Face and lab blogs, filters them, classifies them with Claude
+(Agent SDK, on your subscription, no API key) and exports a catalogue. The v0 site above is not
+changed yet.
+
+```bash
+env -u ANTHROPIC_API_KEY uv run veille-core run --db build/veille.db --out build/catalogue.json --days 7
+```
+
+- Every LLM batch is saved to SQLite as soon as it is done. If the subscription limit is reached
+  the command exits with code 1 and keeps what is saved; run it again to resume without
+  re-classifying.
+- Only classified and categorised items are exported. Items still unclassified after 3 days are
+  dropped.
+- Categories are proposed by the LLM (12 at most, plus "Autres").
+- Design and plans: `docs/superpowers/`.
+
 ## Deploy on GitHub Pages
 
 1. Push the repo to GitHub.
