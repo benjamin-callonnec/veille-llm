@@ -6,6 +6,7 @@ catalogue (GitHub Pages) et une newsletter hebdomadaire. Coût visé : zéro, ho
 
 Spec : `docs/superpowers/specs/2026-11-21-veille-llm-design.md`. Plans : `docs/superpowers/plans/`.
 Avant de toucher au pipeline, lis le skill `veille-guidelines`.
+Si `graphify-out/` existe (graphe local, ignoré par git, à régénérer avec `/graphify`), consulte `GRAPH_REPORT.md` avant d'explorer.
 
 ## Commandes
 

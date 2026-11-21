@@ -9,3 +9,4 @@ subscribers.txt
 .env.*
 !.env.example
 .superpowers/
+graphify-out/

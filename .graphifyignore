@@ -1,0 +1,3 @@
+# Third-party vendored skills: not part of the project knowledge graph
+.claude/skills/frontend-design/
+.claude/skills/agentic-actions-auditor/
