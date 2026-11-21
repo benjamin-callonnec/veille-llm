@@ -1,4 +1,5 @@
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -9,6 +10,7 @@ from veille_llm.llm import (
     LlmOptions,
     LlmResult,
     RawReply,
+    _reply_from_result,
     assert_subscription_auth,
     classify_error,
     complete_json,
@@ -139,3 +141,46 @@ def test_refuses_before_calling_runner_when_api_key_set(monkeypatch):
     with pytest.raises(LlmError):
         _call(_runner('{"interesting": true}', seen=seen))
     assert seen == []
+
+
+# --- real runner wiring ----------------------------------------------------
+
+
+def test_complete_json_uses_claude_runner_by_default(monkeypatch):
+    calls = []
+
+    async def fake(prompt, options):
+        calls.append(options)
+        return RawReply(
+            text='{"interesting": true}', input_tokens=1, output_tokens=1, cost_usd=None
+        )
+
+    monkeypatch.setattr("veille_llm.llm.claude_runner", fake)
+    result = asyncio.run(complete_json("classify", SCHEMA))
+    assert result.data == {"interesting": True}
+    assert len(calls) == 1
+
+
+def test_reply_from_result_reads_text_usage_and_cost():
+    msg = SimpleNamespace(
+        is_error=False,
+        result='{"interesting": true}',
+        usage={"input_tokens": 30, "output_tokens": 8},
+        total_cost_usd=0.002,
+        errors=None,
+    )
+    assert _reply_from_result(msg) == RawReply(
+        text='{"interesting": true}', input_tokens=30, output_tokens=8, cost_usd=0.002
+    )
+
+
+def test_reply_from_result_raises_on_error_result():
+    msg = SimpleNamespace(
+        is_error=True,
+        result="Claude usage limit reached",
+        usage=None,
+        total_cost_usd=None,
+        errors=None,
+    )
+    with pytest.raises(RuntimeError, match="usage limit"):
+        _reply_from_result(msg)

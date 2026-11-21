@@ -115,8 +115,7 @@ async def complete_json(
 ) -> LlmResult:
     """One tool-less turn that must return JSON valid for `schema`."""
     assert_subscription_auth()
-    if runner is None:
-        raise LlmError("no runner configured")
+    runner = runner or claude_runner
     options = LlmOptions(model=model, tools=[], max_turns=1, system_prompt=SYSTEM_PROMPT)
     try:
         reply = await runner(prompt, options)
@@ -134,3 +133,37 @@ async def complete_json(
         output_tokens=reply.output_tokens,
         cost_usd=reply.cost_usd,
     )
+
+
+def _reply_from_result(message: object) -> RawReply:
+    """Turn the SDK's final result message into a RawReply, or raise with its error text."""
+    if message.is_error:
+        detail = message.result or "; ".join(message.errors or []) or "unknown error"
+        raise RuntimeError(detail)
+    usage = message.usage or {}
+    return RawReply(
+        text=message.result or "",
+        input_tokens=int(usage.get("input_tokens", 0)),
+        output_tokens=int(usage.get("output_tokens", 0)),
+        cost_usd=message.total_cost_usd,
+    )
+
+
+async def claude_runner(prompt: str, options: LlmOptions) -> RawReply:
+    """Run one tool-less turn through the Claude Agent SDK (subscription auth)."""
+    from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
+
+    sdk_options = ClaudeAgentOptions(
+        model=options.model,
+        tools=options.tools,
+        max_turns=options.max_turns,
+        system_prompt=options.system_prompt,
+        setting_sources=[],  # ignore user/project settings, hooks and CLAUDE.md
+    )
+    final = None
+    async for message in query(prompt=prompt, options=sdk_options):
+        if isinstance(message, ResultMessage):
+            final = message
+    if final is None:
+        raise RuntimeError("no result message received from the SDK")
+    return _reply_from_result(final)
