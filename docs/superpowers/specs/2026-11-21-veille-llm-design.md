@@ -215,7 +215,7 @@ marqueur « semaine X envoyée » est dans `veille.db`, donc une relance ne renv
 ## 8. Ordre de livraison
 
 1. Harnais de développement (`.claude/`, pre-commit, stop hook, premier push).
-2. Spike LLM : vérifier que le Claude Agent SDK tourne en headless dans GitHub Actions avec
+2. Spike LLM (fait, GO : voir `docs/superpowers/specs/2026-11-21-spike-llm-result.md`) : vérifier que le Claude Agent SDK tourne en headless dans GitHub Actions avec
    `CLAUDE_CODE_OAUTH_TOKEN`. Condition d'arrêt : toute erreur de limite ou d'authentification
    fait sortir le job en erreur, résultats déjà enregistrés conservés, sans bascule payante.
    Budget visé : quelques dizaines d'appels par jour (environ 400 papiers filtrés en
