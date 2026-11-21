@@ -4,3 +4,6 @@ __pycache__/
 .ruff_cache/
 .coverage
 site/data.json
+subscribers.txt
+.env
+.superpowers/

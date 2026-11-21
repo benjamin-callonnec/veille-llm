@@ -1,4 +1,4 @@
-.PHONY: install unittest build serve lint
+.PHONY: install unittest build serve lint check
 
 install:
 	uv sync
@@ -9,6 +9,11 @@ unittest:
 lint:
 	uv run ruff check --fix src tests
 	uv run ruff format src tests
+
+check:
+	uv run ruff check src tests
+	uv run ruff format --check src tests
+	uv run pytest
 
 build:
 	uv run veille-llm --days 7
