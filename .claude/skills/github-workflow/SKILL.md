@@ -10,18 +10,18 @@ utiliser le compte personnel et cibler le repo explicitement :
 
 ```bash
 export GH_TOKEN="$(gh auth token --user benjamin-callonnec)"
-R="-R benjamin-callonnec/veille-llm"
+REPO=benjamin-callonnec/veille-llm   # puis toujours: -R "$REPO"
 ```
 
 Ne jamais lancer `gh auth switch` : cela change le compte actif pour tous les autres repos.
 
 ## Commandes
 
-- Issues : `gh issue create $R --title ... --body ... --label core`, `gh issue list $R`,
-  `gh issue edit $R <n> ...`, `gh issue close $R <n>`.
+- Issues : `gh issue create -R "$REPO" --title ... --body ... --label core`, `gh issue list -R "$REPO"`,
+  `gh issue edit -R "$REPO" <n> ...`, `gh issue close -R "$REPO" <n>`.
 - Projet : `gh project list --owner benjamin-callonnec`, `gh project item-add <numero> --owner benjamin-callonnec --url <url-issue>`.
   Le scope `project` est déjà accordé au compte personnel.
-- PR : `gh pr create $R --title ... --body ...` (le corps se termine par la ligne d'attribution Claude Code).
+- PR : `gh pr create -R "$REPO" --title ... --body ...` (le corps se termine par la ligne d'attribution Claude Code).
 - Commits : autorisés dans ce repo. Jamais de `git push` sans accord de l'auteur.
 
 ## Conventions
