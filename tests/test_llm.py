@@ -8,11 +8,13 @@ from veille_llm.llm import (
     LlmError,
     LlmLimitError,
     LlmOptions,
+    LlmOutputError,
     LlmResult,
     RawReply,
     _reply_from_result,
     assert_subscription_auth,
     classify_error,
+    claude_runner,
     complete_json,
     is_retryable,
     redact,
@@ -184,3 +186,109 @@ def test_reply_from_result_raises_on_error_result():
     )
     with pytest.raises(RuntimeError, match="usage limit"):
         _reply_from_result(msg)
+
+
+# --- review fixes ----------------------------------------------------------
+
+
+def test_classify_error_ignores_numbers_inside_timestamps():
+    assert classify_error("Claude AI usage limit reached|1764014010") is LlmLimitError
+    assert classify_error("something 1764014010 happened") is LlmError
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["Invalid API key · Please run /login", "OAuth token has expired", "401 Unauthorized"],
+)
+def test_classify_error_recognises_real_cli_auth_messages(message):
+    assert classify_error(message) is LlmAuthError
+
+
+def test_schema_error_mentioning_500_is_not_retryable():
+    with pytest.raises(LlmOutputError) as info:
+        _call(_runner('{"interesting": 500}'))
+    assert not is_retryable(info.value)
+
+
+def test_limit_message_returned_as_reply_is_classified():
+    with pytest.raises(LlmLimitError):
+        _call(_runner("Claude AI usage limit reached|1764014010"))
+
+
+def test_unparseable_reply_error_keeps_a_redacted_excerpt():
+    with pytest.raises(LlmOutputError) as info:
+        _call(_runner("garbage sk-ant-oat01-ZZZ blah"))
+    assert "garbage" in str(info.value)
+    assert "ZZZ" not in str(info.value)
+
+
+def test_empty_reply_is_an_output_error():
+    with pytest.raises(LlmOutputError):
+        _call(_runner(""))
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_BASE_URL",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_VERTEX",
+    ],
+)
+def test_guard_refuses_other_billing_variables(name):
+    with pytest.raises(LlmError):
+        assert_subscription_auth({name: "1"})
+
+
+def test_unexpected_exception_message_includes_its_type():
+    with pytest.raises(LlmError, match="TimeoutError"):
+        _call(_runner(error=TimeoutError()))
+
+
+OPTIONS = LlmOptions(model="claude-sonnet-5-5", tools=[], max_turns=1, system_prompt="x")
+
+
+def test_claude_runner_refuses_when_api_key_set(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-x")
+    with pytest.raises(LlmError):
+        asyncio.run(claude_runner("p", OPTIONS))
+
+
+def _fake_query(messages, captured):
+    async def fake(*, prompt, options):
+        captured.append(options)
+        for message in messages:
+            yield message
+
+    return fake
+
+
+def test_claude_runner_passes_isolation_options(monkeypatch):
+    from claude_agent_sdk import ResultMessage
+
+    final = ResultMessage(
+        subtype="success",
+        duration_ms=1,
+        duration_api_ms=1,
+        is_error=False,
+        num_turns=1,
+        session_id="s",
+        result='{"a": 1}',
+        usage={"input_tokens": 3, "output_tokens": 4},
+        total_cost_usd=0.1,
+    )
+    captured = []
+    monkeypatch.setattr("claude_agent_sdk.query", _fake_query([final], captured))
+    reply = asyncio.run(claude_runner("p", OPTIONS))
+    assert reply.text == '{"a": 1}'
+    assert captured[0].tools == []
+    assert captured[0].max_turns == 1
+    assert captured[0].setting_sources == []
+    assert captured[0].strict_mcp_config is True
+
+
+def test_claude_runner_raises_on_empty_stream(monkeypatch):
+    monkeypatch.setattr("claude_agent_sdk.query", _fake_query([], []))
+    with pytest.raises(RuntimeError):
+        asyncio.run(claude_runner("p", OPTIONS))

@@ -10,6 +10,7 @@ import os
 import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from typing import Any
 
 import jsonschema
 
@@ -26,32 +27,49 @@ class LlmLimitError(LlmError):
     """Subscription limit reached. Never retry: stop and keep what is already saved."""
 
 
+class LlmOutputError(LlmError):
+    """The call worked but the reply is empty, not JSON, or does not match the schema."""
+
+
 _TOKEN = re.compile(r"sk-ant-[A-Za-z0-9_-]+")
-_AUTH_MARKERS = ("401", "invalid bearer token", "authentication")
-_LIMIT_MARKERS = ("usage limit", "rate limit", "limit reached", "429")
-_RETRYABLE_MARKERS = ("500", "502", "503", "504", "overloaded")
+# Status codes use word boundaries so digits inside a timestamp ("...|1764014010") never match.
+_LIMIT = re.compile(r"usage limit|rate limit|limit reached|too many requests|\b429\b", re.I)
+_AUTH = re.compile(
+    r"\b401\b|invalid bearer token|invalid api key|oauth token|/login|unauthori[sz]ed"
+    r"|token has expired|authentication",
+    re.I,
+)
+_RETRYABLE = re.compile(r"\b(500|502|503|504)\b|overloaded", re.I)
+# Any of these would move billing off the subscription.
+_BILLING_VARIABLES = (
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+)
 
 
 def assert_subscription_auth(env: Mapping[str, str] = os.environ) -> None:
-    """Refuse to run when an API key is set: that would bill per token, not use the plan."""
-    if env.get("ANTHROPIC_API_KEY"):
-        raise LlmError("ANTHROPIC_API_KEY is set: unset it, calls must use the subscription")
+    """Refuse to run when a variable would bill per token instead of using the plan."""
+    for name in _BILLING_VARIABLES:
+        if env.get(name):
+            raise LlmError(f"{name} is set: unset it, calls must use the subscription")
 
 
 def classify_error(message: str) -> type[LlmError]:
-    lowered = message.lower()
-    if any(marker in lowered for marker in _AUTH_MARKERS):
-        return LlmAuthError
-    if any(marker in lowered for marker in _LIMIT_MARKERS):
+    """Limit is checked first: a limit must never be mistaken for a revoked token."""
+    if _LIMIT.search(message):
         return LlmLimitError
+    if _AUTH.search(message):
+        return LlmAuthError
     return LlmError
 
 
 def is_retryable(exc: Exception) -> bool:
-    if isinstance(exc, (LlmLimitError, LlmAuthError)):
+    if isinstance(exc, (LlmLimitError, LlmAuthError, LlmOutputError)):
         return False
-    lowered = str(exc).lower()
-    return any(marker in lowered for marker in _RETRYABLE_MARKERS)
+    return bool(_RETRYABLE.search(str(exc)))
 
 
 def redact(text: str) -> str:
@@ -84,7 +102,7 @@ class RawReply:
 
 @dataclass(frozen=True)
 class LlmResult:
-    data: dict
+    data: Any
     input_tokens: int
     output_tokens: int
     cost_usd: float | None
@@ -99,11 +117,20 @@ def _parse_json(text: str) -> object:
     if fenced:
         body = fenced.group(1).strip()
     if not body:
-        raise LlmError("empty reply")
+        raise LlmOutputError("empty reply")
+
+    def reject_constant(name: str) -> object:
+        raise ValueError(name)
+
     try:
-        return json.loads(body)
-    except json.JSONDecodeError as exc:
-        raise LlmError(f"reply is not valid JSON: {exc.msg}") from None
+        return json.loads(body, parse_constant=reject_constant)
+    except ValueError:
+        excerpt = redact(text.strip()[:200])
+        # The CLI may return a limit or auth message as the reply: keep it, typed.
+        error_type = classify_error(excerpt)
+        if error_type is not LlmError:
+            raise error_type(excerpt) from None
+        raise LlmOutputError(f"reply is not valid JSON: {excerpt}") from None
 
 
 async def complete_json(
@@ -120,13 +147,13 @@ async def complete_json(
     try:
         reply = await runner(prompt, options)
     except Exception as exc:  # noqa: BLE001 - reclassified below, message redacted
-        message = redact(str(exc))
+        message = redact(f"{type(exc).__name__}: {exc}")
         raise classify_error(message)(message) from None
     data = _parse_json(reply.text)
     try:
         jsonschema.validate(data, schema)
     except jsonschema.ValidationError as exc:
-        raise LlmError(f"reply does not match the schema: {exc.message}") from None
+        raise LlmOutputError(f"reply does not match the schema: {exc.message}") from None
     return LlmResult(
         data=data,
         input_tokens=reply.input_tokens,
@@ -151,6 +178,7 @@ def _reply_from_result(message: object) -> RawReply:
 
 async def claude_runner(prompt: str, options: LlmOptions) -> RawReply:
     """Run one tool-less turn through the Claude Agent SDK (subscription auth)."""
+    assert_subscription_auth()
     from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
     sdk_options = ClaudeAgentOptions(
@@ -159,6 +187,7 @@ async def claude_runner(prompt: str, options: LlmOptions) -> RawReply:
         max_turns=options.max_turns,
         system_prompt=options.system_prompt,
         setting_sources=[],  # ignore user/project settings, hooks and CLAUDE.md
+        strict_mcp_config=True,  # and no MCP servers (none are passed)
     )
     final = None
     async for message in query(prompt=prompt, options=sdk_options):
