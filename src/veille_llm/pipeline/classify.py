@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from veille_llm.llm import LlmError, LlmOutputError, Runner, complete_json, redact
 from veille_llm.models import Item, Verdict
@@ -23,7 +23,7 @@ CLASSIFY_SCHEMA = {
                     "interesting": {"type": "boolean"},
                     "score": {"type": "integer", "minimum": 0, "maximum": 10},
                     "type": {"enum": ["paper", "news", "benchmark"]},
-                    "category_hint": {"type": "string", "maxLength": 40},
+                    "category_hint": {"type": "string", "maxLength": 80},
                 },
                 "required": ["id", "interesting", "score", "type", "category_hint"],
                 "additionalProperties": False,
@@ -49,6 +49,7 @@ INSTRUCTIONS = (
 class ClassifyOutcome:
     classified: int = 0
     skipped_batches: int = 0
+    skip_reasons: list[str] = field(default_factory=list)
     stopped: str | None = None
 
 
@@ -77,7 +78,7 @@ async def classify_batch(items: list[Item], *, runner: Runner | None = None) -> 
                 interesting=entry["interesting"],
                 score=entry["score"],
                 type=entry["type"],
-                category_hint=entry["category_hint"],
+                category_hint=entry["category_hint"][:40],
             )
         )
     return verdicts
@@ -90,8 +91,9 @@ async def classify_pending(store: Store, *, runner: Runner | None = None) -> Cla
         batch = pending[start : start + BATCH_SIZE]
         try:
             verdicts = await classify_batch(batch, runner=runner)
-        except LlmOutputError:
+        except LlmOutputError as exc:
             outcome.skipped_batches += 1
+            outcome.skip_reasons.append(redact(str(exc))[:200])
             continue
         except LlmError as exc:
             outcome.stopped = redact(f"{type(exc).__name__}: {exc}")

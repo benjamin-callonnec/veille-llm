@@ -121,3 +121,12 @@ def test_store_survives_reopen(tmp_path):
     second = Store(path)
     assert second.known_ids(["a"]) == {"a"}
     assert [i.id for i, _ in second.pending_enrichment()] == ["a"]
+
+
+def test_refresh_upvotes_raises_but_never_lowers_and_keeps_status(store):
+    store.upsert_items([item("a", upvotes=3)], NOW)
+    store.save_verdicts([verdict("a")])
+    store.refresh_upvotes({"a": 9, "ghost": 5})
+    store.refresh_upvotes({"a": 4})
+    (pending, _) = store.pending_enrichment()[0]
+    assert pending.upvotes == 9

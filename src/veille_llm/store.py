@@ -98,6 +98,14 @@ class Store:
                 )
         return len({i.id for i in items} - existing)
 
+    def refresh_upvotes(self, upvotes: dict[str, int]) -> None:
+        """Raise (never lower) the upvotes of known items, whatever their status."""
+        with self._conn:
+            for item_id, votes in upvotes.items():
+                self._conn.execute(
+                    "UPDATE items SET upvotes = MAX(upvotes, ?) WHERE id = ?", (votes, item_id)
+                )
+
     def pending_classification(self, limit: int | None = None) -> list[Item]:
         sql = f"SELECT {_ITEM_COLUMNS} FROM items WHERE status = 'new' ORDER BY published DESC"
         if limit is not None:

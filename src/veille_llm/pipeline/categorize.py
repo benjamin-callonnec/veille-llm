@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from veille_llm.llm import LlmError, LlmOutputError, Runner, complete_json, redact
 from veille_llm.models import Enrichment
@@ -22,7 +22,7 @@ ENRICH_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "id": {"type": "string"},
-                    "category": {"type": "string", "minLength": 1, "maxLength": 40},
+                    "category": {"type": "string", "minLength": 1, "maxLength": 120},
                     "hook": {"type": "string", "maxLength": 400},
                 },
                 "required": ["id", "category", "hook"],
@@ -47,12 +47,28 @@ INSTRUCTIONS = (
 class EnrichOutcome:
     enriched: int = 0
     skipped_batches: int = 0
+    skip_reasons: list[str] = field(default_factory=list)
     stopped: str | None = None
 
 
+CATEGORY_MAX = 40
+
+
+def _category_is_safe(name: str) -> bool:
+    """Letters, digits, spaces, hyphen and slash only: no markup, domain or link."""
+    lowered = name.lower()
+    return (
+        bool(name)
+        and name[0].isalnum()
+        and all(ch.isalnum() or ch in " /-" for ch in name)
+        and "http" not in lowered
+        and "www" not in lowered
+    )
+
+
 def normalise_category(name: str, existing: list[str]) -> str:
-    cleaned = " ".join(name.split())
-    if not cleaned:
+    cleaned = " ".join(name.split())[:CATEGORY_MAX].strip()
+    if not _category_is_safe(cleaned):
         return FALLBACK_CATEGORY
     for known in existing:
         if known.casefold() == cleaned.casefold():
@@ -91,8 +107,9 @@ async def enrich_pending(store: Store, *, runner: Runner | None = None) -> Enric
         }
         try:
             result = await complete_json(INSTRUCTIONS, ENRICH_SCHEMA, data=data, runner=runner)
-        except LlmOutputError:
+        except LlmOutputError as exc:
             outcome.skipped_batches += 1
+            outcome.skip_reasons.append(redact(str(exc))[:200])
             continue
         except LlmError as exc:
             outcome.stopped = redact(f"{type(exc).__name__}: {exc}")

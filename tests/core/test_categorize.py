@@ -125,3 +125,23 @@ def test_enrich_pending_stops_on_limit_after_saving_previous_batches():
     assert outcome.enriched == 30
     assert outcome.stopped.startswith("LlmLimitError")
     assert len(store.pending_enrichment()) == 1
+
+
+def test_normalise_rejects_markup_and_domains_in_categories():
+    assert normalise_category("<img src=x onerror=alert(1)>", []) == FALLBACK_CATEGORY
+    assert normalise_category("see evil.com", []) == FALLBACK_CATEGORY
+    assert normalise_category("visit www home", []) == FALLBACK_CATEGORY
+    assert normalise_category("Agents & tools", []) == FALLBACK_CATEGORY
+    assert normalise_category("Reasoning / Planning", []) == "Reasoning / Planning"
+    assert normalise_category("Mémoire longue-durée", []) == "Mémoire longue-durée"
+
+
+def test_overlong_category_is_truncated_not_rejected_by_the_schema():
+    store = seeded(1)
+
+    async def run(prompt, options):
+        return reply([{"id": "i00", "category": "word " * 14, "hook": "Hook."}])
+
+    outcome = asyncio.run(enrich_pending(store, runner=run))
+    assert outcome.enriched == 1
+    assert len(store.category_names()[0]) <= 40

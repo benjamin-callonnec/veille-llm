@@ -20,9 +20,23 @@ Date : 2026-11-21, commande `veille-core run` sur l'abonnement, base `build/test
 - 13 catégories dont `Autres` (6 items), par exemple Agent Tooling (35), Inference Efficiency (32),
   Reasoning Methods (28), AI Security (20), Benchmarks (17).
 
-## Conclusion et points à décider
-- Le premier remplissage (backfill) de 7 jours consomme toute la fenêtre de 5 heures. Le régime
-  quotidien (environ un septième) est beaucoup plus léger, mais le pipeline devrait plafonner le
-  nombre de lots par exécution pour ne pas vider ta fenêtre d'usage interactif. À décider.
-- Qualité des catégories et des hooks : plausible sur les exemples lus ; une relecture humaine d'un
-  échantillon plus large reste à faire.
+## Ce que la revue a trouvé dans ces chiffres
+- Les 450 items restés `new` ne sont pas « en attente de la limite » : ils forment exactement 30 lots
+  de 15 sur 84 appels de classification, perdus parce que le schéma limitait `category_hint` à
+  40 caractères (une réponse trop longue invalidait tout le lot). Corrigé : le schéma accepte 80
+  caractères et le code tronque à 40. Les lots ignorés sont maintenant comptés et leur raison est
+  affichée dans le résumé du run.
+- Seuls 23 papiers arXiv sur 1209 avaient des upvotes Hugging Face, car ils n'étaient lus qu'à la
+  première vue du papier. Corrigé : les upvotes des papiers déjà connus sont mis à jour à chaque run.
+- Les catégories (jusqu'à 40 caractères, issues du modèle) ne sont plus publiées si elles contiennent
+  autre chose que lettres, chiffres, espaces, tiret ou barre oblique, ni `http` ni `www`.
+
+## Mesures et conclusions
+- **Non mesuré** : la consommation réelle de l'abonnement. Les jetons n'étaient pas comptés pendant
+  ces essais ; `veille-core` affiche maintenant les jetons et le coût indicatif du SDK à chaque
+  run. La fenêtre de 5 heures est aussi partagée avec l'usage interactif du même compte : on ne
+  peut pas attribuer son épuisement au seul pipeline. Seul fait établi : la limite a été atteinte
+  pendant le run de 7 jours, qui avait beaucoup de lots perdus et réessayés.
+- À décider : plafonner le nombre de lots par exécution (par exemple 20, option `--max-batches`).
+- Qualité des catégories et des hooks : plausible sur les exemples lus, mais seul un échantillon
+  de 4 items a été relu. Une relecture humaine d'un échantillon plus large reste à faire.

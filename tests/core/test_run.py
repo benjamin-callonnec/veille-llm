@@ -131,3 +131,28 @@ def test_main_returns_1_when_stopped_and_0_otherwise(tmp_path):
     args = ["run", "--db", str(tmp_path / "v.db"), "--out", str(tmp_path / "c.json")]
     assert main(args, sources=source([news("a")]), runner=Llm(limit_on_call=1), now=NOW) == 1
     assert main(args, sources=source([news("a")]), runner=Llm(), now=NOW) == 0
+
+
+def test_run_refreshes_upvotes_of_papers_already_known(tmp_path):
+    store, out = Store(":memory:"), tmp_path / "c.json"
+    paper = Item(
+        "arxiv:x",
+        "arxiv",
+        "paper",
+        "LLM agents paper",
+        "About LLM agents",
+        "https://e.com",
+        [],
+        "2026-11-20T10:00:00Z",
+    )
+    run(store, out, [paper], Llm())
+    assert json.loads(out.read_text())["items"][0]["upvotes"] == 0
+    run(store, out, [paper], Llm(), upvotes=lambda: {"x": 9})
+    assert json.loads(out.read_text())["items"][0]["upvotes"] == 9
+
+
+def test_run_reports_skipped_batches_and_token_usage(tmp_path):
+    llm = Llm()
+    report = run(Store(":memory:"), tmp_path / "c.json", [news("a"), news("b")], llm)
+    assert report.input_tokens == llm.calls and report.output_tokens == llm.calls
+    assert report.skipped_batches == 0

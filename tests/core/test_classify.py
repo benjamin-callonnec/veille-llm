@@ -138,3 +138,23 @@ def test_classify_pending_does_nothing_when_nothing_pending():
     outcome = asyncio.run(classify_pending(Store(":memory:"), runner=runner))
     assert (outcome.classified, outcome.skipped_batches, outcome.stopped) == (0, 0, None)
     assert runner.prompts == []
+
+
+def test_overlong_category_hint_is_truncated_instead_of_losing_the_batch():
+    long_hint = "x" * 70
+    runner = Script(reply([{**entry("a"), "category_hint": long_hint}, entry("b")]))
+    verdicts = asyncio.run(classify_batch([make("a"), make("b")], runner=runner))
+    assert [v.item_id for v in verdicts] == ["a", "b"]
+    assert len(verdicts[0].category_hint) == 40
+
+
+def test_skipped_batches_keep_their_reason():
+    store = Store(":memory:")
+    store.upsert_items([make("a")], NOW)
+
+    async def run(prompt, options):
+        return RawReply("this is not json", 1, 1, None)
+
+    outcome = asyncio.run(classify_pending(store, runner=run))
+    assert outcome.skipped_batches == 1
+    assert "not valid JSON" in outcome.skip_reasons[0]
