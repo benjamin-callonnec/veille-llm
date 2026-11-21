@@ -10,3 +10,5 @@ subscribers.txt
 !.env.example
 .superpowers/
 graphify-out/
+build/
+*.db

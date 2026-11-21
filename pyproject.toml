@@ -9,6 +9,7 @@ dependencies = [
 
 [project.scripts]
 veille-llm = "veille_llm.build:main"
+veille-core = "veille_llm.pipeline.run:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6"]
