@@ -55,8 +55,8 @@ Public : l'auteur et 2 à 3 amis. Le projet ne coûte rien d'autre que l'abonnem
 - Envoi des mails : SMTP (Gmail avec mot de passe d'application), identifiants en GitHub Secrets.
 - **Sécurité (repo public)** :
   - Les workflows qui ont accès aux secrets ne se déclenchent que par `schedule` et `workflow_dispatch`.
-    Seul le workflow de contrôle `ci.yml` (sans secret, permissions en lecture seule) se déclenche aussi
-    sur `push` et `pull_request`. Jamais
+    Seul le workflow de contrôle `ci.yml` (sans secret, permissions en lecture seule) se déclenche aussi,
+    au `push` sur `main` uniquement (gitflow : on travaille sur `develop`, sans Action). Jamais
     `pull_request_target`, ni `issues` ou `issue_comment` sur un workflow qui a accès aux secrets.
   - Aucun collaborateur avec droit d'écriture (un workflow peut lire les secrets).
   - Approbation manuelle activée pour les workflows de contributeurs extérieurs

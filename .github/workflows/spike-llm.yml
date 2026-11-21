@@ -16,7 +16,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@v6
-      - run: uv sync --group llm
+      - run: uv sync --locked
       - name: Run the LLM spike
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

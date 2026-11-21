@@ -25,6 +25,11 @@ Le code v0 actuel est dans `src/veille_llm` et `site/` ; il sera repris dans les
 
 ## Git et GitHub
 
+- Gitflow à deux branches : on travaille et on commite sur `develop`. Les GitHub Actions ne se
+  déclenchent qu'au push de `main`, jamais au push de `develop`.
+- À la fin de chaque étape (un plan terminé et revu), merge `develop` dans `main` avec
+  `git merge --no-ff develop`, puis demande l'accord de l'auteur avant `git push origin main`.
+  Ne pousse `develop` que si l'auteur le demande : il le pousse lui-même régulièrement.
 - Dans ce repo, tu peux commiter toi-même (autorisation de l'auteur, propre à ce repo).
   Jamais de `git push` sans accord explicite, jamais de `git push --force`.
 - Identité du repo : adresse personnelle (déjà configurée en local). Ne jamais utiliser l'adresse pro.
