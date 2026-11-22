@@ -11,7 +11,7 @@ from pathlib import Path
 
 from veille_llm.llm import DEFAULT_MODEL, RawReply, Runner, claude_runner
 from veille_llm.pipeline.categorize import enrich_pending
-from veille_llm.pipeline.classify import classify_pending
+from veille_llm.pipeline.classify import BATCH_SIZE, classify_pending
 from veille_llm.pipeline.export import export_catalogue
 from veille_llm.pipeline.filtering import deterministic_filter
 from veille_llm.sources import RSS_FEEDS, Source, SourceReport, collect_all
@@ -21,6 +21,7 @@ from veille_llm.sources.rss_source import rss_source
 from veille_llm.store import Store
 
 _STAMP = "%Y-%m-%dT%H:%M:%SZ"
+DEFAULT_MAX_BATCHES = 20  # about 300 items per run; revisit once Haiku consumption is measured
 
 
 @dataclass
@@ -37,6 +38,7 @@ class RunReport:
     output_tokens: int = 0
     cost_usd: float = 0.0
     stopped: str | None = None
+    capped: bool = False
 
 
 class _Meter:
@@ -44,8 +46,10 @@ class _Meter:
 
     def __init__(self, inner: Runner) -> None:
         self.inner, self.input_tokens, self.output_tokens, self.cost_usd = inner, 0, 0, 0.0
+        self.calls = 0
 
     async def __call__(self, prompt: str, options) -> RawReply:
+        self.calls += 1
         reply = await self.inner(prompt, options)
         self.input_tokens += reply.input_tokens
         self.output_tokens += reply.output_tokens
@@ -63,6 +67,7 @@ async def run_pipeline(
     runner: Runner | None = None,
     upvotes: Callable[[], dict[str, int]] | None = None,
     model: str = DEFAULT_MODEL,
+    max_batches: int | None = None,
 ) -> RunReport:
     report = RunReport()
     meter = _Meter(runner or claude_runner)
@@ -79,18 +84,33 @@ async def run_pipeline(
     )
     report.new = store.upsert_items(fresh, stamp)
 
-    classified = await classify_pending(store, runner=meter, model=model)
+    # Keep part of the budget for hooks, or a long backlog would abandon interesting items
+    # (after 3 days) before they were ever enriched.
+    classify_cap = max_batches
+    if max_batches is not None:
+        waiting = -(-len(store.pending_enrichment()) // BATCH_SIZE)
+        classify_cap = max_batches - min(waiting, max_batches // 3)
+    classified = await classify_pending(store, runner=meter, model=model, max_batches=classify_cap)
     report.classified = classified.classified
     report.skipped_batches = classified.skipped_batches
     report.skip_reasons = list(classified.skip_reasons)
     report.stopped = classified.stopped
-    if classified.stopped is None:  # never call the LLM again right after it stopped us
-        enriched = await enrich_pending(store, runner=meter, model=model)
+    report.capped = classified.capped
+    left = None if max_batches is None else max_batches - meter.calls
+    if classified.stopped is None and not (left is not None and left <= 0):
+        # never call the LLM again right after it stopped us or once the budget is spent
+        enriched = await enrich_pending(store, runner=meter, model=model, max_batches=left)
         report.enriched = enriched.enriched
         report.skipped_batches += enriched.skipped_batches
         report.skip_reasons += enriched.skip_reasons
         report.stopped = enriched.stopped
+        report.capped = report.capped or enriched.capped
+    elif classified.stopped is None:
+        report.capped = report.capped or bool(store.pending_enrichment())
 
+    if report.stopped is None and report.classified == 0 and report.enriched == 0:
+        if report.skipped_batches:
+            report.stopped = "every LLM batch was rejected (see skipped reasons)"
     report.input_tokens, report.output_tokens = meter.input_tokens, meter.output_tokens
     report.cost_usd = meter.cost_usd
     export_catalogue(store, out, now=now)
@@ -112,9 +132,18 @@ def _summary(report: RunReport) -> str:
     for source in report.sources:
         status = "ok" if source.ok else f"FAILED ({source.error})"
         lines.append(f"  source {source.name}: {source.count} items, {status}")
+    if report.capped:
+        lines.append("CAPPED: batch limit reached, the rest resumes on the next run")
     if report.stopped:
         lines.append(f"STOPPED: {report.stopped}")
     return "\n".join(lines)
+
+
+def _positive_int(text: str) -> int:
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return value
 
 
 def main(
@@ -130,6 +159,12 @@ def main(
     run.add_argument("--db", type=Path, default=Path("veille.db"))
     run.add_argument("--out", type=Path, default=Path("build/catalogue.json"))
     run.add_argument("--days", type=int, default=7)
+    run.add_argument(
+        "--max-batches",
+        type=_positive_int,
+        default=DEFAULT_MAX_BATCHES,
+        help="LLM batches per run (classification + hooks); the rest waits for the next run",
+    )
     run.add_argument("--model", default=DEFAULT_MODEL, help="Claude model used for every LLM call")
     args = parser.parse_args(argv)
 
@@ -148,6 +183,7 @@ def main(
                 out=args.out,
                 runner=runner,
                 model=args.model,
+                max_batches=args.max_batches,
                 upvotes=hf_upvotes if live else None,
             )
         )

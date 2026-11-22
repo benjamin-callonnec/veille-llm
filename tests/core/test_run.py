@@ -169,3 +169,63 @@ def test_main_model_option_reaches_every_llm_call_and_defaults_to_haiku(tmp_path
     main(args, sources=source([news("b")]), runner=default, now=NOW)
     assert sonnet.models == {"claude-sonnet-5-5"}
     assert default.models == {"claude-haiku-5-5"}
+
+
+def test_max_batches_caps_llm_calls_and_the_next_run_resumes(tmp_path):
+    store, out = Store(":memory:"), tmp_path / "c.json"
+    items = [news(f"{n:02d}") for n in range(20)]  # 2 classification batches, 2 enrichment
+    first_llm = Llm()
+    first = run(store, out, items, first_llm, max_batches=1)
+    assert first_llm.calls == 1 and first.classified == 15 and first.enriched == 0
+    assert first.capped and first.stopped is None
+    second_llm = Llm()
+    second = run(store, out, items, second_llm)
+    assert not second.capped and second.stopped is None
+    assert len(json.loads(out.read_text())["items"]) == 20
+
+
+def test_max_batches_is_shared_between_classification_and_enrichment(tmp_path):
+    llm = Llm()
+    report = run(Store(":memory:"), tmp_path / "c.json", [news("a")], llm, max_batches=2)
+    assert llm.calls == 2 and report.enriched == 1 and not report.capped
+
+
+def test_main_defaults_to_20_batches_and_returns_0_when_capped(tmp_path):
+    args = ["run", "--db", str(tmp_path / "v.db"), "--out", str(tmp_path / "c.json")]
+    items = [news(f"{n:03d}") for n in range(20 * 15 + 1)]
+    llm = Llm()
+    assert main([*args, "--max-batches", "1"], sources=source(items), runner=llm, now=NOW) == 0
+    assert llm.calls == 1
+
+
+def test_capped_is_reported_when_the_budget_ends_before_the_hooks(tmp_path):
+    report = run(Store(":memory:"), tmp_path / "c.json", [news("a")], Llm(), max_batches=1)
+    assert report.classified == 1 and report.enriched == 0 and report.capped
+
+
+def test_a_capped_backlog_still_leaves_budget_for_hooks(tmp_path):
+    store, out = Store(":memory:"), tmp_path / "c.json"
+    items = [news(f"{n:03d}") for n in range(15 * 6)]  # 6 classification batches
+    first = run(store, out, items, Llm(), max_batches=3)
+    assert first.classified == 15 * 3 and first.enriched == 0  # nothing to enrich yet: all spent
+    # Interesting items now wait for hooks: next run must spend part of its budget on them.
+    second_llm = Llm()
+    second = run(store, out, items, second_llm, max_batches=3)
+    assert second.enriched > 0 and second.classified > 0
+
+
+def test_main_rejects_a_zero_batch_budget(tmp_path):
+    import pytest
+
+    args = ["run", "--db", str(tmp_path / "v.db"), "--out", str(tmp_path / "c.json")]
+    with pytest.raises(SystemExit):
+        main([*args, "--max-batches", "0"], sources=source([news("a")]), runner=Llm(), now=NOW)
+
+
+def test_run_fails_visibly_when_every_batch_is_rejected(tmp_path):
+    class Garbage(Llm):
+        async def __call__(self, prompt, options):
+            return RawReply("not json", 1, 1, None)
+
+    report = run(Store(":memory:"), tmp_path / "c.json", [news("a")], Garbage())
+    assert report.classified == 0 and report.skipped_batches == 1 and report.stopped
