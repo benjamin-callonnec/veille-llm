@@ -14,7 +14,8 @@ export type IconName =
   | "chevron"
   | "compose"
   | "close"
-  | "quiz";
+  | "quiz"
+  | "highlighter";
 
 /** One line style for every icon of the app: 24px grid, round caps, drawn in the current colour. */
 const SHAPES: Record<IconName, ReactNode> = {
@@ -26,6 +27,13 @@ const SHAPES: Record<IconName, ReactNode> = {
   ),
   stop: <rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor" stroke="none" />,
   plus: <path d="M12 5v14M5 12h14" />,
+  highlighter: (
+    <>
+      <path d="M14 5l5 5-7 7-5-5z" />
+      <path d="M7 12l-2.5 5.5L10 15" />
+      <path d="M4 20h9" />
+    </>
+  ),
   compose: (
     <>
       <path d="M12 5H7.5A2.5 2.5 0 0 0 5 7.5v9A2.5 2.5 0 0 0 7.5 19h9a2.5 2.5 0 0 0 2.5-2.5V12" />

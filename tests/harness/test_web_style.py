@@ -152,7 +152,14 @@ def test_highlights_over_the_white_page_use_the_same_light_colours_in_every_them
         assert min(channels) >= 0xC0 - 0x20, (color, value)  # a light colour, not a dark one
 
 
-def test_a_highlight_row_in_the_list_keeps_dark_text_on_its_light_colour():
+def test_the_highlights_list_is_quiet_and_its_text_is_readable_in_every_theme():
     reader = (STYLES / "reader.css").read_text()
-    row = rule(reader, ".highlights-strip li button:first-child")
-    assert "color: #1b1b19" in row
+    text = rule(reader, ".hl-row-text")
+    assert "color: var(--fg)" in text and "border: 0" in text
+    assert "background: transparent" in text  # never the highlight colour behind the text
+    dot = rule(reader, ".hl-dot.hl-yellow")
+    assert "var(--dot-yellow)" in dot
+    actions = rule(reader, ".hl-actions")
+    assert "opacity: 0" in actions  # shown on hover or focus, like the chat messages
+    assert "highlights-strip li button:first-child" not in reader  # the old coloured row rule
+    assert ".highlights-strip button" not in reader.split(".pdf-scroll {")[0]  # no boxed buttons

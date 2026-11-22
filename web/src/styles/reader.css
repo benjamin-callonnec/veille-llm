@@ -97,7 +97,6 @@
 .pdf-toolbar button,
 .pdf-search button,
 .pdf-outline button,
-.highlights-strip button,
 .selection-box button:not(.icon-btn):not(.dot),
 .questions button {
   border: 1px solid var(--border);
@@ -204,28 +203,119 @@
   text-align: left;
   border: 0;
 }
+/* The highlights list: quiet, like the chat. Text always in the normal colour on the plain
+   background (never on the highlight colour), the colour is a small dot, actions on hover. */
 .highlights-strip {
   border-top: 1px solid var(--border);
   /* room on the left for the settings gear, fixed in the corner on every page */
   padding: 4px 12px 4px 52px;
-  max-height: 30%;
+  max-height: 34%;
   overflow: auto;
 }
-.highlights-strip ul {
+.hl-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+}
+.hl-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.hl-toggle:hover,
+.hl-toggle:focus-visible,
+.hl-toggle[aria-expanded="true"] {
+  background: var(--bubble);
+  color: var(--fg);
+}
+.hl-filters {
+  display: flex;
+  gap: 8px;
+}
+.hl-filters .dot {
+  width: 12px;
+  height: 12px;
+}
+.hl-empty {
+  margin: 4px 8px;
+  font-size: 0.85rem;
+}
+.hl-list {
   list-style: none;
   padding: 0;
-  margin: 4px 0 0;
+  margin: 2px 0 4px;
 }
-.highlights-strip li {
+.hl-list li {
   display: flex;
-  gap: 6px;
-  margin: 3px 0;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 4px 8px;
+  border-radius: 8px;
 }
-.highlights-strip li button:first-child {
+.hl-list li:hover,
+.hl-list li:focus-within {
+  background: var(--bubble);
+}
+.hl-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-top: 7px;
+  border-radius: 50%;
+}
+.hl-dot.hl-yellow {
+  background: var(--dot-yellow);
+}
+.hl-dot.hl-green {
+  background: var(--dot-green);
+}
+.hl-dot.hl-red {
+  background: var(--dot-red);
+}
+.hl-row-text {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 10px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.9rem;
   text-align: left;
-  /* the row is painted with the light highlight colour in every theme: dark text on it */
-  color: #1b1b19;
+  cursor: pointer;
+}
+.hl-page {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding-top: 2px;
+}
+.hl-quote {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.hl-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.hl-list li:hover .hl-actions,
+.hl-list li:focus-within .hl-actions {
+  opacity: 1;
 }
 /* The colour dots belong to the interface: their colours are real in both themes (the page
    highlights, drawn over a white page, are the .hl-* ones above). */
