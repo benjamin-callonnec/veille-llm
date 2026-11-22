@@ -45,6 +45,14 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX messages_conversation ON messages (conversation_id, seq);
     """,
+    """
+    CREATE TABLE paper_text (
+        item_id TEXT PRIMARY KEY,
+        pages TEXT NOT NULL,
+        outline TEXT NOT NULL,
+        extracted_at TEXT NOT NULL
+    );
+    """,
 ]
 
 
@@ -252,6 +260,22 @@ class ReaderStore:
             else:
                 lines += [content.get("answer", ""), ""]
         return "\n".join(lines)
+
+    def paper_text(self, item_id: str) -> dict | None:
+        row = self._con.execute(
+            "SELECT pages, outline FROM paper_text WHERE item_id = ?", (item_id,)
+        ).fetchone()
+        return {"pages": json.loads(row[0]), "outline": json.loads(row[1])} if row else None
+
+    def save_paper_text(
+        self, item_id: str, pages: list[str], outline: list[tuple[str, int]]
+    ) -> None:
+        with self._con:
+            self._con.execute(
+                "INSERT OR REPLACE INTO paper_text (item_id, pages, outline, extracted_at)"
+                " VALUES (?, ?, ?, ?)",
+                (item_id, json.dumps(pages), json.dumps(outline), self._now()),
+            )
 
     def close(self) -> None:
         self._con.close()

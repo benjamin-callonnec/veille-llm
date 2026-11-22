@@ -24,6 +24,7 @@ reader = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "httpx>=0.27",
+    "pypdf>=7.1.1",
 ]
 llm = [
     "claude-agent-sdk>=0.2.187",
