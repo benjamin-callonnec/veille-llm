@@ -53,6 +53,15 @@ MIGRATIONS: list[str] = [
         extracted_at TEXT NOT NULL
     );
     """,
+    """
+    CREATE TABLE memory_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );
+    CREATE INDEX memory_notes_item ON memory_notes (item_id);
+    """,
 ]
 
 
@@ -260,6 +269,37 @@ class ReaderStore:
             else:
                 lines += [content.get("answer", ""), ""]
         return "\n".join(lines)
+
+    def memory_notes(self, item_id: str) -> list[dict]:
+        rows = self._con.execute(
+            "SELECT id, text, created_at FROM memory_notes WHERE item_id = ? ORDER BY id",
+            (item_id,),
+        ).fetchall()
+        return [{"id": r[0], "text": r[1], "created_at": r[2]} for r in rows]
+
+    def add_memory_note(self, item_id: str, text: str) -> dict:
+        now = self._now()
+        with self._con:
+            cursor = self._con.execute(
+                "INSERT INTO memory_notes (item_id, text, created_at) VALUES (?, ?, ?)",
+                (item_id, text, now),
+            )
+        return {"id": int(cursor.lastrowid), "text": text, "created_at": now}
+
+    def update_memory_note(self, item_id: str, note_id: int, text: str) -> bool:
+        with self._con:
+            cursor = self._con.execute(
+                "UPDATE memory_notes SET text = ? WHERE id = ? AND item_id = ?",
+                (text, note_id, item_id),
+            )
+        return cursor.rowcount > 0
+
+    def delete_memory_note(self, item_id: str, note_id: int) -> bool:
+        with self._con:
+            cursor = self._con.execute(
+                "DELETE FROM memory_notes WHERE id = ? AND item_id = ?", (note_id, item_id)
+            )
+        return cursor.rowcount > 0
 
     def paper_text(self, item_id: str) -> dict | None:
         row = self._con.execute(

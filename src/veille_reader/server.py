@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, model_validator
 from veille_reader import events
 from veille_reader.chat import stream_turn
 from veille_reader.events import AgentRunner
+from veille_reader.memory import MAX_NOTES
 from veille_reader.pdf import Fetcher, PdfError, arxiv_id, default_fetcher, ensure_pdf
 from veille_reader.storage import ReaderStore
 
@@ -53,6 +54,17 @@ class MessageIn(BaseModel):
 
 async def _no_agent(request):  # noqa: ANN001, ANN202
     yield events.error("failed", "no agent is configured")
+
+
+class NoteIn(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def not_blank(self) -> Self:
+        if not self.text.strip():
+            raise ValueError("a note cannot be blank")
+        self.text = self.text.strip()
+        return self
 
 
 class HighlightIn(BaseModel):
@@ -261,6 +273,32 @@ def create_app(
         if not messages or messages[-1]["role"] != "user":
             return JSONResponse({"reason": "nothing_to_regenerate"}, status_code=400)
         return await run_turn(item_id, cid, None, None)
+
+    @app.get("/api/items/{item_id}/memory")
+    def list_notes(item_id: str):  # noqa: ANN202
+        if item_id not in current_items():
+            return unknown()
+        return store.memory_notes(item_id)
+
+    @app.post("/api/items/{item_id}/memory", status_code=201)
+    def add_note(item_id: str, body: NoteIn):  # noqa: ANN202
+        if item_id not in current_items():
+            return unknown()
+        if len(store.memory_notes(item_id)) >= MAX_NOTES:
+            return JSONResponse({"reason": "memory_full"}, status_code=409)
+        return store.add_memory_note(item_id, body.text)
+
+    @app.put("/api/items/{item_id}/memory/{note_id}")
+    def edit_note(item_id: str, note_id: int, body: NoteIn):  # noqa: ANN202
+        if not store.update_memory_note(item_id, note_id, body.text):
+            return unknown("unknown_note")
+        return next(n for n in store.memory_notes(item_id) if n["id"] == note_id)
+
+    @app.delete("/api/items/{item_id}/memory/{note_id}")
+    def delete_note(item_id: str, note_id: int):  # noqa: ANN202
+        if not store.delete_memory_note(item_id, note_id):
+            return unknown("unknown_note")
+        return Response(status_code=204)
 
     @app.get("/catalogue.json")
     def catalogue() -> FileResponse:
