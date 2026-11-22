@@ -25,6 +25,26 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX highlights_item ON highlights (item_id);
     """,
+    """
+    CREATE TABLE conversations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE INDEX conversations_item ON conversations (item_id);
+    CREATE TABLE messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        seq INTEGER NOT NULL,
+        role TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );
+    CREATE INDEX messages_conversation ON messages (conversation_id, seq);
+    """,
 ]
 
 
@@ -38,6 +58,7 @@ class ReaderStore:
         self.pdfs_dir = data_dir / "pdfs"
         self.pdfs_dir.mkdir(parents=True, exist_ok=True)
         self._con = sqlite3.connect(data_dir / "reader.db", check_same_thread=False)
+        self._con.execute("PRAGMA foreign_keys = ON")
         self._migrate()
 
     def _migrate(self) -> None:
@@ -103,6 +124,134 @@ class ReaderStore:
                 "DELETE FROM highlights WHERE id = ? AND item_id = ?", (highlight_id, item_id)
             )
         return cursor.rowcount > 0
+
+    @staticmethod
+    def _now() -> str:
+        return datetime.now(UTC).isoformat()
+
+    def _conversation_row(self, row: tuple) -> dict:
+        return {
+            "id": row[0],
+            "item_id": row[1],
+            "title": row[2],
+            "created_at": row[3],
+            "updated_at": row[4],
+        }
+
+    def create_conversation(self, item_id: str, title: str) -> dict:
+        now = self._now()
+        with self._con:
+            cursor = self._con.execute(
+                "INSERT INTO conversations (item_id, title, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?)",
+                (item_id, title, now, now),
+            )
+        return {
+            "id": int(cursor.lastrowid),
+            "item_id": item_id,
+            "title": title,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    def conversations(self, item_id: str) -> list[dict]:
+        rows = self._con.execute(
+            "SELECT id, item_id, title, created_at, updated_at FROM conversations"
+            " WHERE item_id = ? ORDER BY id DESC",
+            (item_id,),
+        ).fetchall()
+        return [self._conversation_row(r) for r in rows]
+
+    def conversation(self, item_id: str, conversation_id: int) -> dict | None:
+        row = self._con.execute(
+            "SELECT id, item_id, title, created_at, updated_at FROM conversations"
+            " WHERE id = ? AND item_id = ?",
+            (conversation_id, item_id),
+        ).fetchone()
+        return self._conversation_row(row) if row else None
+
+    def rename_conversation(self, item_id: str, conversation_id: int, title: str) -> bool:
+        with self._con:
+            cursor = self._con.execute(
+                "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND item_id = ?",
+                (title, self._now(), conversation_id, item_id),
+            )
+        return cursor.rowcount > 0
+
+    def delete_conversation(self, item_id: str, conversation_id: int) -> bool:
+        with self._con:
+            cursor = self._con.execute(
+                "DELETE FROM conversations WHERE id = ? AND item_id = ?", (conversation_id, item_id)
+            )
+        return cursor.rowcount > 0
+
+    def add_message(self, conversation_id: int, role: str, kind: str, content: dict) -> dict:
+        now = self._now()
+        with self._con:
+            seq = self._con.execute(
+                "SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE conversation_id = ?",
+                (conversation_id,),
+            ).fetchone()[0]
+            cursor = self._con.execute(
+                "INSERT INTO messages (conversation_id, seq, role, kind, content, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (conversation_id, seq, role, kind, json.dumps(content), now),
+            )
+            self._con.execute(
+                "UPDATE conversations SET updated_at = ? WHERE id = ?", (now, conversation_id)
+            )
+        return {
+            "id": int(cursor.lastrowid),
+            "seq": seq,
+            "role": role,
+            "kind": kind,
+            "content": content,
+            "created_at": now,
+        }
+
+    def messages(self, conversation_id: int) -> list[dict]:
+        rows = self._con.execute(
+            "SELECT id, seq, role, kind, content, created_at FROM messages"
+            " WHERE conversation_id = ? ORDER BY seq",
+            (conversation_id,),
+        ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "seq": r[1],
+                "role": r[2],
+                "kind": r[3],
+                "content": json.loads(r[4]),
+                "created_at": r[5],
+            }
+            for r in rows
+        ]
+
+    def replace_last_assistant(self, conversation_id: int) -> None:
+        """Drop the trailing assistant message (regenerate); anything else stays."""
+        with self._con:
+            self._con.execute(
+                "DELETE FROM messages WHERE id = (SELECT id FROM messages WHERE conversation_id = ?"
+                " ORDER BY seq DESC LIMIT 1) AND role = 'assistant'",
+                (conversation_id,),
+            )
+
+    def export_markdown(self, item_id: str, conversation_id: int) -> str | None:
+        conversation = self.conversation(item_id, conversation_id)
+        if conversation is None:
+            return None
+        lines = [f"# {conversation['title']}", ""]
+        for message in self.messages(conversation_id):
+            content = message["content"]
+            if message["kind"] == "ask_agent":
+                quote = content.get("quote", {})
+                lines += [f"> {quote.get('text', '')} (p. {quote.get('page', '?')})", ""]
+                lines += [f"**You:** {content.get('question', '')}", ""]
+            elif message["role"] == "user":
+                lines += [f"**You:** {content.get('text', '')}", ""]
+            else:
+                lines += [content.get("answer", ""), ""]
+        return "\n".join(lines)
 
     def close(self) -> None:
         self._con.close()

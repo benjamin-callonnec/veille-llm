@@ -19,6 +19,14 @@ LOCAL_HOSTS = {"127.0.0.1", "localhost"}
 Unit = Annotated[float, Field(ge=0, le=1)]
 
 
+class ConversationIn(BaseModel):
+    title: str = Field(default="New conversation", min_length=1, max_length=200)
+
+
+class TitleIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+
+
 class HighlightIn(BaseModel):
     page: int = Field(ge=1)
     color: Literal["yellow", "green", "red"]
@@ -134,6 +142,46 @@ def create_app(
         if not store.delete_highlight(item_id, highlight_id):
             return JSONResponse({"reason": "unknown_highlight"}, status_code=404)
         return Response(status_code=204)
+
+    def unknown(reason: str = "unknown_item") -> JSONResponse:
+        return JSONResponse({"reason": reason}, status_code=404)
+
+    @app.get("/api/items/{item_id}/conversations")
+    def list_conversations(item_id: str):  # noqa: ANN202
+        if item_id not in current_items():
+            return unknown()
+        return store.conversations(item_id)
+
+    @app.post("/api/items/{item_id}/conversations", status_code=201)
+    def create_conversation(item_id: str, body: ConversationIn):  # noqa: ANN202
+        if item_id not in current_items():
+            return unknown()
+        return store.create_conversation(item_id, body.title)
+
+    @app.patch("/api/items/{item_id}/conversations/{cid}")
+    def rename_conversation(item_id: str, cid: int, body: TitleIn):  # noqa: ANN202
+        if not store.rename_conversation(item_id, cid, body.title):
+            return unknown("unknown_conversation")
+        return store.conversation(item_id, cid)
+
+    @app.delete("/api/items/{item_id}/conversations/{cid}")
+    def delete_conversation(item_id: str, cid: int):  # noqa: ANN202
+        if not store.delete_conversation(item_id, cid):
+            return unknown("unknown_conversation")
+        return Response(status_code=204)
+
+    @app.get("/api/items/{item_id}/conversations/{cid}/messages")
+    def conversation_messages(item_id: str, cid: int):  # noqa: ANN202
+        if store.conversation(item_id, cid) is None:
+            return unknown("unknown_conversation")
+        return store.messages(cid)
+
+    @app.get("/api/items/{item_id}/conversations/{cid}/export")
+    def export_conversation(item_id: str, cid: int):  # noqa: ANN202
+        markdown = store.export_markdown(item_id, cid)
+        if markdown is None:
+            return unknown("unknown_conversation")
+        return Response(markdown, media_type="text/markdown; charset=utf-8")
 
     @app.get("/catalogue.json")
     def catalogue() -> FileResponse:

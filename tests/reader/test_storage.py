@@ -76,3 +76,85 @@ def test_delete_highlight_is_scoped_to_its_item(tmp_path):
     assert store.delete_highlight("a", hid) is True
     assert store.delete_highlight("a", hid) is False
     assert store.highlights("a") == []
+
+
+def test_migration_3_keeps_earlier_tables(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    con = sqlite3.connect(data / "reader.db")
+    con.executescript(MIGRATIONS[0] + MIGRATIONS[1])
+    con.execute("INSERT INTO papers VALUES ('a', 'x.pdf', 'now')")
+    con.execute("PRAGMA user_version = 2")
+    con.commit()
+    con.close()
+    store = ReaderStore(data)
+    assert store.schema_version() == len(MIGRATIONS) >= 3
+    assert store.pdf_file("a") == "x.pdf"
+    assert store.conversations("a") == []
+
+
+def test_conversations_are_scoped_to_their_item_and_newest_first(tmp_path):
+    store = ReaderStore(tmp_path / "data")
+    first = store.create_conversation("a", "first")
+    second = store.create_conversation("a", "second")
+    other = store.create_conversation("b", "other")
+    assert [c["title"] for c in store.conversations("a")] == ["second", "first"]
+    assert store.conversation("b", first["id"]) is None
+    assert store.rename_conversation("b", first["id"], "x") is False
+    assert store.rename_conversation("a", first["id"], "renamed") is True
+    assert store.conversation("a", first["id"])["title"] == "renamed"
+    assert store.delete_conversation("a", other["id"]) is False
+    assert store.delete_conversation("a", second["id"]) is True
+    assert [c["id"] for c in store.conversations("a")] == [first["id"]]
+
+
+def test_messages_keep_order_and_content_and_cascade(tmp_path):
+    store = ReaderStore(tmp_path / "data")
+    conv = store.create_conversation("a", "t")
+    one = store.add_message(conv["id"], "user", "text", {"text": "hi"})
+    two = store.add_message(conv["id"], "assistant", "assistant", {"answer": "yo", "blocks": []})
+    assert [m["seq"] for m in store.messages(conv["id"])] == [1, 2]
+    assert store.messages(conv["id"])[1]["content"] == {"answer": "yo", "blocks": []}
+    assert one["id"] != two["id"]
+    store.delete_conversation("a", conv["id"])
+    assert store.messages(conv["id"]) == []
+
+
+def test_replace_last_assistant_removes_only_a_trailing_assistant_message(tmp_path):
+    store = ReaderStore(tmp_path / "data")
+    cid = store.create_conversation("a", "t")["id"]
+    store.add_message(cid, "user", "text", {"text": "q"})
+    store.replace_last_assistant(cid)
+    assert len(store.messages(cid)) == 1
+    store.add_message(cid, "assistant", "assistant", {"answer": "a", "blocks": []})
+    store.replace_last_assistant(cid)
+    assert [m["role"] for m in store.messages(cid)] == ["user"]
+
+
+def test_export_markdown(tmp_path):
+    store = ReaderStore(tmp_path / "data")
+    cid = store.create_conversation("a", "My chat")["id"]
+    store.add_message(cid, "user", "text", {"text": "plain question"})
+    store.add_message(
+        cid,
+        "user",
+        "ask_agent",
+        {"quote": {"text": "a passage", "page": 4, "rects": []}, "question": "why?"},
+    )
+    store.add_message(
+        cid,
+        "assistant",
+        "assistant",
+        {
+            "answer": "because [p.4]",
+            "blocks": [{"type": "thinking", "text": "SECRET REASONING"}],
+            "duration_ms": 10,
+            "stopped": False,
+        },
+    )
+    md = store.export_markdown("a", cid)
+    assert md.startswith("# My chat")
+    assert "plain question" in md and "a passage" in md and "p. 4" in md and "why?" in md
+    assert "because [p.4]" in md
+    assert "SECRET REASONING" not in md
+    assert store.export_markdown("b", cid) is None
