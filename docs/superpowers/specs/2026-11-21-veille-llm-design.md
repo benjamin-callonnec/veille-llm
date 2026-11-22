@@ -109,8 +109,8 @@ veille-llm/
 Flux :
 
 ```
- daily.yml (cron) : restaure veille.db (branche data) → core → export data.json
-                    → pousse veille.db sur `data` → déploie web + data.json sur Pages
+ daily.yml (cron) : restaure veille.db (branche data) → core → export catalogue.json
+                    → pousse veille.db sur `data` → déploie web + catalogue.json sur Pages
  weekly.yml (cron): restaure veille.db → newsletter → SMTP → abonnés (secret SUBSCRIBERS)
                     → enregistre « semaine X envoyée » dans veille.db → pousse `data`
 ```
@@ -133,12 +133,12 @@ Séquence d'étapes. Chaque étape a une interface commune (entrée, sortie, ét
    intéressant ou non, score, type (papier, actualité, benchmark), catégorie proposée.
 4. **Catégories dynamiques + hook LLM** : regroupe les propositions en un petit nombre de
    catégories stables d'un jour à l'autre, et écrit un hook d'une ou deux phrases par item retenu.
-5. **Publication** : écrit en base les items curés et exporte le `data.json` du catalogue.
+5. **Publication** : écrit en base les items curés et exporte le `catalogue.json` du catalogue.
 
 **Résilience**
 - Retry avec backoff exponentiel et jitter sur 429 et 5xx. Une source en panne est ignorée sans
   bloquer les autres. Repli arXiv : API puis flux RSS/OAI-PMH.
-- Si tout échoue, on conserve le dernier `data.json` valide.
+- Si tout échoue, on conserve le dernier `catalogue.json` valide.
 - **Arrêt brutal du LLM** (limite d'abonnement atteinte) : chaque résultat de classification est
   enregistré dans `veille.db` tout de suite, et le workflow pousse la base **même en cas
   d'échec** (étape `if: always()`). Le job est reprenable et ne reclasse pas ce qui l'est déjà.
@@ -157,7 +157,7 @@ encodeur-décodeur ne sont plus des catégories par défaut.
 - React, hébergé sur GitHub Pages, lecture seule.
 - Catalogue de 30 jours d'items, avec recherche, filtres par catégorie dynamique et par type,
   et tri (tendance Hugging Face pour les papiers, date pour les actualités). Tout est côté client.
-- Lit `data.json` sur la même origine Pages.
+- Lit `catalogue.json` sur la même origine Pages.
 - **Thème** : Papier en mode clair, Nuit en mode sombre, selon `prefers-color-scheme` uniquement.
   Pas de sélecteur manuel. Maquettes de référence : `1-papier` et `4-nuit`.
 - Aucun formulaire d'abonnement : l'auteur ajoute les abonnés lui-même (section 5.3).
@@ -209,7 +209,7 @@ marqueur « semaine X envoyée » est dans `veille.db`, donc une relance ne renv
 ## 7. Laissé au constructeur
 
 - Choix du client RSS/HTTP et de la bibliothèque de retry.
-- Format exact de `data.json` et schéma SQLite.
+- Format exact de `catalogue.json` et schéma SQLite.
 - Choix du bundler React et des tests front.
 - Détails du template d'e-mail.
 - Nom et nombre des catégories dynamiques, sous réserve de la section 5.1.
@@ -248,7 +248,7 @@ pas une réécriture :
 - **Dès maintenant, dans le code :**
   - Les abonnés sont lus derrière une petite interface (`SubscriberStore`) : implémentation
     « secret GitHub » aujourd'hui, implémentation « SQLite » demain.
-  - Le front lit `data.json` depuis une URL de base configurable, pas codée en dur.
+  - Le front lit `catalogue.json` depuis une URL de base configurable, pas codée en dur.
   - La persistance de `veille.db` est isolée derrière une interface (branche `data`
     aujourd'hui, disque du serveur demain).
 

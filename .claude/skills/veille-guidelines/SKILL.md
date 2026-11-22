@@ -24,7 +24,7 @@ Spec de référence : `docs/superpowers/specs/2026-11-21-veille-llm-design.md`.
 - Chaque verdict LLM est enregistré dans la base dès qu'il est connu. Un arrêt brutal (limite
   d'abonnement atteinte) doit laisser la base cohérente. Le workflow pousse la base même en cas
   d'échec. Au lancement suivant, les items déjà classés ne sont pas reclassés.
-- Rien d'incomplet n'est publié. En cas d'échec total, le dernier `data.json` valide reste en place.
+- Rien d'incomplet n'est publié. En cas d'échec total, le dernier `catalogue.json` valide reste en place.
 
 ## Sécurité et abonnés
 
@@ -32,7 +32,7 @@ Spec de référence : `docs/superpowers/specs/2026-11-21-veille-llm-design.md`.
   utilisent des adresses fictives `@example.com`.
 - Les abonnés passent par `SubscriberStore` (secret GitHub aujourd'hui, SQLite demain). Un e-mail
   par destinataire, jamais une liste dans le champ « À ».
-- Le front lit `data.json` depuis une URL de base configurable. La persistance de `veille.db` est
+- Le front lit `catalogue.json` depuis une URL de base configurable. La persistance de `veille.db` est
   derrière une interface (branche `data` aujourd'hui).
 
 ## Qualité

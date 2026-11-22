@@ -2,7 +2,7 @@ name: daily
 
 # Collect, classify with the LLM, persist veille.db on the `data` branch, deploy Pages.
 # Triggers: schedule and manual only (this workflow holds secrets: never PR/issue triggers).
-# It is the only Pages deployer; to redeploy after a push, run it manually.
+# It is the only Pages deployer (builds web/); to redeploy after a push, run it manually.
 on:
   schedule:
     - cron: "0 6 * * *"
@@ -69,37 +69,51 @@ jobs:
           REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
         run: PYTHONPATH=src python3 -m veille_llm.persist publish veille.db "$REMOTE"
 
-  deploy:
-    needs: [core, persist]
-    # The previous catalogue stays valid when the LLM stopped: deploy needs only its export.
+  build-web:
+    # Third-party npm code runs here, with read-only access and no Pages token.
+    needs: core
     if: ${{ !cancelled() && needs.core.result != 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --ignore-scripts
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      # No catalogue (pipeline crashed before exporting): fail and keep the live site as it is.
+      - uses: actions/download-artifact@v4
+        with:
+          name: catalogue
+          path: web/dist
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    # Only publishes the built artifact: no checkout, no Node, no third-party build code.
+    needs: [persist, build-web]
+    if: ${{ !cancelled() && needs.build-web.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     concurrency:
       group: pages
       cancel-in-progress: false
     permissions:
-      contents: read
       pages: write
       id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@v6
-      - run: uv sync --locked --no-default-groups
-      - run: uv run veille-llm --days 7
-      # No catalogue (pipeline crashed before exporting): fail and keep the live site as it is.
-      - uses: actions/download-artifact@v4
-        with:
-          name: catalogue
-          path: site
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
       - id: deployment
         uses: actions/deploy-pages@v4

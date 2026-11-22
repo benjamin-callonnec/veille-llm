@@ -17,7 +17,7 @@ from veille_llm.pipeline.classify import BATCH_SIZE, SUMMARY_MAX
 from veille_llm.store import Store
 
 MAX_CATEGORIES = 12
-FALLBACK_CATEGORY = "Autres"
+FALLBACK_CATEGORY = "Other"
 HOOK_MAX = 160
 BRIEF_MAX = 400
 

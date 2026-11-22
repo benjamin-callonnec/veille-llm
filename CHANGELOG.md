@@ -5,6 +5,20 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-22
+
+### Added
+- `web/`: React (Vite, TypeScript, Vitest) catalogue reading `catalogue.json`. Each card shows the hook in bold, then the brief (the raw abstract is gone). Category chips (top 7 by count, rest under "+N more", multi-select), type filter, search, sort (trending, date, score), filters kept in the URL hash, Papier/Nuit themes by system appearance. Source layout by module type: `components/`, `hooks/`, `lib/`, `styles/`. Fixes the display side of #11 and implements #3 and #8.
+- Trending sort adds the 0-10 score to upvotes so news (never upvoted) are not buried; stale categories are dropped from the URL; back/forward updates the filters.
+
+### Changed
+- The fallback category is "Other" (was "Autres"); existing databases are migrated.
+- `daily.yml` builds `web/` (`npm ci --ignore-scripts`, read-only job) and deploys the artifact with the catalogue from a separate job that runs no third-party code; CI also runs the web checks and build, and installs from the lockfiles.
+- `make serve` copies `build/catalogue.json` next to the built app.
+
+### Removed
+- The v0 page and builder (`site/`, `build.py`, `topics.py`, `veille-llm` command).
+
 ## [0.4.1] - 2026-11-22
 
 ### Fixed

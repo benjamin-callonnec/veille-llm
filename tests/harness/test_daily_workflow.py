@@ -26,8 +26,7 @@ def test_only_the_persist_job_can_write_contents_and_no_job_with_third_party_cod
     assert DOC["permissions"] == {"contents": "read"}
     assert DOC["jobs"]["core"]["permissions"] == {"contents": "read"}
     assert DOC["jobs"]["persist"]["permissions"] == {"contents": "write"}
-    assert DOC["jobs"]["deploy"]["permissions"]["contents"] == "read"
-    assert "secrets." not in str(DOC["jobs"]["deploy"])
+    assert "secrets." not in str(DOC["jobs"]["deploy"]) + str(DOC["jobs"]["build-web"])
     assert "uv " not in str(DOC["jobs"]["persist"])  # persist runs plain python, no deps
 
 
@@ -40,13 +39,6 @@ def test_core_runs_only_from_main():
     assert "refs/heads/main" in DOC["jobs"]["core"]["if"]
 
 
-def test_deploy_fails_rather_than_shipping_without_a_catalogue():
-    download = next(
-        s for s in DOC["jobs"]["deploy"]["steps"] if "download-artifact" in s.get("uses", "")
-    )
-    assert "continue-on-error" not in download
-
-
 def test_pages_has_a_single_deployer():
     assert not (WF / "pages.yml").exists()
     assert DOC["jobs"]["deploy"]["concurrency"]["group"] == "pages"
@@ -54,3 +46,22 @@ def test_pages_has_a_single_deployer():
 
 def test_data_branch_writers_share_a_non_cancelling_concurrency_group():
     assert DOC["concurrency"] == {"group": "data-branch", "cancel-in-progress": False}
+
+
+def test_web_is_built_without_install_scripts_in_a_job_with_no_pages_token():
+    job = DOC["jobs"]["build-web"]
+    assert job["permissions"] == {"contents": "read"}
+    runs = [s.get("run") for s in job["steps"]]
+    assert "npm ci --ignore-scripts" in runs and "npm run build" in runs
+    download = next(s for s in job["steps"] if "download-artifact" in s.get("uses", ""))
+    assert download["with"]["path"] == "web/dist"
+    assert "continue-on-error" not in download  # no catalogue: fail, keep the live site
+    upload = next(s for s in job["steps"] if "upload-pages-artifact" in s.get("uses", ""))
+    assert upload["with"]["path"] == "web/dist"
+
+
+def test_deploy_job_only_publishes_and_never_runs_third_party_code():
+    job = DOC["jobs"]["deploy"]
+    assert job["permissions"] == {"pages": "write", "id-token": "write"}
+    assert all("run" not in s for s in job["steps"])
+    assert [s["uses"] for s in job["steps"]] == ["actions/deploy-pages@v4"]

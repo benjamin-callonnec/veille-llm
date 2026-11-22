@@ -66,6 +66,13 @@ class Store:
         self._conn.execute("PRAGMA foreign_keys = ON")
         self._conn.executescript(_SCHEMA)
         columns = [r[1] for r in self._conn.execute("PRAGMA table_info(enrichments)")]
+        with self._conn:  # the fallback category used to be French
+            self._conn.execute(
+                "UPDATE enrichments SET category = 'Other' WHERE category = 'Autres'"
+            )
+            if self._conn.execute("SELECT 1 FROM categories WHERE name = 'Autres'").fetchone():
+                self._conn.execute("INSERT OR IGNORE INTO categories VALUES ('Other')")
+                self._conn.execute("DELETE FROM categories WHERE name = 'Autres'")
         if "brief" not in columns:  # database created before briefs existed
             self._conn.execute("ALTER TABLE enrichments ADD COLUMN brief TEXT NOT NULL DEFAULT ''")
 

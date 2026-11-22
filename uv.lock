@@ -1121,7 +1121,7 @@ wheels = [
 
 [[package]]
 name = "veille-llm"
-version = "0.4.1"
+version = "0.5.0"
 source = { editable = "." }
 default-groups = ["dev", "llm"]
 dependencies = [

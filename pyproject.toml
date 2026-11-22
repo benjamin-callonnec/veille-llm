@@ -1,14 +1,13 @@
 [project]
 name = "veille-llm"
-version = "0.4.1"
-description = "Personal tech watch on LLM architecture papers (arXiv + Hugging Face), published as a static site"
+version = "0.5.0"
+description = "Personal tech watch on LLM research and news: daily pipeline, static catalogue, weekly newsletter"
 requires-python = ">=3.11"
 dependencies = [
     "feedparser>=6.0.14",
 ]
 
 [project.scripts]
-veille-llm = "veille_llm.build:main"
 veille-core = "veille_llm.pipeline.run:main"
 
 [dependency-groups]
