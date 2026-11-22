@@ -5,6 +5,17 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-22
+
+### Added
+- Reader PDF viewer and panes (#21, part of #17): pdf.js viewer (pinned `pdfjs-dist`, scripting and eval off, PDF links never rendered) with zoom, search (`/`), outline, keyboard navigation and a bounded number of rendered pages, so a 300-page PDF stays responsive. The page is kept in the URL.
+- Selection box next to a selected passage: a question field (Enter), three highlight colours (yellow, green, red) and Copy. Highlights are stored per paper in the local database (new routes `GET/POST/DELETE /api/items/{id}/highlights`, migration 2) and listed under the PDF with jump-to and filter.
+- Two panes PDF | chat, resizable by dragging or with the arrow keys and collapsible, layout remembered. The right pane lists the questions asked until the chat arrives (#22).
+
+### Fixed
+- Review follow-ups of the reader: a catalogue whose items are not a list is rejected, the server picks up a regenerated catalogue, default paths are anchored at the repo root, a test checks that the default web build leaves the reader out, the IPv6 literal is no longer a local host.
+- Viewer review fixes: no scroll snap-back when new pages load, renders cancelled when zooming, page memory released, canvas size capped, long selections trimmed and merged per line, failed highlight saves reported, text layer capped and batched.
+
 ## [0.10.0] - 2026-11-22
 
 ### Added

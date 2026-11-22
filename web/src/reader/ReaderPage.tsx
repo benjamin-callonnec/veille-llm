@@ -1,4 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { HighlightsStrip } from "./HighlightsStrip";
+import { parseHash, writeHash } from "./lib/anchor";
+import { PaneLayout } from "./PaneLayout";
+import { PdfViewer, type Selection } from "./PdfViewer";
+import { openPdf } from "./pdf/pdfjsSource";
+import { PdfOpenError, type PdfSource } from "./pdf/source";
+import { type AskedQuestion, QuestionList } from "./QuestionList";
+import { SelectionBox } from "./SelectionBox";
+import { type HighlightsApi, httpApi, useHighlights } from "./useHighlights";
 
 export interface ReaderItem {
   id: string;
@@ -15,37 +24,145 @@ export async function loadItem(id: string): Promise<ReaderItem> {
   return (await response.json()) as ReaderItem;
 }
 
+const MAX_HIGHLIGHT_TEXT = 5000;
+const clip = (text: string) => text.slice(0, MAX_HIGHLIGHT_TEXT);
+
+const pdfUrl = (id: string) => `/api/items/${encodeURIComponent(id)}/pdf`;
+
+const OPEN_ERRORS = {
+  password: "This PDF is password protected and cannot be opened.",
+  invalid: "The file is not a valid PDF.",
+  network: "The PDF could not be downloaded.",
+} as const;
+
 interface Props {
   itemId: string;
   load?: (id: string) => Promise<ReaderItem>;
+  open?: (url: string) => Promise<PdfSource>;
+  api?: HighlightsApi;
 }
 
-/** Placeholder reader page: the PDF viewer and the chat arrive with later issues. */
-export function ReaderPage({ itemId, load = loadItem }: Props) {
+export function ReaderPage({ itemId, load = loadItem, open = openPdf, api = httpApi }: Props) {
   const [item, setItem] = useState<ReaderItem | null>(null);
-  const [error, setError] = useState(!itemId);
+  const [error, setError] = useState<string | null>(
+    itemId ? null : "This item cannot be opened in the reader.",
+  );
+  const [source, setSource] = useState<PdfSource | null>(null);
+  const [page, setPage] = useState(() => parseHash(window.location.hash).page ?? 1);
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [questions, setQuestions] = useState<AskedQuestion[]>([]);
+  const { highlights, add, remove, error: saveError } = useHighlights(itemId, api);
 
   useEffect(() => {
     if (!itemId) return;
     let current = true;
-    setError(false);
+    setError(null);
     load(itemId)
       .then((loaded) => current && setItem(loaded))
-      .catch(() => current && setError(true));
+      .catch(() => current && setError("This item cannot be opened in the reader."));
     return () => {
       current = false;
     };
   }, [itemId, load]);
 
-  if (error) return <p role="alert">This item cannot be opened in the reader.</p>;
+  useEffect(() => {
+    if (!item?.has_pdf) return;
+    let current = true;
+    let opened: PdfSource | null = null;
+    open(pdfUrl(item.id))
+      .then((s) => {
+        opened = s;
+        if (current) setSource(s);
+        else s.destroy();
+      })
+      .catch((e: unknown) => {
+        if (current) setError(OPEN_ERRORS[e instanceof PdfOpenError ? e.reason : "network"]);
+      });
+    return () => {
+      current = false;
+      opened?.destroy();
+    };
+  }, [item, open]);
+
+  const changePage = useCallback(
+    (p: number) => {
+      setPage(p);
+      try {
+        window.history.replaceState(null, "", writeHash(itemId, p));
+      } catch {
+        // the address bar is simply not updated
+      }
+    },
+    [itemId],
+  );
+
+  const closeBox = () => {
+    setSelection(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  if (error) return <p role="alert">{error}</p>;
   if (!item) return <p className="muted">Loading…</p>;
+
+  const pdfPane = source ? (
+    <>
+      <PdfViewer
+        source={source}
+        page={page}
+        onPageChange={changePage}
+        onSelection={setSelection}
+        highlights={highlights}
+      />
+      <HighlightsStrip highlights={highlights} onGo={changePage} onRemove={remove} />
+    </>
+  ) : (
+    <p className="muted">{item.has_pdf ? "Loading the PDF…" : "No PDF for this item"}</p>
+  );
+
   return (
-    <main className="reader">
-      <h1>{item.title}</h1>
-      <p className="hook">
-        <strong>{item.hook}</strong>
-      </p>
-      <p className="muted">{item.has_pdf ? "PDF available" : "No PDF for this item"}</p>
-    </main>
+    <div className="reader-shell">
+      <header className="reader-head">
+        <h1>{item.title}</h1>
+        <p className="hook">
+          <strong>{item.hook}</strong>
+        </p>
+      </header>
+      {saveError && (
+        <p role="status" className="muted">
+          The highlight could not be saved.
+        </p>
+      )}
+      <PaneLayout pdf={pdfPane} chat={<QuestionList questions={questions} onGo={changePage} />} />
+      {selection && (
+        <SelectionBox
+          quote={selection.quote}
+          anchor={selection.anchor}
+          onAsk={(question) => {
+            void add(
+              selection.quote.page,
+              "yellow",
+              clip(selection.quote.text),
+              selection.quote.rects,
+            );
+            setQuestions((q) => [...q, { quote: selection.quote, question }]);
+            closeBox();
+          }}
+          onHighlight={(color) => {
+            void add(
+              selection.quote.page,
+              color,
+              clip(selection.quote.text),
+              selection.quote.rects,
+            );
+            closeBox();
+          }}
+          onCopy={() => {
+            navigator.clipboard?.writeText(selection.quote.text).catch(() => {});
+            closeBox();
+          }}
+          onClose={closeBox}
+        />
+      )}
+    </div>
   );
 }

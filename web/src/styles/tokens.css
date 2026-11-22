@@ -21,3 +21,17 @@
     --accent-fg: #101010;
   }
 }
+
+:root {
+  --hl-yellow: #fff3a8;
+  --hl-green: #c5ecc7;
+  --hl-red: #f6c4c4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --hl-yellow: #6b6023;
+    --hl-green: #2f5a33;
+    --hl-red: #6a3030;
+  }
+}

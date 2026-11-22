@@ -2,22 +2,36 @@
 
 import json
 from pathlib import Path
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from veille_reader.pdf import Fetcher, PdfError, arxiv_id, default_fetcher, ensure_pdf
 from veille_reader.storage import ReaderStore
 
-LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
+LOCAL_HOSTS = {"127.0.0.1", "localhost"}
+
+
+Unit = Annotated[float, Field(ge=0, le=1)]
+
+
+class HighlightIn(BaseModel):
+    page: int = Field(ge=1)
+    color: Literal["yellow", "green", "red"]
+    text: str = Field(max_length=5000)
+    rects: list[Annotated[list[Unit], Field(min_length=4, max_length=4)]] = Field(max_length=200)
 
 
 def _load_items(catalogue_path: Path) -> dict[str, dict]:
     try:
         raw = json.loads(catalogue_path.read_text(encoding="utf-8"))
         items = raw["items"]
+        if not isinstance(items, list):
+            raise TypeError("items is not a list")
         return {str(i["id"]): i for i in items if isinstance(i, dict) and "id" in i}
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise ValueError(f"cannot read catalogue {catalogue_path}: {exc}") from exc
@@ -46,7 +60,18 @@ def create_app(
     static_dir: Path | None = None,
     fetch: Fetcher = default_fetcher,
 ) -> FastAPI:
-    items = _load_items(catalogue_path)
+    loaded = {"items": _load_items(catalogue_path), "mtime": catalogue_path.stat().st_mtime_ns}
+
+    def current_items() -> dict[str, dict]:
+        """Reload when veille-core rewrites the catalogue; keep the old one if it is unreadable."""
+        try:
+            mtime = catalogue_path.stat().st_mtime_ns
+            if mtime != loaded["mtime"]:
+                loaded["items"], loaded["mtime"] = _load_items(catalogue_path), mtime
+        except (OSError, ValueError):
+            pass
+        return loaded["items"]
+
     store = ReaderStore(data_dir)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -67,7 +92,7 @@ def create_app(
 
     @app.get("/api/items/{item_id}")
     def item(item_id: str):  # noqa: ANN202
-        found = items.get(item_id)
+        found = current_items().get(item_id)
         if found is None:
             return JSONResponse({"reason": "unknown_item"}, status_code=404)
         return {
@@ -81,7 +106,7 @@ def create_app(
 
     @app.get("/api/items/{item_id}/pdf")
     def item_pdf(item_id: str):  # noqa: ANN202
-        found = items.get(item_id)
+        found = current_items().get(item_id)
         if found is None:
             return JSONResponse({"reason": "unknown_item"}, status_code=404)
         try:
@@ -90,6 +115,25 @@ def create_app(
             status = 404 if exc.reason == "no_pdf" else 502
             return JSONResponse({"reason": exc.reason}, status_code=status)
         return FileResponse(path, media_type="application/pdf")
+
+    @app.get("/api/items/{item_id}/highlights")
+    def list_highlights(item_id: str):  # noqa: ANN202
+        if item_id not in current_items():
+            return JSONResponse({"reason": "unknown_item"}, status_code=404)
+        return store.highlights(item_id)
+
+    @app.post("/api/items/{item_id}/highlights", status_code=201)
+    def add_highlight(item_id: str, body: HighlightIn):  # noqa: ANN202
+        if item_id not in current_items():
+            return JSONResponse({"reason": "unknown_item"}, status_code=404)
+        hid = store.add_highlight(item_id, body.page, body.color, body.text, body.rects)
+        return next(h for h in store.highlights(item_id) if h["id"] == hid)
+
+    @app.delete("/api/items/{item_id}/highlights/{highlight_id}")
+    def delete_highlight(item_id: str, highlight_id: int):  # noqa: ANN202
+        if not store.delete_highlight(item_id, highlight_id):
+            return JSONResponse({"reason": "unknown_highlight"}, status_code=404)
+        return Response(status_code=204)
 
     @app.get("/catalogue.json")
     def catalogue() -> FileResponse:

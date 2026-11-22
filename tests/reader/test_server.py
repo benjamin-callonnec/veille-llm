@@ -97,7 +97,6 @@ def test_fetch_failure_is_502(tmp_path, catalogue):
 def test_non_local_host_is_refused(client):
     assert client.get("/api/health", headers={"Host": "evil.example"}).status_code == 403
     assert client.get("/api/health", headers={"Host": "localhost:8765"}).status_code == 200
-    assert client.get("/api/health", headers={"Host": "[::1]:8765"}).status_code == 200
 
 
 def test_path_tricks_never_leave_data_dir(client, tmp_path):
@@ -155,3 +154,77 @@ def test_responses_forbid_framing_and_cross_origin_reads(client):
     response = client.get("/api/health")
     assert response.headers["x-frame-options"] == "SAMEORIGIN"
     assert response.headers["cross-origin-resource-policy"] == "same-origin"
+
+
+def test_items_must_be_a_list(tmp_path):
+    bad = tmp_path / "bad.json"
+    bad.write_text('{"items": {"a": 1}}', encoding="utf-8")
+    with pytest.raises(ValueError, match="catalogue"):
+        create_app(tmp_path / "data", bad)
+
+
+def test_catalogue_changes_are_picked_up(client, catalogue):
+    import os
+
+    assert client.get("/api/items/new1").status_code == 404
+    fresh = {
+        "items": [*ITEMS, {"id": "new1", "title": "N", "hook": "h", "url": "u", "type": "paper"}]
+    }
+    catalogue.write_text(json.dumps(fresh), encoding="utf-8")
+    stat = catalogue.stat()
+    os.utime(catalogue, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10**9))
+    assert client.get("/api/items/new1").status_code == 200
+
+
+def test_ipv6_literal_is_not_a_local_host(client):
+    assert client.get("/api/health", headers={"Host": "[::1]:8765"}).status_code == 403
+
+
+HL = {"page": 2, "color": "yellow", "text": "a passage", "rects": [[0.1, 0.2, 0.3, 0.05]]}
+
+
+def test_highlights_post_get_delete(client):
+    created = client.post("/api/items/a1/highlights", json=HL)
+    assert created.status_code == 201
+    body = created.json()
+    assert body["page"] == 2 and body["color"] == "yellow" and body["rects"] == HL["rects"]
+    assert client.get("/api/items/a1/highlights").json() == [body]
+    assert client.delete(f"/api/items/a1/highlights/{body['id']}").status_code == 204
+    assert client.get("/api/items/a1/highlights").json() == []
+    assert client.delete(f"/api/items/a1/highlights/{body['id']}").status_code == 404
+
+
+def test_highlights_unknown_item_is_404(client):
+    assert client.get("/api/items/nope/highlights").status_code == 404
+    assert client.post("/api/items/nope/highlights", json=HL).status_code == 404
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"color": "blue"},
+        {"page": 0},
+        {"text": "x" * 5001},
+        {"rects": [[0, 0, 1, 1]] * 201},
+        {"rects": [[0, 0, 1.5, 1]]},
+        {"rects": [[-0.1, 0, 1, 1]]},
+        {"rects": [[0, 0, 1]]},
+    ],
+)
+def test_invalid_highlights_are_rejected_and_not_stored(client, patch):
+    assert client.post("/api/items/a1/highlights", json={**HL, **patch}).status_code == 422
+    assert client.get("/api/items/a1/highlights").json() == []
+
+
+def test_cross_site_highlight_post_is_refused(client):
+    response = client.post(
+        "/api/items/a1/highlights", json=HL, headers={"Sec-Fetch-Site": "cross-site"}
+    )
+    assert response.status_code == 403
+    assert client.get("/api/items/a1/highlights").json() == []
+
+
+def test_delete_cannot_reach_another_items_highlight(client):
+    hid = client.post("/api/items/a1/highlights", json=HL).json()["id"]
+    assert client.delete(f"/api/items/b1/highlights/{hid}").status_code == 404
+    assert len(client.get("/api/items/a1/highlights").json()) == 1
