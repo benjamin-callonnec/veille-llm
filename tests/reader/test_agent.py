@@ -472,3 +472,10 @@ def test_the_tutor_is_told_to_quote_and_never_to_invent():
     text = SYSTEM_PROMPT_TOOLS
     assert '[p.N "' in text and "exact" in text.lower() and "never invent" in text.lower()
     assert "reference list" in text.lower()
+
+
+def test_the_tutor_abstains_plainly_when_the_paper_has_no_answer():
+    text = SYSTEM_PROMPT_TOOLS.lower()
+    assert "does not contain the answer" in text and "cite nothing" in text
+    assert "never cite a page just because a search hit it" in text
+    assert "not coming from the paper" in text
