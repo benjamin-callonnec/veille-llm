@@ -5,8 +5,13 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-22
+
 ### Added
-- Each published item now carries a `brief` (2-3 plain sentences) next to a much shorter `hook` (at most 120 characters, written to make you want to read without overselling). Existing databases get the new column automatically. Closes the pipeline side of #11; the bold hook display belongs to the web front.
+- Each published item now carries a `brief` (2-3 plain sentences) next to a much shorter `hook` (at most 120 characters, written to make you want to read without overselling). Existing databases get the new column automatically. Pipeline side of #11; the bold hook display belongs to the web front.
+
+### Changed
+- The v0 GitHub Pages front is English only (labels, placeholders, date format, `lang`).
 
 ## [0.3.0] - 2026-11-22
 
