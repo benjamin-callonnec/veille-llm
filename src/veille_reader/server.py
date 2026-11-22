@@ -2,14 +2,17 @@
 
 import json
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
+from veille_reader import events
+from veille_reader.chat import stream_turn
+from veille_reader.events import AgentRunner
 from veille_reader.pdf import Fetcher, PdfError, arxiv_id, default_fetcher, ensure_pdf
 from veille_reader.storage import ReaderStore
 
@@ -25,6 +28,31 @@ class ConversationIn(BaseModel):
 
 class TitleIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
+
+
+class QuoteIn(BaseModel):
+    text: str = Field(max_length=5000)
+    page: int = Field(ge=1)
+    rects: list[list[float]] = Field(default_factory=list, max_length=200)
+
+
+class MessageIn(BaseModel):
+    kind: Literal["text", "ask_agent"]
+    text: str | None = Field(default=None, max_length=8000)
+    quote: QuoteIn | None = None
+    question: str | None = Field(default=None, max_length=8000)
+
+    @model_validator(mode="after")
+    def complete(self) -> Self:
+        if self.kind == "text" and not (self.text or "").strip():
+            raise ValueError("text is required")
+        if self.kind == "ask_agent" and not (self.quote and (self.question or "").strip()):
+            raise ValueError("quote and question are required")
+        return self
+
+
+async def _no_agent(request):  # noqa: ANN001, ANN202
+    yield events.error("failed", "no agent is configured")
 
 
 class HighlightIn(BaseModel):
@@ -67,6 +95,7 @@ def create_app(
     catalogue_path: Path,
     static_dir: Path | None = None,
     fetch: Fetcher = default_fetcher,
+    runner: AgentRunner | None = None,
 ) -> FastAPI:
     loaded = {"items": _load_items(catalogue_path), "mtime": catalogue_path.stat().st_mtime_ns}
 
@@ -82,6 +111,8 @@ def create_app(
 
     store = ReaderStore(data_dir)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    app.state.streaming = set()
+    app.state.runner = runner or _no_agent
 
     @app.middleware("http")
     async def local_only(request: Request, call_next):  # noqa: ANN001, ANN202
@@ -182,6 +213,47 @@ def create_app(
         if markdown is None:
             return unknown("unknown_conversation")
         return Response(markdown, media_type="text/markdown; charset=utf-8")
+
+    async def run_turn(item_id: str, cid: int, kind: str | None, content: dict | None):  # noqa: ANN202
+        streaming: set[int] = app.state.streaming
+        streaming.add(cid)
+
+        async def body():  # noqa: ANN202
+            try:
+                async for line in stream_turn(
+                    store, app.state.runner, current_items()[item_id], cid, kind, content
+                ):
+                    yield line
+            finally:
+                streaming.discard(cid)
+
+        return StreamingResponse(
+            body(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"}
+        )
+
+    @app.post("/api/items/{item_id}/conversations/{cid}/messages")
+    async def send_message(item_id: str, cid: int, body: MessageIn):  # noqa: ANN202
+        if store.conversation(item_id, cid) is None:
+            return unknown("unknown_conversation")
+        if cid in app.state.streaming:
+            return JSONResponse({"reason": "busy"}, status_code=409)
+        if body.kind == "ask_agent":
+            content = {"quote": body.quote.model_dump(), "question": body.question}
+        else:
+            content = {"text": body.text}
+        return await run_turn(item_id, cid, body.kind, content)
+
+    @app.post("/api/items/{item_id}/conversations/{cid}/regenerate")
+    async def regenerate(item_id: str, cid: int):  # noqa: ANN202
+        if store.conversation(item_id, cid) is None:
+            return unknown("unknown_conversation")
+        if cid in app.state.streaming:
+            return JSONResponse({"reason": "busy"}, status_code=409)
+        store.replace_last_assistant(cid)
+        messages = store.messages(cid)
+        if not messages or messages[-1]["role"] != "user":
+            return JSONResponse({"reason": "nothing_to_regenerate"}, status_code=400)
+        return await run_turn(item_id, cid, None, None)
 
     @app.get("/catalogue.json")
     def catalogue() -> FileResponse:
