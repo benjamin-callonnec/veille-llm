@@ -221,7 +221,7 @@ def test_blank_marker_stays_in_a_cloze_question_and_is_markup_elsewhere():
 @pytest.mark.parametrize("kind", list(SPECS))
 def test_the_public_view_of_each_kind_has_no_key(kind):
     spec = check(SPECS[kind])
-    shown = json.dumps(public_quiz(3, spec))
+    shown = json.dumps(public_quiz(3, spec), separators=(",", ":"))
     for secret in KEYS[kind]:
         assert secret not in shown
     assert set(public_quiz(3, spec)) <= {

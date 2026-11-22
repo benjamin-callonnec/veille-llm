@@ -46,3 +46,54 @@ test("the score line names the paper and, when different, the session", () => {
   );
   expect(scoreLine({ paper: { total: 1, correct: 1 }, session: null })).toBe("1/1 on this paper");
 });
+
+test("the new kinds keep only what they need and are refused when malformed", () => {
+  const base = { quiz_id: 1, question: "Q?" };
+  expect(toQuiz({ ...base, kind: "multi", options: ["a", "b", "c", "d"] })?.options).toHaveLength(
+    4,
+  );
+  expect(toQuiz({ ...base, kind: "multi", options: ["a", "b"] })).toBeNull();
+  expect(toQuiz({ ...base, kind: "truefalse", options: ["True", "False"] })?.options).toHaveLength(
+    2,
+  );
+  expect(toQuiz({ ...base, kind: "truefalse", options: ["x"] })).toBeNull();
+  expect(toQuiz({ ...base, kind: "cloze", blanks: 2 })?.blanks).toBe(2);
+  expect(toQuiz({ ...base, kind: "cloze", blanks: 0 })).toBeNull();
+  expect(toQuiz({ ...base, kind: "order", items: ["a", "b", "c", 4] })?.items).toEqual([
+    "a",
+    "b",
+    "c",
+  ]);
+  expect(toQuiz({ ...base, kind: "order", items: ["a"] })).toBeNull();
+  // a free quiz drops what it should not carry
+  expect(
+    toQuiz({ ...base, kind: "free", options: ["a", "b"], items: ["x"], blanks: 2 }),
+  ).toMatchObject({ options: [], items: [], blanks: 0 });
+});
+
+test("results of the new kinds are read field by field", () => {
+  const read = toResult({
+    ...result,
+    choices: [0, 2],
+    correct_choices: [0, 1],
+    words: ["a"],
+    answers: ["b"],
+    blank_ok: [false],
+    order: [1, 0],
+    steps: ["x", "y"],
+  });
+  expect(read).toMatchObject({
+    choices: [0, 2],
+    correct_choices: [0, 1],
+    words: ["a"],
+    answers: ["b"],
+    blank_ok: [false],
+    order: [1, 0],
+    steps: ["x", "y"],
+  });
+  const bad = toResult({ ...result, choices: ["x"], words: [1], blank_ok: [1], order: "no" });
+  expect(bad?.choices).toBeUndefined();
+  expect(bad?.words).toBeUndefined();
+  expect(bad?.blank_ok).toBeUndefined();
+  expect(bad?.order).toBeUndefined();
+});

@@ -17,26 +17,47 @@ export interface QuizResult {
   page: number;
   section: string | null;
   score: QuizScores;
-  /** Choice quiz: what was picked and what was right. */
+  /** Choice and true/false: what was picked and what was right. */
   choice?: number;
   correct_choice?: number;
+  /** Multiple answers: what was ticked and what was right. */
+  choices?: number[];
+  correct_choices?: number[];
+  /** Fill in the blanks: the words given, the expected ones and which blanks were right. */
+  words?: string[];
+  answers?: string[];
+  blank_ok?: boolean[];
+  /** Ordering: the positions chosen (in the order shown) and the steps in the right order. */
+  order?: number[];
+  steps?: string[];
   /** Free quiz: the answer given, the model answer and the grader's reasoning. */
   answer?: string;
   reference?: string;
   reasoning?: string;
 }
 
+export type QuizKind = "choice" | "multi" | "truefalse" | "cloze" | "order" | "free";
+const KINDS: readonly string[] = ["choice", "multi", "truefalse", "cloze", "order", "free"];
+
 export interface QuizContent {
   quiz_id: number;
-  kind: "choice" | "free";
+  kind: QuizKind;
   question: string;
+  /** choice, multi, truefalse. */
   options: string[];
+  /** cloze: how many blanks (___) the question has. */
+  blanks: number;
+  /** order: the steps, shuffled. */
+  items: string[];
   result?: QuizResult;
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 const isStr = (v: unknown): v is string => typeof v === "string";
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+const isNums = (v: unknown): v is number[] => Array.isArray(v) && v.every(isNum);
+const isStrs = (v: unknown): v is string[] => Array.isArray(v) && v.every(isStr);
 
 function toScore(raw: unknown): Score | null {
   if (!isObj(raw) || !isNum(raw.total) || !isNum(raw.correct)) return null;
@@ -58,6 +79,14 @@ export function toResult(raw: unknown): QuizResult | undefined {
   };
   if (isNum(raw.choice)) result.choice = raw.choice;
   if (isNum(raw.correct_choice)) result.correct_choice = raw.correct_choice;
+  if (isNums(raw.choices)) result.choices = raw.choices;
+  if (isNums(raw.correct_choices)) result.correct_choices = raw.correct_choices;
+  if (isStrs(raw.words)) result.words = raw.words;
+  if (isStrs(raw.answers)) result.answers = raw.answers;
+  if (Array.isArray(raw.blank_ok) && raw.blank_ok.every((b) => typeof b === "boolean"))
+    result.blank_ok = raw.blank_ok;
+  if (isNums(raw.order)) result.order = raw.order;
+  if (isStrs(raw.steps)) result.steps = raw.steps;
   if (isStr(raw.answer)) result.answer = raw.answer;
   if (isStr(raw.reference)) result.reference = raw.reference;
   if (isStr(raw.reasoning)) result.reasoning = raw.reasoning;
@@ -67,16 +96,27 @@ export function toResult(raw: unknown): QuizResult | undefined {
 /** A quiz message of the server, or null when it is not well formed. */
 export function toQuiz(raw: unknown): QuizContent | null {
   if (!isObj(raw) || !isNum(raw.quiz_id) || !isStr(raw.question)) return null;
-  if (raw.kind !== "choice" && raw.kind !== "free") return null;
+  const kind = raw.kind;
+  if (!isStr(kind) || !KINDS.includes(kind)) return null;
   const options = Array.isArray(raw.options) ? raw.options.filter(isStr) : [];
-  if (raw.kind === "choice" && options.length < 2) return null;
-  return {
+  const items = Array.isArray(raw.items) ? raw.items.filter(isStr) : [];
+  const blanks = isNum(raw.blanks) ? raw.blanks : 0;
+  if (kind === "choice" && options.length < 2) return null;
+  if (kind === "multi" && options.length < 3) return null;
+  if (kind === "truefalse" && options.length !== 2) return null;
+  if (kind === "cloze" && (blanks < 1 || blanks > 2)) return null;
+  if (kind === "order" && items.length < 3) return null;
+  const quiz: QuizContent = {
     quiz_id: raw.quiz_id,
-    kind: raw.kind,
+    kind: kind as QuizKind,
     question: raw.question,
-    options: raw.kind === "choice" ? options : [],
-    result: toResult(raw.result),
+    options: ["choice", "multi", "truefalse"].includes(kind) ? options : [],
+    blanks: kind === "cloze" ? blanks : 0,
+    items: kind === "order" ? items : [],
   };
+  const result = toResult(raw.result);
+  if (result) quiz.result = result;
+  return quiz;
 }
 
 // the tutor ends an answer with [[quiz: topic]] to start a quiz; it is not for the reader
