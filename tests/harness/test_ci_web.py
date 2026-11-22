@@ -26,3 +26,22 @@ def test_make_has_a_local_reader_target():
     makefile = (Path(__file__).resolve().parents[2] / "Makefile").read_text()
     assert "\nreader:" in makefile
     assert "--mode reader" in makefile and "veille-reader serve" in makefile
+
+
+def test_default_web_build_leaves_the_reader_out(tmp_path):
+    import shutil
+    import subprocess
+
+    web = Path(__file__).resolve().parents[2] / "web"
+    if not (web / "node_modules").is_dir() or shutil.which("npx") is None:
+        import pytest
+
+        pytest.skip("web dependencies not installed")
+    subprocess.run(
+        ["npx", "vite", "build", "--outDir", str(tmp_path / "dist"), "--emptyOutDir"],
+        cwd=web,
+        check=True,
+        capture_output=True,
+    )
+    assert (tmp_path / "dist" / "index.html").is_file()
+    assert not (tmp_path / "dist" / "reader.html").exists()

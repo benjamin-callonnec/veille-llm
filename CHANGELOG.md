@@ -5,6 +5,9 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+### Fixed
+- Reader review follow-ups: a catalogue whose items are not a list is rejected, the server picks up a regenerated catalogue, default paths are anchored at the repo root instead of the current directory, a test checks that the default web build leaves `reader.html` out, and the IPv6 literal is no longer a local host.
+
 ## [0.10.0] - 2026-11-22
 
 ### Added

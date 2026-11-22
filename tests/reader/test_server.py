@@ -97,7 +97,6 @@ def test_fetch_failure_is_502(tmp_path, catalogue):
 def test_non_local_host_is_refused(client):
     assert client.get("/api/health", headers={"Host": "evil.example"}).status_code == 403
     assert client.get("/api/health", headers={"Host": "localhost:8765"}).status_code == 200
-    assert client.get("/api/health", headers={"Host": "[::1]:8765"}).status_code == 200
 
 
 def test_path_tricks_never_leave_data_dir(client, tmp_path):
@@ -155,3 +154,27 @@ def test_responses_forbid_framing_and_cross_origin_reads(client):
     response = client.get("/api/health")
     assert response.headers["x-frame-options"] == "SAMEORIGIN"
     assert response.headers["cross-origin-resource-policy"] == "same-origin"
+
+
+def test_items_must_be_a_list(tmp_path):
+    bad = tmp_path / "bad.json"
+    bad.write_text('{"items": {"a": 1}}', encoding="utf-8")
+    with pytest.raises(ValueError, match="catalogue"):
+        create_app(tmp_path / "data", bad)
+
+
+def test_catalogue_changes_are_picked_up(client, catalogue):
+    import os
+
+    assert client.get("/api/items/new1").status_code == 404
+    fresh = {
+        "items": [*ITEMS, {"id": "new1", "title": "N", "hook": "h", "url": "u", "type": "paper"}]
+    }
+    catalogue.write_text(json.dumps(fresh), encoding="utf-8")
+    stat = catalogue.stat()
+    os.utime(catalogue, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10**9))
+    assert client.get("/api/items/new1").status_code == 200
+
+
+def test_ipv6_literal_is_not_a_local_host(client):
+    assert client.get("/api/health", headers={"Host": "[::1]:8765"}).status_code == 403

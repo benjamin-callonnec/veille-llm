@@ -11,13 +11,15 @@ from fastapi.staticfiles import StaticFiles
 from veille_reader.pdf import Fetcher, PdfError, arxiv_id, default_fetcher, ensure_pdf
 from veille_reader.storage import ReaderStore
 
-LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
+LOCAL_HOSTS = {"127.0.0.1", "localhost"}
 
 
 def _load_items(catalogue_path: Path) -> dict[str, dict]:
     try:
         raw = json.loads(catalogue_path.read_text(encoding="utf-8"))
         items = raw["items"]
+        if not isinstance(items, list):
+            raise TypeError("items is not a list")
         return {str(i["id"]): i for i in items if isinstance(i, dict) and "id" in i}
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise ValueError(f"cannot read catalogue {catalogue_path}: {exc}") from exc
@@ -46,7 +48,18 @@ def create_app(
     static_dir: Path | None = None,
     fetch: Fetcher = default_fetcher,
 ) -> FastAPI:
-    items = _load_items(catalogue_path)
+    loaded = {"items": _load_items(catalogue_path), "mtime": catalogue_path.stat().st_mtime_ns}
+
+    def current_items() -> dict[str, dict]:
+        """Reload when veille-core rewrites the catalogue; keep the old one if it is unreadable."""
+        try:
+            mtime = catalogue_path.stat().st_mtime_ns
+            if mtime != loaded["mtime"]:
+                loaded["items"], loaded["mtime"] = _load_items(catalogue_path), mtime
+        except (OSError, ValueError):
+            pass
+        return loaded["items"]
+
     store = ReaderStore(data_dir)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -67,7 +80,7 @@ def create_app(
 
     @app.get("/api/items/{item_id}")
     def item(item_id: str):  # noqa: ANN202
-        found = items.get(item_id)
+        found = current_items().get(item_id)
         if found is None:
             return JSONResponse({"reason": "unknown_item"}, status_code=404)
         return {
@@ -81,7 +94,7 @@ def create_app(
 
     @app.get("/api/items/{item_id}/pdf")
     def item_pdf(item_id: str):  # noqa: ANN202
-        found = items.get(item_id)
+        found = current_items().get(item_id)
         if found is None:
             return JSONResponse({"reason": "unknown_item"}, status_code=404)
         try:

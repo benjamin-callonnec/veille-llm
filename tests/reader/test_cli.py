@@ -1,4 +1,3 @@
-from pathlib import Path
 from unittest.mock import patch
 
 from veille_reader import cli
@@ -27,9 +26,10 @@ def test_no_host_option():
 def test_defaults():
     args = cli.parse_args(["serve"])
     assert args.port == 8765
-    assert args.data_dir == Path(".local/reader")
-    assert args.catalogue == Path("build/catalogue.json")
-    assert args.static == Path("web/dist")
+    assert args.data_dir == cli.ROOT / ".local/reader"
+    assert args.catalogue == cli.ROOT / "build/catalogue.json"
+    assert args.static == cli.ROOT / "web/dist"
+    assert cli.ROOT.joinpath("pyproject.toml").is_file()
 
 
 def test_missing_catalogue_exits_with_message(tmp_path, capsys):
