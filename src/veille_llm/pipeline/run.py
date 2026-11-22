@@ -9,12 +9,13 @@ import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from veille_llm.llm import DEFAULT_MODEL, RawReply, Runner, claude_runner
 from veille_llm.pipeline.categorize import enrich_pending
 from veille_llm.pipeline.classify import BATCH_SIZE, classify_pending
+from veille_llm.pipeline.consolidate import consolidate
 from veille_llm.pipeline.export import export_catalogue
 from veille_llm.pipeline.filtering import deterministic_filter
 from veille_llm.pipeline.progress import Progress
@@ -25,6 +26,8 @@ from veille_llm.sources.rss_source import rss_source
 from veille_llm.store import Store
 
 _STAMP = "%Y-%m-%dT%H:%M:%SZ"
+CATALOGUE_DAYS = 30  # the exported window, and the window categories are counted over
+CONSOLIDATE_ROUNDS = 3
 DEFAULT_MAX_BATCHES = 20  # about 300 items per run; revisit once Haiku consumption is measured
 
 
@@ -43,6 +46,8 @@ class RunReport:
     cost_usd: float = 0.0
     stopped: str | None = None
     capped: bool = False
+    merged: int = 0
+    reassigned: int = 0
 
 
 class _Meter:
@@ -101,6 +106,7 @@ async def _run(
     report = RunReport()
     meter = _Meter(runner or claude_runner)
     stamp = now.strftime(_STAMP)
+    window_start = (now - timedelta(days=CATALOGUE_DAYS)).strftime(_STAMP)
     store.abandon_stale(stamp)
 
     progress.group("Collect")
@@ -165,7 +171,12 @@ async def _run(
             )
 
         enriched = await enrich_pending(
-            store, runner=meter, model=model, max_batches=left, on_batch=hooks_progress
+            store,
+            runner=meter,
+            model=model,
+            max_batches=left,
+            on_batch=hooks_progress,
+            since=window_start,
         )
         progress.endgroup()
         report.enriched = enriched.enriched
@@ -175,6 +186,24 @@ async def _run(
         report.capped = report.capped or enriched.capped
     elif classified.stopped is None:
         report.capped = report.capped or bool(store.pending_enrichment())
+
+    # Tidy the categories once every hook is written and some budget is left (one LLM call).
+    budget_left = max_batches is None or max_batches - meter.calls >= 1
+    if report.stopped is None and budget_left and not store.pending_enrichment():
+        progress.group("Categories")
+        for _ in range(CONSOLIDATE_ROUNDS):  # each call re-homes up to 60 parked items
+            tidy = await consolidate(store, since=window_start, runner=meter, model=model)
+            report.merged += tidy.merged
+            report.reassigned += tidy.reassigned
+            report.stopped = tidy.stopped
+            progress.info(
+                f"merged={tidy.merged} reassigned={tidy.reassigned} skipped={tidy.skipped}"
+            )
+            made_progress = tidy.merged + tidy.reassigned > 0
+            still_budget = max_batches is None or max_batches - meter.calls >= 1
+            if tidy.skipped or tidy.stopped or not made_progress or not still_budget:
+                break
+        progress.endgroup()
 
     if report.stopped is None and report.classified == 0 and report.enriched == 0:
         if report.skipped_batches:
@@ -192,7 +221,8 @@ async def _run(
 def _summary(report: RunReport) -> str:
     lines = [
         f"collected={report.collected} new={report.new} classified={report.classified} "
-        f"enriched={report.enriched} published={report.published}"
+        f"enriched={report.enriched} published={report.published} "
+        f"merged={report.merged} reassigned={report.reassigned}"
     ]
     lines.append(
         f"  llm: tokens in={report.input_tokens} out={report.output_tokens} "
@@ -273,6 +303,8 @@ def main(
                 "classified": report.classified,
                 "enriched": report.enriched,
                 "published": report.published,
+                "categories merged": report.merged,
+                "items re-homed from Other": report.reassigned,
                 "skipped batches": report.skipped_batches,
                 "input tokens": report.input_tokens,
                 "output tokens": report.output_tokens,

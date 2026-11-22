@@ -5,6 +5,18 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-22
+
+### Added
+- Category consolidation: when "Other" holds more than 25% of the 30-day window (at least 10 items), up to 3 LLM calls per run merge tiny or duplicate categories into broader ones and re-home the parked items. The model only proposes; names and ids are validated and the cap of 12 categories is enforced. On the real data, "Other" went from 110 of 194 items to 4.
+
+### Changed
+- Categories offered to the LLM are those used inside the 30-day window (an empty category frees its slot), and once the cap of 12 is reached the prompt says so (no new category, pick the closest). Fixes 57% of items landing in "Other".
+- The newsletter no longer shows "Other" as a label.
+
+### Fixed
+- `make subs-add` and `subs-remove` explain the `EMAIL=` variable when it is missing (passing the address as a bare argument used to give a confusing error).
+
 ## [0.7.0] - 2026-11-22
 
 ### Added

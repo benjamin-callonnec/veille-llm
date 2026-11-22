@@ -2,7 +2,7 @@ import asyncio
 import json
 
 from veille_llm.llm import LlmLimitError, RawReply
-from veille_llm.models import Item, Verdict
+from veille_llm.models import Enrichment, Item, Verdict
 from veille_llm.pipeline.categorize import (
     FALLBACK_CATEGORY,
     MAX_CATEGORIES,
@@ -109,9 +109,8 @@ def test_enrich_pending_leaves_item_with_unsafe_hook_unpublished():
 
 
 def test_enrich_pending_sends_existing_categories_to_the_llm():
-    store = seeded(1)
-    store.upsert_items([], NOW)
-    store._conn.execute("INSERT INTO categories VALUES ('Agents')")
+    store = seeded(2)
+    store.save_enrichments([Enrichment("i01", "Agents", "H.", "B.")])  # i01 is now published
     seen = []
 
     async def run(prompt, options):
@@ -189,3 +188,41 @@ def test_enrich_pending_rejects_an_unsafe_or_empty_brief():
     outcome = asyncio.run(enrich_pending(store, runner=run))
     assert outcome.enriched == 1
     assert [p["id"] for p in store.published_items("2026-01-01T00:00:00Z")] == ["i02"]
+
+
+def test_enrichment_offers_only_categories_used_inside_the_window():
+    store = seeded(2)
+    store.upsert_items(
+        [Item("old", "s", "paper", "T", "S", "https://e.com", [], "2026-01-01T00:00:00Z")], NOW
+    )
+    store.save_verdicts([Verdict("old", True, 5, "paper", "h")])
+    store.save_enrichments([Enrichment("old", "Ancient topic", "H.", "B.")])
+    seen = {}
+
+    async def run(prompt, options):
+        seen.update(prompt_data(prompt))
+        return reply([{"id": "i00", "category": "A", "hook": "H.", "brief": "B."}] * 0)
+
+    asyncio.run(enrich_pending(store, runner=run, since="2026-11-01T00:00:00Z"))
+    assert "Ancient topic" not in seen["existing_categories"]
+
+
+def test_prompt_forbids_new_categories_once_the_cap_is_reached_and_allows_them_before():
+    prompts = []
+
+    async def run(prompt, options):
+        prompts.append(prompt)
+        return reply([])
+
+    full = seeded(1)
+    for k in range(MAX_CATEGORIES):
+        full.upsert_items(
+            [Item(f"e{k}", "s", "paper", "T", "S", "https://e.com", [], "2026-11-20T00:00:00Z")],
+            NOW,
+        )
+        full.save_verdicts([Verdict(f"e{k}", True, 5, "paper", "h")])
+        full.save_enrichments([Enrichment(f"e{k}", f"Cat {k}", "H.", "B.")])
+    asyncio.run(enrich_pending(full, runner=run, since="2026-11-01T00:00:00Z"))
+    asyncio.run(enrich_pending(seeded(1), runner=run, since="2026-11-01T00:00:00Z"))
+    assert "do not create any new category" in prompts[0].lower()
+    assert "do not create any new category" not in prompts[1].lower()

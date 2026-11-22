@@ -184,6 +184,42 @@ class Store:
                 (week, delivered, total),
             )
 
+    def category_usage(self, since: str) -> list[tuple[str, int]]:
+        """Categories of the published items inside the window, most used first."""
+        rows = self._conn.execute(
+            "SELECT e.category, COUNT(*) FROM enrichments e JOIN items i ON i.id = e.item_id "
+            "WHERE i.status = 'published' AND i.published >= ? "
+            "GROUP BY e.category ORDER BY COUNT(*) DESC, e.category",
+            (since,),
+        )
+        return [(row[0], row[1]) for row in rows]
+
+    def rename_category(self, old: str, new: str) -> int:
+        with self._conn:
+            self._conn.execute("INSERT OR IGNORE INTO categories VALUES (?)", (new,))
+            cursor = self._conn.execute(
+                "UPDATE enrichments SET category = ? WHERE category = ?", (new, old)
+            )
+        return cursor.rowcount
+
+    def reassign_other(self, item_id: str, category: str) -> bool:
+        with self._conn:
+            self._conn.execute("INSERT OR IGNORE INTO categories VALUES (?)", (category,))
+            cursor = self._conn.execute(
+                "UPDATE enrichments SET category = ? WHERE item_id = ? AND category = 'Other'",
+                (category, item_id),
+            )
+        return cursor.rowcount == 1
+
+    def other_items(self, since: str, limit: int = 60) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT i.id, i.title, e.hook FROM enrichments e JOIN items i ON i.id = e.item_id "
+            "WHERE i.status = 'published' AND i.published >= ? AND e.category = 'Other' "
+            "ORDER BY i.published DESC, i.id LIMIT ?",
+            (since, limit),
+        )
+        return [{"id": r[0], "title": r[1], "hook": r[2]} for r in rows]
+
     def category_names(self) -> list[str]:
         return [row[0] for row in self._conn.execute("SELECT name FROM categories ORDER BY rowid")]
 

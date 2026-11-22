@@ -57,6 +57,16 @@ INSTRUCTIONS = (
 )
 
 
+CAP_REACHED = (
+    f" The limit of {MAX_CATEGORIES} categories is reached: do not create any new category. "
+    f'Pick the closest of existing_categories, and use "{FALLBACK_CATEGORY}" only when none fits.'
+)
+
+
+def instructions_for(at_cap: bool) -> str:
+    return INSTRUCTIONS + (CAP_REACHED if at_cap else "")
+
+
 @dataclass
 class EnrichOutcome:
     enriched: int = 0
@@ -109,6 +119,7 @@ async def enrich_pending(
     model: str = DEFAULT_MODEL,
     max_batches: int | None = None,
     on_batch: Callable[[int, int], None] | None = None,
+    since: str = "0000-01-01T00:00:00Z",
 ) -> EnrichOutcome:
     outcome = EnrichOutcome()
     pending = store.pending_enrichment()
@@ -120,7 +131,9 @@ async def enrich_pending(
             outcome.capped = True
             break
         batch = pending[start : start + BATCH_SIZE]
-        known = store.category_names()
+        # Only categories in use inside the window: an empty one frees its slot.
+        known = [name for name, _ in store.category_usage(since)]
+        at_cap = len([c for c in known if c != FALLBACK_CATEGORY]) >= MAX_CATEGORIES
         data = {
             "existing_categories": known,
             "items": [
@@ -135,7 +148,7 @@ async def enrich_pending(
         }
         try:
             result = await complete_json(
-                INSTRUCTIONS, ENRICH_SCHEMA, data=data, model=model, runner=runner
+                instructions_for(at_cap), ENRICH_SCHEMA, data=data, model=model, runner=runner
             )
         except LlmOutputError as exc:
             outcome.skipped_batches += 1

@@ -3,7 +3,7 @@ The {{ items|length }} best items of the week ({{ week }})
 
 {% for item in items %}
 {{ loop.index }}. {{ item.hook }}
-   {{ item.category }} / {{ item.type }}
+   {% if item.category != 'Other' %}{{ item.category }} / {% endif %}{{ item.type }}
 {% if item.brief %}
    {{ item.brief }}
 {% endif %}

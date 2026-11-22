@@ -33,9 +33,11 @@ serve: web-build
 
 # Subscribers: local subscribers.txt (gitignored), pushed to the SUBSCRIBERS secret.
 subs-add:
+	@test -n "$(EMAIL)" || { echo "usage: make subs-add EMAIL=someone@example.org"; exit 1; }
 	@uv run python scripts/subs.py add "$(EMAIL)"
 
 subs-remove:
+	@test -n "$(EMAIL)" || { echo "usage: make subs-remove EMAIL=someone@example.org"; exit 1; }
 	@uv run python scripts/subs.py remove "$(EMAIL)"
 
 subs-list:
