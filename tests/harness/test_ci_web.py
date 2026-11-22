@@ -88,3 +88,13 @@ def test_make_reader_fetches_the_catalogue_when_it_is_missing():
     for target in ("reader", "reader-build"):
         recipe = makefile.split(f"\n{target}:")[1].split("\n\n")[0]
         assert "$(MAKE) catalogue" in recipe, target
+
+
+def test_make_reader_rebuilds_the_static_front_so_port_8765_is_never_stale():
+    makefile = (Path(__file__).resolve().parents[2] / "Makefile").read_text()
+    recipe = makefile.split("\nreader:")[1].split("\n\n")[0]
+    build = recipe.index("vite build --mode reader")
+    servers = recipe.index("kill 0")
+    assert build < servers  # built first, then both servers start
+    assert "$(READER_FRONT_URL)" in recipe  # and it says where to go
+    assert "READER_FRONT_URL ?= http://127.0.0.1:5173" in makefile

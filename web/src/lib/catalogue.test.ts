@@ -4,6 +4,7 @@ import {
   chipCategories,
   countsByCategory,
   DEFAULT_FILTERS,
+  hasArxivPdf,
   type Item,
   parseCatalogue,
   readerUrl,
@@ -227,5 +228,32 @@ describe("readerUrl", () => {
   });
   test("encodes the id", () => {
     expect(readerUrl("arxiv:2611.26107", "1")).toBe("reader.html#item=arxiv%3A2611.26107");
+  });
+});
+
+describe("hasArxivPdf", () => {
+  test.each([
+    "https://arxiv.org/abs/2401.01234",
+    "https://arxiv.org/abs/2401.01234v3",
+    "https://arxiv.org/pdf/2401.01234v2",
+    "https://arxiv.org/pdf/2401.01234v2.pdf",
+    "https://arxiv.org/abs/hep-th/9901001",
+    "https://arxiv.org/abs/2401.01234/",
+    "https://arxiv.org/abs/2401.01234?context=cs#top",
+  ])("accepts %s", (url) => {
+    expect(hasArxivPdf(url)).toBe(true);
+  });
+  test.each([
+    "https://arxiv.org.evil.com/abs/2401.01234",
+    "https://evilarxiv.org/abs/2401.01234",
+    "http://arxiv.org/abs/2401.01234",
+    "https://arxiv.org/abs/../../etc/passwd",
+    "https://arxiv.org/abs/%2e%2e/x",
+    "https://huggingface.co/papers/2401.01234",
+    "https://example.org/blog/post",
+    "not a url",
+    "",
+  ])("rejects %s", (url) => {
+    expect(hasArxivPdf(url)).toBe(false);
   });
 });

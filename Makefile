@@ -51,7 +51,11 @@ READER_NO_BILLING = -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BA
 READER_FRONT_URL ?= http://127.0.0.1:5173
 reader:
 	@test -f build/catalogue.json || $(MAKE) catalogue
-	@echo "Reader: open $(READER_FRONT_URL)  (API on http://127.0.0.1:8765, Ctrl+C stops both)"
+	@# Port 8765 serves web/dist: rebuild it so it is never an older version than the dev server.
+	@cd web && VITE_READER_URL=$(READER_FRONT_URL) npx vite build --mode reader --logLevel warn
+	@echo ""
+	@echo "Reader: open $(READER_FRONT_URL)  (hot reload). Port 8765 is the API and a plain build."
+	@echo "Ctrl+C stops both."
 	@trap 'kill 0' INT TERM EXIT; \
 	(cd web && VITE_READER_URL=$(READER_FRONT_URL) npx vite --mode reader --host 127.0.0.1 --port 5173 --strictPort) & \
 	env $(READER_NO_BILLING) uv run veille-reader serve --reload & \

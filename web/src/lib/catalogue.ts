@@ -95,8 +95,26 @@ export function safeUrl(url: string): string | null {
   }
 }
 
+const ARXIV_ID = String.raw`(?:\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[A-Z]{2})?/\d{7}(?:v\d+)?)`;
+const ARXIV_PATH = new RegExp(`^/(?:abs|pdf)/${ARXIV_ID}(?:\\.pdf)?/?$`);
+
+/** Same rule as the reader server: an https arxiv.org abs/pdf link has a PDF it can fetch. */
+export function hasArxivPdf(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (
+      u.protocol === "https:" &&
+      u.hostname === "arxiv.org" &&
+      !u.port &&
+      ARXIV_PATH.test(u.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Link to the local reader for an item; null when the reader is not enabled for this build.
+ * Link to the local reader for an item for an item; null when the reader is not enabled for this build.
  * The reader page lives next to the catalogue page, so the link is relative: it follows whatever
  * address the catalogue is served from (dev server, built front) and never carries a port.
  */

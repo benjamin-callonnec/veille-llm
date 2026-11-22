@@ -6,6 +6,8 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 ## [Unreleased]
 
 ### Fixed
+- Cards of any item with an arXiv PDF open the reader when clicked (benchmarks too: the 60 benchmark items were left out because only the "paper" type counted); items without a PDF stay plain.
+- `make reader` rebuilds the static front (`web/dist`, served on port 8765) every time it starts, so that port is never an older version than the hot-reload dev server on 5173 (you could see an old "Read" link and no shortcuts gear there).
 - The local catalogue showed no briefs: `build/catalogue.json` was an old local file from before briefs existed. `make catalogue` now downloads the published catalogue (with hooks and briefs) into `build/catalogue.json` safely (temporary file, validated, then moved), and `make reader` / `make reader-build` run it when the file is missing.
 - The "Read" link no longer carries a port written at build time (it was wrong when the front had been built for another port): it is relative to the catalogue page, so it works from the dev server and from the built front.
 

@@ -60,10 +60,23 @@ test("without the reader enabled the card is not clickable", () => {
   expect(screen.queryByRole("link", { name: /in the reader/ })).toBeNull();
 });
 
-test("news cards are not clickable for reading", () => {
+test("any item with an arXiv PDF is clickable, whatever its type (benchmarks too)", () => {
   vi.stubEnv("VITE_READER_URL", "http://127.0.0.1:8765");
-  render(<Card item={item({ type: "news" })} />);
-  expect(screen.queryByRole("link", { name: /in the reader/ })).toBeNull();
+  render(<Card item={item({ type: "benchmark" })} />);
+  expect(openLink().getAttribute("href")).toBe("reader.html#item=a1");
+});
+
+test("an item without an arXiv PDF is not clickable, even a paper", () => {
+  vi.stubEnv("VITE_READER_URL", "http://127.0.0.1:8765");
+  for (const url of [
+    "https://example.com/a",
+    "https://huggingface.co/papers/2401.01234",
+    "https://arxiv.org.evil.com/abs/2401.01234",
+  ]) {
+    render(<Card item={item({ url, type: "paper" })} />);
+    expect(screen.queryByRole("link", { name: /in the reader/ })).toBeNull();
+    cleanup();
+  }
 });
 
 test("the link does not depend on the port set at build time", () => {

@@ -53,7 +53,7 @@ unsubscribe). Nothing private is stored in the repository.
 
 `make reader` starts the local reader with **auto-reload**: the API (`veille-reader serve --reload`,
 `127.0.0.1:8765`) restarts when a Python file changes and the front (Vite, `127.0.0.1:5173`)
-hot-reloads. Open `http://127.0.0.1:5173`. The catalogue it shows is `build/catalogue.json`, a copy of the
+hot-reloads. Open `http://127.0.0.1:5173` (port 8765 is the API and a plain build of the front, rebuilt at each start). The catalogue it shows is `build/catalogue.json`, a copy of the
 published one: `make catalogue` refreshes it (no LLM involved, and `make reader` runs it by itself when the
 file is missing). The reader answers on your
 Claude subscription, so `make reader` removes `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
