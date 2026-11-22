@@ -58,7 +58,11 @@ export function ChatPane({
           </p>
         )}
         {chat.messages.map((m, i) =>
-          m.role === "user" ? (
+          m.role === "system" ? (
+            <p key={`${m.id}-${m.seq}`} className="compaction-note">
+              Earlier messages were summarised to keep the conversation light.
+            </p>
+          ) : m.role === "user" ? (
             <UserMessage
               key={`${m.id}-${m.seq}`}
               message={m}

@@ -168,3 +168,39 @@ test("the plus icon of the composer starts a new empty conversation", async () =
   await waitFor(() => expect(screen.queryByRole("button", { name: /Thought for/ })).toBeNull());
   expect(screen.getByText(/select a passage/i)).toBeTruthy();
 });
+
+test("a compaction shows as a quiet note, not as a message with actions", async () => {
+  const api = makeApi(Promise.resolve());
+  const base = api.messages;
+  api.messages = async (item, id) => [
+    {
+      id: 90,
+      seq: 1,
+      role: "user",
+      kind: "text",
+      content: { text: "old question" },
+      created_at: "",
+    },
+    {
+      id: 91,
+      seq: 2,
+      role: "system",
+      kind: "compaction",
+      content: { summary: "SECRET SUMMARY", upto_seq: 1 },
+      created_at: "",
+    },
+    ...(await base(item, id)),
+  ];
+  const conversations = api.listConversations;
+  api.listConversations = async (item) => {
+    const list = await conversations(item);
+    return list.length
+      ? list
+      : [{ id: 1, item_id: "a1", title: "T", created_at: "", updated_at: "" }];
+  };
+  render(<Host api={api} onGo={() => {}} />);
+  const note = await screen.findByText(/earlier messages were summarised/i);
+  expect(note.closest(".turn")).toBeNull();
+  expect(screen.queryByText("SECRET SUMMARY")).toBeNull();
+  expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(1); // only the old question
+});

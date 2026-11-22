@@ -29,7 +29,7 @@ export type StoredContent =
 export interface StoredMessage {
   id: number;
   seq: number;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   kind: string;
   content: Record<string, unknown>;
   created_at: string;

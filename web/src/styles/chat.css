@@ -294,3 +294,10 @@
   color: var(--muted);
   font-size: 0.8rem;
 }
+
+.compaction-note {
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
