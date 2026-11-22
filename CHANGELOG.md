@@ -5,6 +5,11 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-22
+
+### Fixed
+- A first capped run classified 300 items and published none (empty catalogue): a third of the batch budget is now always kept for hooks, more when many are waiting.
+
 ## [0.4.0] - 2026-11-22
 
 ### Added

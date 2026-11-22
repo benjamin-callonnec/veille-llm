@@ -84,12 +84,13 @@ async def run_pipeline(
     )
     report.new = store.upsert_items(fresh, stamp)
 
-    # Keep part of the budget for hooks, or a long backlog would abandon interesting items
-    # (after 3 days) before they were ever enriched.
+    # Always keep a third of the budget for hooks (more if many wait): otherwise a first run
+    # classifies everything, publishes nothing, and a backlog abandons interesting items
+    # (after 3 days) before they were ever enriched. Unused budget flows to the hooks anyway.
     classify_cap = max_batches
     if max_batches is not None:
         waiting = -(-len(store.pending_enrichment()) // BATCH_SIZE)
-        classify_cap = max_batches - min(waiting, max_batches // 3)
+        classify_cap = max_batches - min(max(waiting, max_batches // 3), max_batches - 1)
     classified = await classify_pending(store, runner=meter, model=model, max_batches=classify_cap)
     report.classified = classified.classified
     report.skipped_batches = classified.skipped_batches
