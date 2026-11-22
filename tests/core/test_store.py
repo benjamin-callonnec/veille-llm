@@ -246,3 +246,91 @@ def test_other_items_lists_newest_first_with_hook_and_respects_the_limit():
     )
     rows = store.other_items("2026-11-01T00:00:00Z", limit=1)
     assert [r["id"] for r in rows] == ["new"] and rows[0]["hook"] == "Hook new."
+
+
+def _prov(model="m", prompt="p", pipeline="1.0.0"):
+    from veille_llm.models import Provenance
+
+    return Provenance(model, prompt, pipeline)
+
+
+def test_results_are_saved_with_their_provenance_and_legacy_by_default():
+    store = Store(":memory:")
+    store.upsert_items([item("a"), item("b")], NOW)
+    store.save_verdicts([verdict("a")], _prov("haiku", "h1", "1.2.0"))
+    store.save_verdicts([verdict("b")])
+    rows = dict(
+        (r[0], tuple(r[1:]))
+        for r in store._conn.execute("SELECT item_id, model, prompt, pipeline FROM verdicts")
+    )
+    assert rows["a"] == ("haiku", "h1", "1.2.0") and rows["b"] == ("legacy",) * 3
+    store.save_enrichments([Enrichment("a", "Cat", "H.", "B.")], _prov("haiku", "h2", "1.2.0"))
+    got = store._conn.execute("SELECT model, prompt, pipeline FROM enrichments").fetchone()
+    assert got == ("haiku", "h2", "1.2.0")
+
+
+def test_old_databases_get_provenance_columns_marked_legacy(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(
+        "CREATE TABLE items (id TEXT PRIMARY KEY, source TEXT NOT NULL, kind TEXT NOT NULL,"
+        " title TEXT NOT NULL, summary TEXT NOT NULL, url TEXT NOT NULL, authors TEXT NOT NULL,"
+        " published TEXT NOT NULL, upvotes INTEGER NOT NULL DEFAULT 0, first_seen TEXT NOT NULL,"
+        " status TEXT NOT NULL DEFAULT 'new');"
+        "INSERT INTO items VALUES ('x','s','paper','A long enough title for the dedupe hash',"
+        "'S','u','[]','2026-11-20T00:00:00Z',0,'2026-11-20T00:00:00Z','published');"
+        "CREATE TABLE verdicts (item_id TEXT PRIMARY KEY, interesting INTEGER NOT NULL,"
+        " score INTEGER NOT NULL, type TEXT NOT NULL, category_hint TEXT NOT NULL);"
+        "INSERT INTO verdicts VALUES ('x',1,5,'paper','h');"
+    )
+    old.commit()
+    old.close()
+    Store(path).close()
+    row = sqlite3.connect(path).execute("SELECT model, prompt, pipeline FROM verdicts").fetchone()
+    assert row == ("legacy", "legacy", "legacy")
+    assert sqlite3.connect(path).execute("SELECT content_hash FROM items").fetchone()[0] != ""
+
+
+def _titled(item_id, title):
+    return Item(
+        item_id, "s", "paper", title, "S", "https://e.com/" + item_id, [], "2026-11-20T00:00:00Z"
+    )
+
+
+def test_the_same_article_under_a_second_id_is_never_classified_twice():
+    store = Store(":memory:")
+    title = "Scaling Test-Time Compute: A Careful Study of Reasoning Models"
+    store.upsert_items([_titled("arxiv:1", title)], NOW)
+    store.upsert_items([_titled("rss:2", title.upper() + "!")], NOW)  # case and punctuation differ
+    assert [i.id for i in store.pending_classification()] == ["arxiv:1"]
+    status = store._conn.execute("SELECT status FROM items WHERE id = 'rss:2'").fetchone()[0]
+    assert status == "duplicate"
+
+
+def test_duplicates_inside_one_batch_keep_only_the_first_and_short_titles_never_collide():
+    store = Store(":memory:")
+    long_title = "A reasonably long and specific article title"
+    store.upsert_items(
+        [
+            _titled("a", long_title),
+            _titled("b", long_title),
+            _titled("c", "Introducing GPT"),
+            _titled("d", "Introducing GPT"),
+        ],
+        NOW,
+    )
+    assert sorted(i.id for i in store.pending_classification()) == ["a", "c", "d"]
+
+
+def test_a_known_item_is_never_turned_into_a_duplicate_when_seen_again():
+    store = Store(":memory:")
+    title = "A reasonably long and specific article title"
+    store.upsert_items([_titled("a", title)], NOW)
+    store.save_verdicts([verdict("a")])
+    store.upsert_items([_titled("a", title)], NOW)
+    assert (
+        store._conn.execute("SELECT status FROM items WHERE id = 'a'").fetchone()[0]
+        == "interesting"
+    )

@@ -7,7 +7,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from veille_llm.models import Enrichment, Item, Verdict
+from veille_llm.models import LEGACY, Enrichment, Item, Provenance, Verdict, content_hash
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS items (
@@ -71,7 +71,7 @@ class Store:
         self._conn = sqlite3.connect(str(path))
         self._conn.execute("PRAGMA foreign_keys = ON")
         self._conn.executescript(_SCHEMA)
-        columns = [r[1] for r in self._conn.execute("PRAGMA table_info(enrichments)")]
+        self._migrate_columns()
         with self._conn:  # the fallback category used to be French
             self._conn.execute(
                 "UPDATE enrichments SET category = 'Other' WHERE category = 'Autres'"
@@ -79,8 +79,35 @@ class Store:
             if self._conn.execute("SELECT 1 FROM categories WHERE name = 'Autres'").fetchone():
                 self._conn.execute("INSERT OR IGNORE INTO categories VALUES ('Other')")
                 self._conn.execute("DELETE FROM categories WHERE name = 'Autres'")
-        if "brief" not in columns:  # database created before briefs existed
-            self._conn.execute("ALTER TABLE enrichments ADD COLUMN brief TEXT NOT NULL DEFAULT ''")
+
+    def _migrate_columns(self) -> None:
+        """Columns added after the first databases were published; old rows get safe defaults."""
+
+        def columns(table: str) -> list[str]:
+            return [r[1] for r in self._conn.execute(f"PRAGMA table_info({table})")]
+
+        legacy = "TEXT NOT NULL DEFAULT 'legacy'"
+        wanted = {
+            "enrichments": [("brief", "TEXT NOT NULL DEFAULT ''")],
+            "items": [("content_hash", "TEXT NOT NULL DEFAULT ''")],
+        }
+        for table in ("verdicts", "enrichments"):
+            wanted.setdefault(table, [])
+            wanted[table] += [("model", legacy), ("prompt", legacy), ("pipeline", legacy)]
+        for table, additions in wanted.items():
+            present = columns(table)
+            for name, ddl in additions:
+                if name not in present:
+                    self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+        # Backfill the dedupe hash of items stored before it existed.
+        todo = self._conn.execute("SELECT id, title FROM items WHERE content_hash = ''").fetchall()
+        with self._conn:
+            for item_id, title in todo:
+                digest = content_hash(title)
+                if digest:
+                    self._conn.execute(
+                        "UPDATE items SET content_hash = ? WHERE id = ?", (digest, item_id)
+                    )
 
     def close(self) -> None:
         self._conn.close()
@@ -96,9 +123,22 @@ class Store:
         existing = self.known_ids([i.id for i in items])
         with self._conn:
             for i in items:
+                digest = content_hash(i.title)
+                status = "new"
+                if i.id not in existing and digest:
+                    # Same article under another id (arXiv and Hugging Face, a re-published
+                    # post): the first one wins, the copy is never sent to the LLM.
+                    twin = self._conn.execute(
+                        "SELECT 1 FROM items WHERE content_hash = ? AND id != ? "
+                        "AND status != 'duplicate' LIMIT 1",
+                        (digest, i.id),
+                    ).fetchone()
+                    if twin:
+                        status = "duplicate"
                 self._conn.execute(
                     "INSERT INTO items (id, source, kind, title, summary, url, authors, "
-                    "published, upvotes, first_seen) VALUES (?,?,?,?,?,?,?,?,?,?) "
+                    "published, upvotes, first_seen, status, content_hash) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "
                     "ON CONFLICT(id) DO UPDATE SET upvotes = MAX(upvotes, excluded.upvotes)",
                     (
                         i.id,
@@ -111,6 +151,8 @@ class Store:
                         i.published,
                         i.upvotes,
                         now,
+                        status,
+                        digest,
                     ),
                 )
         return len({i.id for i in items} - existing)
@@ -129,12 +171,22 @@ class Store:
             sql += f" LIMIT {int(limit)}"
         return [_item(row) for row in self._conn.execute(sql)]
 
-    def save_verdicts(self, verdicts: list[Verdict]) -> None:
+    def save_verdicts(self, verdicts: list[Verdict], provenance: Provenance = LEGACY) -> None:
         with self._conn:
             for v in verdicts:
                 self._conn.execute(
-                    "INSERT OR REPLACE INTO verdicts VALUES (?,?,?,?,?)",
-                    (v.item_id, int(v.interesting), v.score, v.type, v.category_hint),
+                    "INSERT OR REPLACE INTO verdicts (item_id, interesting, score, type, "
+                    "category_hint, model, prompt, pipeline) VALUES (?,?,?,?,?,?,?,?)",
+                    (
+                        v.item_id,
+                        int(v.interesting),
+                        v.score,
+                        v.type,
+                        v.category_hint,
+                        provenance.model,
+                        provenance.prompt,
+                        provenance.pipeline,
+                    ),
                 )
                 self._conn.execute(
                     "UPDATE items SET status = ? WHERE id = ?",
@@ -156,14 +208,24 @@ class Store:
             out.append((item, Verdict(item.id, bool(row[9]), row[10], row[11], row[12])))
         return out
 
-    def save_enrichments(self, enrichments: list[Enrichment]) -> None:
+    def save_enrichments(
+        self, enrichments: list[Enrichment], provenance: Provenance = LEGACY
+    ) -> None:
         with self._conn:
             for e in enrichments:
                 self._conn.execute("INSERT OR IGNORE INTO categories VALUES (?)", (e.category,))
                 self._conn.execute(
-                    "INSERT OR REPLACE INTO enrichments (item_id, category, hook, brief) "
-                    "VALUES (?,?,?,?)",
-                    (e.item_id, e.category, e.hook, e.brief),
+                    "INSERT OR REPLACE INTO enrichments (item_id, category, hook, brief, "
+                    "model, prompt, pipeline) VALUES (?,?,?,?,?,?,?)",
+                    (
+                        e.item_id,
+                        e.category,
+                        e.hook,
+                        e.brief,
+                        provenance.model,
+                        provenance.prompt,
+                        provenance.pipeline,
+                    ),
                 )
                 self._conn.execute(
                     "UPDATE items SET status = 'published' WHERE id = ?", (e.item_id,)
