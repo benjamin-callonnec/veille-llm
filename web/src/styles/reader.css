@@ -53,3 +53,183 @@
   background: var(--accent);
   outline: none;
 }
+
+.reader-shell .muted,
+.reader-shell p {
+  margin: 4px 16px;
+}
+.pdf-viewer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pdf-toolbar,
+.pdf-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+.pdf-toolbar input {
+  width: 4.5em;
+}
+.pdf-toolbar button,
+.pdf-search button,
+.pdf-outline button,
+.highlights-strip button,
+.selection-box button,
+.questions button {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--fg);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.pdf-scroll {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg);
+}
+.pdf-canvas {
+  position: relative;
+}
+.pdf-page {
+  position: absolute;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+.pdf-text {
+  position: relative;
+}
+.pdf-text canvas {
+  display: block;
+}
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.pdf-text-layer span {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  line-height: 1;
+  cursor: text;
+}
+.pdf-text-layer span::selection {
+  background: rgba(47, 95, 208, 0.35);
+}
+.pdf-match {
+  background: rgba(255, 200, 0, 0.45);
+}
+.hl {
+  position: absolute;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+.hl-yellow {
+  background: var(--hl-yellow);
+}
+.hl-green {
+  background: var(--hl-green);
+}
+.hl-red {
+  background: var(--hl-red);
+}
+.pdf-outline {
+  position: relative;
+}
+.pdf-outline ul {
+  position: absolute;
+  z-index: 5;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 50vh;
+  overflow: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.pdf-outline li button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+}
+.highlights-strip {
+  border-top: 1px solid var(--border);
+  padding: 4px 12px;
+  max-height: 30%;
+  overflow: auto;
+}
+.highlights-strip ul {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+}
+.highlights-strip li {
+  display: flex;
+  gap: 6px;
+  margin: 3px 0;
+}
+.highlights-strip li button:first-child {
+  flex: 1;
+  text-align: left;
+  color: var(--fg);
+}
+.dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  padding: 0;
+}
+.dot[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+}
+.selection-box {
+  position: fixed;
+  z-index: 10;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+.selection-box input {
+  padding: 6px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+.selection-tools {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.questions {
+  list-style: none;
+  padding: 8px 16px;
+  margin: 0;
+  overflow: auto;
+}
+.questions blockquote {
+  margin: 0;
+  padding-left: 8px;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.chat-empty {
+  padding: 16px;
+}
