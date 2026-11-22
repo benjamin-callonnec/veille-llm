@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Logo } from "../components/Logo";
 import { type ChatApi, httpChatApi } from "./chat/api";
 import { ChatPane } from "./chat/ChatPane";
 import { useChat } from "./chat/useChat";
@@ -40,7 +41,7 @@ function HomeLink() {
       aria-label="Back to the catalogue"
       title="Back to the catalogue"
     >
-      ← Catalogue
+      <Logo size={28} />
     </a>
   );
 }

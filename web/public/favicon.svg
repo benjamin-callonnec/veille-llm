@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    .bg { fill: #2f5fd0; }
+    .fg { fill: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #7ea0f0; }
+      .fg { fill: #101010; }
+    }
+  </style>
+  <rect class="bg" width="32" height="32" rx="8"/>
+  <text class="fg" x="16" y="22.5" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="700" font-size="17">Lw</text>
+</svg>

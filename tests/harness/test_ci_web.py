@@ -63,3 +63,11 @@ def test_make_reader_reloads_on_change_and_never_bills_per_token():
         "CLAUDE_CODE_USE_VERTEX",
     ):
         assert f"-u {name}" in makefile, name
+
+
+def test_both_pages_declare_the_favicon_and_it_exists():
+    web = Path(__file__).resolve().parents[2] / "web"
+    assert (web / "public" / "favicon.svg").is_file()
+    for page in ("index.html", "reader.html"):
+        html = (web / page).read_text()
+        assert 'rel="icon"' in html and "favicon.svg" in html, page

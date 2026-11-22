@@ -188,3 +188,9 @@ test("a slow older response never overwrites a newer catalogue", async () => {
   expect(screen.queryByText("Older")).toBeNull();
   expect(screen.getByText("Newer")).toBeTruthy();
 });
+
+test("the catalogue header shows the logo next to the title", async () => {
+  render(<App load={loader([item({})])} />);
+  const heading = await screen.findByRole("heading", { name: "LLM watch" });
+  expect(heading.parentElement?.querySelector("svg")).not.toBeNull();
+});

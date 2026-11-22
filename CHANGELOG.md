@@ -6,7 +6,7 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 ## [Unreleased]
 
 ### Added
-- Reader: a "← Catalogue" link at the top of the page goes back to the catalogue with all the articles (also shown while loading and when a paper cannot be opened).
+- A logo for the web app: the "Lw" monogram in a rounded square, coloured by the Papier / Nuit theme. It is the favicon of both pages, sits next to the title of the catalogue, and is the home button of the reader (click it to go back to the catalogue with all the articles; also shown while loading and when a paper cannot be opened).
 
 ## [0.12.0] - 2026-11-22
 

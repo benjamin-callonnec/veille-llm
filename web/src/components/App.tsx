@@ -9,6 +9,7 @@ import {
   TYPES,
 } from "../lib/catalogue";
 import { Card } from "./Card";
+import { Logo } from "./Logo";
 
 const SORT_LABELS: Record<SortKey, string> = { trending: "Trending", date: "Date", score: "Score" };
 const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -42,7 +43,10 @@ export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }
   return (
     <>
       <header>
-        <h1>LLM watch</h1>
+        <div className="brand">
+          <Logo size={32} />
+          <h1>LLM watch</h1>
+        </div>
         <p className="muted" aria-live="polite">
           {catalogue
             ? `Updated ${new Date(catalogue.generated_at).toLocaleDateString("en-US")} · ${shown.length} of ${items.length} items`

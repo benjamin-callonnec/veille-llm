@@ -414,3 +414,11 @@ test("the way home is offered while loading and when the PDF fails", async () =>
   await screen.findByRole("alert");
   expect(screen.getByRole("link", { name: "Back to the catalogue" })).toBeTruthy();
 });
+
+test("the home control is the logo: no text, an accessible name and a tooltip", async () => {
+  setup();
+  const home = await screen.findByRole("link", { name: "Back to the catalogue" });
+  expect(home.getAttribute("title")).toBe("Back to the catalogue");
+  expect(home.querySelector("svg")).not.toBeNull();
+  expect(home.textContent).toBe("Lw"); // the monogram only, no "Catalogue" label
+});
