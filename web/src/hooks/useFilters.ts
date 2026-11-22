@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { pruneCategories, readHash, writeHash, type Filters } from "../lib/catalogue";
+import { type Filters, pruneCategories, readHash, writeHash } from "../lib/catalogue";
 
 /** Filters kept in the URL hash: read on load, on back/forward, written on every change. */
 export function useFilters(knownCategories: Set<string> | null) {
@@ -25,7 +25,11 @@ export function useFilters(knownCategories: Set<string> | null) {
   useEffect(() => {
     const hash = writeHash(filters);
     if (hash !== window.location.hash) {
-      window.history.replaceState(null, "", hash || window.location.pathname + window.location.search);
+      window.history.replaceState(
+        null,
+        "",
+        hash || window.location.pathname + window.location.search,
+      );
     }
   }, [filters]);
 

@@ -5,6 +5,12 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+### Added
+- Pre-commit hooks for the web app, limited to staged `web/` files: Biome (format and lint, about 0.1 s), `tsc` with an incremental cache (about 2 s) and Vitest on the related tests only. `npm run check` also runs Biome.
+
+### Fixed
+- Chip groups are real `fieldset`/`legend` elements (accessibility).
+
 ## [0.5.0] - 2026-11-22
 
 ### Added

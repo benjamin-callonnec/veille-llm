@@ -10,7 +10,7 @@ repos:
       - id: detect-private-key
       - id: check-added-large-files
         args: [--maxkb=500]
-        exclude: (data\.json|\.db)$
+        exclude: (catalogue\.json|\.db)$
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.17.6
     hooks:
@@ -28,3 +28,22 @@ repos:
         entry: subscribers.txt and .env must never be committed
         language: fail
         files: (^|/)(subscribers\.txt|\.env(?!\.example$)(\..+)?)$
+      # Web hooks run only on staged web files. Measured locally: biome ~0.1 s, tsc ~2 s with its
+      # incremental cache, vitest only on the tests related to the staged files.
+      - id: web-biome
+        name: web format and lint (biome)
+        entry: bash -c 'cd web && npx --no-install biome check --write --no-errors-on-unmatched --files-ignore-unknown=true "${@#web/}"' --
+        language: system
+        files: ^web/.*\.(ts|tsx|css|json|html)$
+        exclude: ^web/package-lock\.json$
+      - id: web-tsc
+        name: web typecheck (tsc, incremental)
+        entry: bash -c 'cd web && npx --no-install tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc.tsbuildinfo'
+        language: system
+        pass_filenames: false
+        files: ^web/.*\.(ts|tsx)$
+      - id: web-vitest-related
+        name: web tests related to the change (vitest)
+        entry: bash -c 'cd web && npx --no-install vitest related --run "${@#web/}"' --
+        language: system
+        files: ^web/src/.*\.(ts|tsx)$

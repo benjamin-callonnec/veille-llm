@@ -30,3 +30,10 @@ def test_forbid_hook_allows_env_example_and_lookalikes():
     rx = _forbid_regex()
     for name in [".env.example", "environment.py", "my.environment", "subscribers.txt.md"]:
         assert not rx.search(name), name
+
+
+def test_web_hooks_run_only_on_web_files_and_never_on_the_whole_repo():
+    config = (Path(__file__).resolve().parents[2] / ".pre-commit-config.yaml").read_text()
+    for hook in ("web-biome", "web-tsc", "web-vitest-related"):
+        block = config[config.index(f"id: {hook}") :].split("- id:")[0]
+        assert "files: ^web/" in block

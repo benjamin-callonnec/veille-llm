@@ -43,9 +43,15 @@ function parseItem(raw: unknown): Item | null {
   if (typeof raw !== "object" || raw === null) return null;
   const r = raw as Record<string, unknown>;
   if (
-    !isStr(r.id) || !isStr(r.title) || !isStr(r.url) || !isStr(r.published) ||
-    !isStr(r.category) || !isStr(r.hook) || !isNum(r.score) ||
-    !TYPES.includes(r.type as ItemType) || Number.isNaN(Date.parse(r.published))
+    !isStr(r.id) ||
+    !isStr(r.title) ||
+    !isStr(r.url) ||
+    !isStr(r.published) ||
+    !isStr(r.category) ||
+    !isStr(r.hook) ||
+    !isNum(r.score) ||
+    !TYPES.includes(r.type as ItemType) ||
+    Number.isNaN(Date.parse(r.published))
   ) {
     return null;
   }
@@ -94,7 +100,9 @@ function matches(item: Item, f: Filters, ignoreCategory = false): boolean {
   if (f.types.length && !f.types.includes(item.type)) return false;
   const q = f.query.trim().toLowerCase();
   if (!q) return true;
-  return [item.title, item.hook, item.brief, item.category].some((t) => t.toLowerCase().includes(q));
+  return [item.title, item.hook, item.brief, item.category].some((t) =>
+    t.toLowerCase().includes(q),
+  );
 }
 
 export function applyFilters(items: Item[], f: Filters): Item[] {

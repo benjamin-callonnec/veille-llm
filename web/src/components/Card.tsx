@@ -1,4 +1,4 @@
-import { safeUrl, type Item } from "../lib/catalogue";
+import { type Item, safeUrl } from "../lib/catalogue";
 
 const date = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
@@ -7,7 +7,15 @@ export function Card({ item }: { item: Item }) {
   const href = safeUrl(item.url);
   return (
     <article className="card">
-      <h2>{href ? <a href={href} rel="noopener noreferrer" target="_blank">{item.title}</a> : item.title}</h2>
+      <h2>
+        {href ? (
+          <a href={href} rel="noopener noreferrer" target="_blank">
+            {item.title}
+          </a>
+        ) : (
+          item.title
+        )}
+      </h2>
       <p className="hook">
         <strong>{item.hook}</strong>
       </p>
