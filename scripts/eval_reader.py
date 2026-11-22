@@ -53,11 +53,15 @@ Runner = Callable[[RunRequest], object]
 
 # --- metrics (pure) ----------------------------------------------------------------------
 def page_scores(cited: list[int], expected: list[int]) -> tuple[float, float]:
-    """(precision, recall) of the cited pages; 1.0 where there is nothing to be wrong about."""
+    """(precision, recall) of the cited pages; 1.0 where there is nothing to be wrong about.
+
+    `expected` lists the pages where the answer can be found: any one of them is a good source, so
+    recall is 1.0 when at least one cited page is among them (not all of them), else 0.0.
+    """
     got, want = set(cited), set(expected)
     hit = len(got & want)
     precision = hit / len(got) if got else (1.0 if not want else 0.0)
-    recall = hit / len(want) if want else 1.0
+    recall = (1.0 if hit else 0.0) if want else 1.0
     return precision, recall
 
 
