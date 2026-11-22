@@ -145,6 +145,7 @@ def test_no_tools_are_allowed_and_nothing_loads_from_settings(monkeypatch):
     options = query.calls[0].options
     assert options.tools == [] and options.allowed_tools == []
     assert options.include_partial_messages is True
+    assert options.thinking == {"type": "adaptive", "display": "summarized"}
     assert options.setting_sources == []
     assert options.system_prompt == SYSTEM_PROMPT
 

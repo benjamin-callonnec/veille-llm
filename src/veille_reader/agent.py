@@ -6,7 +6,6 @@ import time
 from collections.abc import AsyncIterator, Callable
 
 from veille_llm.llm import (
-    DEFAULT_MODEL,
     LlmError,
     LlmLimitError,
     assert_subscription_auth,
@@ -16,7 +15,9 @@ from veille_llm.llm import (
 from veille_reader import events
 from veille_reader.events import RunRequest
 
-MODEL = os.environ.get("VEILLE_READER_MODEL", DEFAULT_MODEL)
+# The tutor needs good explanations and visible reasoning: Sonnet by default.
+# The pipeline itself stays on Haiku.
+MODEL = os.environ.get("VEILLE_READER_MODEL", "claude-sonnet-5-5")
 
 SYSTEM_PROMPT = (
     "You are a patient tutor helping the user understand a research paper. Explain in plain "
@@ -90,7 +91,7 @@ async def sdk_runner(request: RunRequest, query: Callable | None = None) -> Asyn
         allowed_tools=[],
         system_prompt=SYSTEM_PROMPT,
         include_partial_messages=True,
-        thinking={"type": "adaptive"},
+        thinking={"type": "adaptive", "display": "summarized"},
         setting_sources=[],  # ignore user/project settings, hooks and CLAUDE.md
         strict_mcp_config=True,  # and no MCP servers (none are passed)
         max_turns=1,
