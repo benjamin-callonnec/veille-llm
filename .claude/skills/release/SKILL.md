@@ -26,4 +26,18 @@ section du changelog en description. Il ne fait rien si la release de cette vers
 6. Commit : `chore(release): vX.Y.Z`. Ensuite seulement : `git merge --no-ff develop` dans `main`,
    puis demande l'accord avant `git push origin main`.
 
+## Version de la pipeline (distincte de la version du produit)
+
+`src/veille_llm/pipeline/version.py` porte `PIPELINE_VERSION`, qui décide si les résultats LLM déjà
+stockés sont périmés (issue #16). Elle ne bouge que si un fichier qui influence les résultats a
+changé (filtres, classification, hooks, consolidation, réglages du LLM : liste `RESULT_FILES`).
+Un test échoue tant que ce n'est pas décidé :
+
+- `uv run python -m veille_llm.pipeline.version bump patch` : aucun effet sur les résultats
+  (jamais de recalcul) ;
+- `... bump minor` : les résultats changent un peu (règle, seuil, prompt) : recalcul progressif ;
+- `... bump major` : les résultats changent beaucoup.
+Un changement de modèle ou de prompt invalide de toute façon (hash enregistré avec chaque résultat).
+Propose le niveau d'après les commits qui touchent `RESULT_FILES`, puis note-le dans le changelog.
+
 Ne crée jamais le tag à la main : c'est le workflow qui le fait.

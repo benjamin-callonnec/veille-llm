@@ -13,7 +13,8 @@ from veille_llm.llm import (
     complete_json,
     redact,
 )
-from veille_llm.models import Item, Verdict
+from veille_llm.models import LEGACY, Item, Provenance, Verdict
+from veille_llm.pipeline.resilient import with_halves
 from veille_llm.store import Store
 
 BATCH_SIZE = 15
@@ -105,6 +106,7 @@ async def classify_pending(
     model: str = DEFAULT_MODEL,
     max_batches: int | None = None,
     on_batch: Callable[[int, int], None] | None = None,
+    provenance: Provenance = LEGACY,
 ) -> ClassifyOutcome:
     outcome = ClassifyOutcome()
     pending = store.pending_classification()
@@ -117,18 +119,48 @@ async def classify_pending(
             break
         batch = pending[start : start + BATCH_SIZE]
         try:
+            verdicts = await with_halves(
+                batch,
+                lambda part: classify_batch(part, runner=runner, model=model),
+                outcome,
+            )
+        except LlmError as exc:
+            outcome.stopped = redact(f"{type(exc).__name__}: {exc}")
+            break
+        store.save_verdicts(verdicts, provenance)
+        outcome.classified += len(verdicts)
+        if on_batch:
+            on_batch(start // BATCH_SIZE + 1, total)
+    return outcome
+
+
+async def reclassify_stale(
+    store: Store,
+    *,
+    provenance: Provenance,
+    runner: Runner | None = None,
+    model: str = DEFAULT_MODEL,
+    max_batches: int,
+) -> ClassifyOutcome:
+    """Recompute verdicts made under another model, prompt or minor pipeline version.
+
+    Bounded by `max_batches`; a failed batch keeps the previous verdicts and is retried on a
+    later run. A published item is never unpublished (see `Store.refresh_verdict`).
+    """
+    outcome = ClassifyOutcome()
+    stale = store.stale_classification(provenance, max_batches * BATCH_SIZE)
+    for start in range(0, len(stale), BATCH_SIZE):
+        batch = stale[start : start + BATCH_SIZE]
+        try:
             verdicts = await classify_batch(batch, runner=runner, model=model)
         except LlmOutputError as exc:
             outcome.skipped_batches += 1
             outcome.skip_reasons.append(redact(str(exc))[:200])
-            if on_batch:
-                on_batch(start // BATCH_SIZE + 1, total)
             continue
         except LlmError as exc:
             outcome.stopped = redact(f"{type(exc).__name__}: {exc}")
             break
-        store.save_verdicts(verdicts)
+        for verdict in verdicts:
+            store.refresh_verdict(verdict, provenance)
         outcome.classified += len(verdicts)
-        if on_batch:
-            on_batch(start // BATCH_SIZE + 1, total)
     return outcome

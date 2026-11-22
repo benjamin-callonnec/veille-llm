@@ -348,3 +348,52 @@ def test_consolidation_repeats_while_other_stays_too_big_but_stops_when_it_is_no
     report = run(store, tmp_path / "c.json", [], llm)
     # 60 + 60 re-homed, then Other is 10 of 134 items (under 25%): no third call
     assert llm.calls == 2 and report.reassigned == 120
+
+
+def test_every_stored_result_records_model_prompt_and_pipeline_version(tmp_path):
+    from veille_llm.pipeline.version import PIPELINE_VERSION
+
+    store = Store(":memory:")
+    run(store, tmp_path / "c.json", [news("a")], Llm(), model="claude-sonnet-5-5")
+    v = store._conn.execute("SELECT model, prompt, pipeline FROM verdicts").fetchone()
+    e = store._conn.execute("SELECT model, prompt, pipeline FROM enrichments").fetchone()
+    for row in (v, e):
+        assert row[0] == "claude-sonnet-5-5" and row[2] == PIPELINE_VERSION
+        assert row[1] not in ("", "legacy")
+    assert v[1] != e[1]  # classification and hooks have their own prompt hash
+
+
+def test_an_unchanged_version_makes_zero_llm_calls_on_the_next_run(tmp_path):
+    store = Store(":memory:")
+    run(store, tmp_path / "c.json", [news("a"), news("b")], Llm())
+    second = Llm()
+    report = run(store, tmp_path / "c.json", [news("a"), news("b")], second)
+    assert second.calls == 0 and report.refreshed == 0
+
+
+def test_a_model_change_recomputes_old_results_with_the_leftover_budget(tmp_path):
+    store = Store(":memory:")
+    run(store, tmp_path / "c.json", [news("a"), news("b")], Llm(), model="claude-haiku-5-5")
+    second = Llm()
+    report = run(store, tmp_path / "c.json", [], second, model="claude-sonnet-5-5", max_batches=5)
+    assert second.calls == 2 and report.refreshed == 4  # 2 verdicts + 2 hooks
+    models = {r[0] for r in store._conn.execute("SELECT model FROM verdicts")}
+    assert models == {"claude-sonnet-5-5"}
+    assert len(json.loads((tmp_path / "c.json").read_text())["items"]) == 2  # never unpublished
+
+
+def test_recomputation_is_bounded_by_the_batch_budget_and_new_work_goes_first(tmp_path):
+    store = Store(":memory:")
+    run(store, tmp_path / "c.json", [news("a"), news("b")], Llm(), model="claude-haiku-5-5")
+    spent = Llm()
+    report = run(store, tmp_path / "c.json", [], spent, model="claude-sonnet-5-5", max_batches=1)
+    assert spent.calls == 1 and report.refreshed == 2  # verdicts only; hooks wait
+
+
+def test_a_patch_bump_of_the_pipeline_never_recomputes():
+    from veille_llm.models import Provenance
+    from veille_llm.pipeline.version import PIPELINE_VERSION, outdated
+
+    major, minor, patch = PIPELINE_VERSION.split(".")
+    stored = Provenance("m", "p", f"{major}.{minor}.{int(patch) + 3}")
+    assert not outdated(stored, Provenance("m", "p", PIPELINE_VERSION))

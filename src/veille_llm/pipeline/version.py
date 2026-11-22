@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 PIPELINE_VERSION = "1.0.0"
-SOURCES_HASH = "ad5259c034ef85a1"
+SOURCES_HASH = "7c689159fe6de62d"
 
 # Relative to src/veille_llm: the files whose changes can alter a stored result.
 RESULT_FILES = (
@@ -29,6 +29,7 @@ RESULT_FILES = (
     "pipeline/classify.py",
     "pipeline/categorize.py",
     "pipeline/consolidate.py",
+    "pipeline/resilient.py",
     "llm.py",
 )
 

@@ -334,3 +334,63 @@ def test_a_known_item_is_never_turned_into_a_duplicate_when_seen_again():
         store._conn.execute("SELECT status FROM items WHERE id = 'a'").fetchone()[0]
         == "interesting"
     )
+
+
+def _stale_store():
+    """a: published under model A; b: rejected under A; c: published under legacy."""
+    store = Store(":memory:")
+    items = [
+        _titled("a", "Article a with a long enough title"),
+        _titled("b", "Article b with a long enough title"),
+        _titled("c", "Article c with a long enough title"),
+    ]
+    store.upsert_items(items, NOW)
+    old = _prov("A", "p", "1.0.0")
+    store.save_verdicts([verdict("a")], old)
+    store.save_verdicts([Verdict("b", False, 2, "paper", "h")], old)
+    store.save_verdicts([verdict("c")])  # legacy
+    store.save_enrichments([Enrichment("a", "Agents", "Old hook.", "Old brief.")], old)
+    store.save_enrichments([Enrichment("c", "Agents", "H.", "B.")])
+    return store
+
+
+def test_stale_classification_lists_outdated_results_but_never_legacy_ones():
+    store = _stale_store()
+    current = _prov("B", "p", "1.0.0")
+    assert sorted(i.id for i in store.stale_classification(current, 10)) == ["a", "b"]
+    assert store.stale_classification(_prov("A", "p", "1.0.7"), 10) == []  # patch: same results
+
+
+def test_stale_classification_respects_the_limit_and_the_current_version_is_not_stale():
+    store = _stale_store()
+    assert len(store.stale_classification(_prov("B", "p", "1.0.0"), 1)) == 1
+    assert store.stale_classification(_prov("A", "p", "1.0.0"), 10) == []
+
+
+def test_refresh_verdict_keeps_a_published_item_published_and_revives_a_rejected_one():
+    store = _stale_store()
+    new = _prov("B", "p", "1.0.0")
+    store.refresh_verdict(Verdict("a", False, 3, "news", "x"), new)  # now "not interesting"
+    store.refresh_verdict(Verdict("b", True, 8, "paper", "y"), new)
+    status = dict(store._conn.execute("SELECT id, status FROM items"))
+    assert status["a"] == "published" and status["b"] == "interesting"  # never unpublished
+    row = store._conn.execute(
+        "SELECT score, type, model FROM verdicts WHERE item_id='a'"
+    ).fetchone()
+    assert row == (3, "news", "B")
+
+
+def test_stale_hooks_and_refresh_keep_the_category_that_consolidation_chose():
+    store = _stale_store()
+    store.rename_category("Agents", "Consolidated")
+    current = _prov("B", "hp", "1.0.0")
+    stale = store.stale_hooks(current, 10)
+    assert [(i.id, e.category) for i, _, e in stale] == [("a", "Consolidated")]
+    store.refresh_enrichment("a", "New hook.", "New brief.", current)
+    (row,) = [r for r in store.published_items("2026-01-01T00:00:00Z") if r["id"] == "a"]
+    assert (row["hook"], row["brief"], row["category"]) == (
+        "New hook.",
+        "New brief.",
+        "Consolidated",
+    )
+    assert store.stale_hooks(current, 10) == []

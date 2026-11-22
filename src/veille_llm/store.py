@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import astuple
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from veille_llm.models import LEGACY, Enrichment, Item, Provenance, Verdict, content_hash
+from veille_llm.pipeline.version import outdated
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS items (
@@ -230,6 +232,87 @@ class Store:
                 self._conn.execute(
                     "UPDATE items SET status = 'published' WHERE id = ?", (e.item_id,)
                 )
+
+    def stale_classification(self, current: Provenance, limit: int) -> list[Item]:
+        """Classified items whose verdict was made under another model, prompt or minor version."""
+        rows = self._conn.execute(
+            f"SELECT {', '.join('i.' + c.strip() for c in _ITEM_COLUMNS.split(','))}, "
+            "v.model, v.prompt, v.pipeline FROM items i JOIN verdicts v ON v.item_id = i.id "
+            "WHERE i.status IN ('published', 'interesting', 'rejected') "
+            "ORDER BY i.published DESC, i.id"
+        )
+        out = []
+        for row in rows:
+            if outdated(Provenance(row[9], row[10], row[11]), current):
+                out.append(_item(row[:9]))
+                if len(out) >= limit:
+                    break
+        return out
+
+    def stale_hooks(
+        self, current: Provenance, limit: int
+    ) -> list[tuple[Item, Verdict, Enrichment]]:
+        """Published items whose hook and brief were written under another version."""
+        rows = self._conn.execute(
+            f"SELECT {', '.join('i.' + c.strip() for c in _ITEM_COLUMNS.split(','))}, "
+            "v.interesting, v.score, v.type, v.category_hint, "
+            "e.category, e.hook, e.brief, e.model, e.prompt, e.pipeline "
+            "FROM items i JOIN verdicts v ON v.item_id = i.id "
+            "JOIN enrichments e ON e.item_id = i.id "
+            "WHERE i.status = 'published' ORDER BY i.published DESC, i.id"
+        )
+        out = []
+        for row in rows:
+            if outdated(Provenance(row[16], row[17], row[18]), current):
+                item = _item(row[:9])
+                verdict = Verdict(item.id, bool(row[9]), row[10], row[11], row[12])
+                out.append((item, verdict, Enrichment(item.id, row[13], row[14], row[15])))
+                if len(out) >= limit:
+                    break
+        return out
+
+    def refresh_verdict(self, v: Verdict, provenance: Provenance) -> None:
+        """Replace a verdict with a newer one. A published item is never unpublished."""
+        status = self._conn.execute(
+            "SELECT status FROM items WHERE id = ?", (v.item_id,)
+        ).fetchone()
+        if status is None:
+            return
+        with self._conn:
+            if status[0] == "published":
+                self._conn.execute(
+                    "UPDATE verdicts SET score = ?, type = ?, category_hint = ?, model = ?, "
+                    "prompt = ?, pipeline = ? WHERE item_id = ?",
+                    (v.score, v.type, v.category_hint, *astuple(provenance), v.item_id),
+                )
+                return
+            self._conn.execute(
+                "UPDATE verdicts SET interesting = ?, score = ?, type = ?, category_hint = ?, "
+                "model = ?, prompt = ?, pipeline = ? WHERE item_id = ?",
+                (
+                    int(v.interesting),
+                    v.score,
+                    v.type,
+                    v.category_hint,
+                    *astuple(provenance),
+                    v.item_id,
+                ),
+            )
+            self._conn.execute(
+                "UPDATE items SET status = ? WHERE id = ?",
+                ("interesting" if v.interesting else "rejected", v.item_id),
+            )
+
+    def refresh_enrichment(
+        self, item_id: str, hook: str, brief: str, provenance: Provenance
+    ) -> None:
+        """New hook and brief; the category stays (consolidation may have chosen it)."""
+        with self._conn:
+            self._conn.execute(
+                "UPDATE enrichments SET hook = ?, brief = ?, model = ?, prompt = ?, pipeline = ? "
+                "WHERE item_id = ?",
+                (hook, brief, *astuple(provenance), item_id),
+            )
 
     def newsletter_progress(self, week: str) -> tuple[int, int] | None:
         row = self._conn.execute(
