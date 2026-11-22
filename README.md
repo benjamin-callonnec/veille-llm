@@ -92,8 +92,7 @@ The page shows the PDF (zoom, search with `/`, outline, PageUp/PageDown) next to
 chat; the divider can be dragged (or moved with the arrow keys) and each pane collapsed. Select a
 passage to get a small box: type a question about it (Enter), or pick a colour to highlight it, or
 copy it. Highlights are kept in `reader.db` and the page number stays in the URL. The tutor chat
-chat is a streaming conversation with the tutor (Agent SDK on your subscription, no API key, no
-tools yet): answers stream token by token, a discreet "Thinking" line shows the reasoning (open while
+chat is a streaming conversation with the tutor (Agent SDK on your subscription, no API key, local tools, see below): answers stream token by token, a discreet "Thinking" line shows the reasoning (open while
 the agent works, folded when the answer starts, reopenable any time), `[p.N]` citations scroll the PDF,
 conversations are kept per paper (dropdown in the chat header: new, rename, delete, export to
 Markdown). The tutor uses Sonnet by default (`VEILLE_READER_MODEL` to change it).
@@ -109,7 +108,22 @@ last 4 exchanges and your notes are always kept; the cost of a conversation coun
 those that hit a limit or were regenerated). Notes say whether you or the tutor wrote them. Every turn leaves a trace (tools, tokens, time, cost, never
 the text) at `/api/items/<id>/conversations/<cid>/trace`. Not there yet: the `ask_user` tool and the
 screens for the notes, the limit and the trace.
-Remaining pieces: #23 to #26 (parent: #17).
+
+**Grounded citations (#31).** The tutor cites as `[p.4 "short exact quote"]`. After each answer the
+server checks every quote against the page text (letters and digits only, case and spacing ignored)
+and marks it verified, found on another page, not found, or page only; the section comes from the PDF
+outline and from where the quote sits on the page. In the chat, a doubtful citation is a dashed chip
+whose tooltip says why, and clicking a chip goes to the page and flashes the quote in the PDF.
+`search_paper` is a local ranked search (BM25 over passages of about 700 characters, section titles
+indexed with them, exact phrases first), so a paraphrased question still finds the right page.
+`make eval-reader` (`ARGS="--limit 3"`, `--model`, `--ids`) runs 10 questions on two papers
+(`evals/reader_cases.json`) through the real tutor on your subscription and reports page precision and
+recall, verified quotes, expected facts, abstention, tool calls, cost and time (JSON in
+`evals/results/`, git-ignored).
+The question box next to a selected passage is one pill: three coloured dots, the question, copy, and a
+send icon once you typed. A new conversation starts from the compose icon in the chat corner (the "+"
+of the composer is kept for attachments and audio).
+Remaining pieces: #24 to #26 (parent: #17).
 
 ## Deploy on GitHub Pages
 
