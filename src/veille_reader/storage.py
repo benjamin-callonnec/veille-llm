@@ -283,7 +283,7 @@ class ReaderStore:
                 lines += [f"**You:** {content.get('question', '')}", ""]
             elif message["role"] == "user":
                 lines += [f"**You:** {content.get('text', '')}", ""]
-            else:
+            elif message["role"] == "assistant":
                 lines += [content.get("answer", ""), ""]
         return "\n".join(lines)
 

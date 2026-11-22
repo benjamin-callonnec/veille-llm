@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from veille_reader import events
 from veille_reader.chat import stream_turn
+from veille_reader.compaction import Summarizer
 from veille_reader.events import AgentRunner
 from veille_reader.limits import AgentLimits
 from veille_reader.memory import MAX_NOTES, StoreMemory
@@ -121,6 +122,7 @@ def create_app(
     model: str | None = None,
     agent_limits: AgentLimits | None = None,
     tools_factory: Callable[[str, dict], tuple[PaperTools | None, list[str]]] | None = None,
+    summarizer: Summarizer | None = None,
 ) -> FastAPI:
     loaded = {"items": _load_items(catalogue_path), "mtime": catalogue_path.stat().st_mtime_ns}
 
@@ -286,6 +288,7 @@ def create_app(
                     agent_limits=agent_limits,
                     model=model or "",
                     raise_limit=raise_limit,
+                    summarizer=summarizer,
                 ):
                     yield line
             finally:
@@ -314,8 +317,8 @@ def create_app(
         if cid in app.state.streaming:
             return JSONResponse({"reason": "busy"}, status_code=409)
         store.replace_last_assistant(cid)
-        messages = store.messages(cid)
-        if not messages or messages[-1]["role"] != "user":
+        spoken = [m for m in store.messages(cid) if m["role"] in ("user", "assistant")]
+        if not spoken or spoken[-1]["role"] != "user":
             return JSONResponse({"reason": "nothing_to_regenerate"}, status_code=400)
         return await run_turn(item_id, cid, None, None)
 

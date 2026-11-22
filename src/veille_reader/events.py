@@ -40,6 +40,7 @@ class RunRequest:
     question: str
     history: list[dict] = field(default_factory=list)
     quote: dict | None = None
+    summary: str | None = None  # the summary of the turns that were compacted away
     # the tutor's tools for this paper (a PaperTools) and the limits of this answer; with no tools
     # the agent answers from the summary alone
     paper_tools: Any = None

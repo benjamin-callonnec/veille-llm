@@ -7,7 +7,7 @@ from pathlib import Path
 
 import uvicorn
 
-from veille_reader.agent import MODEL, sdk_runner
+from veille_reader.agent import MODEL, sdk_runner, sdk_summarizer
 from veille_reader.env import load_env_file, permission_warning
 from veille_reader.server import create_app
 
@@ -63,7 +63,12 @@ def main(argv: list[str] | None = None) -> int:
     static = args.static if args.static.is_dir() else None
     try:
         app = create_app(
-            args.data_dir, args.catalogue, static_dir=static, runner=sdk_runner, model=MODEL
+            args.data_dir,
+            args.catalogue,
+            static_dir=static,
+            runner=sdk_runner,
+            model=MODEL,
+            summarizer=sdk_summarizer,
         )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -100,6 +105,7 @@ def reload_app():  # noqa: ANN201
         static_dir=Path(static) if static else None,
         runner=sdk_runner,
         model=MODEL,
+        summarizer=sdk_summarizer,
         dev_origins={o for o in os.environ.get("VEILLE_READER_DEV_ORIGINS", "").split(",") if o},
         dev_front=os.environ.get("VEILLE_READER_DEV_FRONT") or None,
     )

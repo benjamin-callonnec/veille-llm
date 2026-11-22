@@ -9,6 +9,7 @@ import anyio
 
 from veille_llm.llm import redact
 from veille_reader import events
+from veille_reader.compaction import Summarizer, compact, current_history, needs_compaction
 from veille_reader.events import AgentRunner, RunRequest
 from veille_reader.limits import AgentLimits
 from veille_reader.storage import ReaderStore
@@ -16,25 +17,6 @@ from veille_reader.storage import ReaderStore
 
 def sse(event: dict) -> str:
     return f"data: {json.dumps(event)}\n\n"
-
-
-def history_of(messages: list[dict]) -> list[dict]:
-    turns = []
-    for m in messages:
-        content = m["content"]
-        if m["role"] == "assistant":
-            turns.append({"role": "assistant", "text": content.get("answer", "")})
-        elif m["kind"] == "ask_agent":
-            turns.append(
-                {
-                    "role": "user",
-                    "text": content.get("question", ""),
-                    "quote": content.get("quote"),
-                }
-            )
-        else:
-            turns.append({"role": "user", "text": content.get("text", "")})
-    return turns
 
 
 class _Answer:
@@ -162,6 +144,7 @@ async def stream_turn(
     tool_limits: object = None,
     model: str = "",
     raise_limit: bool = False,
+    summarizer: Summarizer | None = None,
 ) -> AsyncIterator[str]:
     """Stream one turn. With `kind` None the last user message is run again (regenerate)."""
     if kind is not None and content is not None:
@@ -171,12 +154,20 @@ async def stream_turn(
     refusal = session_refusal(store, cid, messages, limits, raise_limit)
     if refusal is not None:
         runner = _refusal_runner(refusal)
-    turns = history_of(messages)
+    summary, turns = current_history(messages)
+    if (
+        summarizer is not None
+        and needs_compaction(turns)
+        and await compact(store, cid, messages, summarizer)
+    ):
+        messages = store.messages(cid)
+        summary, turns = current_history(messages)
     last = turns[-1]
     request = RunRequest(
         item=item,
         question=last["text"],
         history=turns[:-1],
+        summary=summary,
         quote=last.get("quote"),
         paper_tools=tools,
         notes=list(notes or []),
