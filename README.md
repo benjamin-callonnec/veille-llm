@@ -28,6 +28,27 @@ env -u ANTHROPIC_API_KEY uv run veille-core run --db build/veille.db --out build
 - Categories are proposed by the LLM (12 at most, plus "Other").
 - Design and plans: `docs/superpowers/`.
 
+## Newsletter
+
+Every Monday 08:00 UTC `weekly.yml` sends the same mail (Jinja2, HTML and text) with the 8 best
+items of the last 7 days to each subscriber, one message per address, once per ISO week. With no
+interesting item it sends nothing (and does not fail). The delivery counters (counts
+only, never addresses) live in `veille.db` on the `data` branch; a rerun after a partial failure
+resumes where it stopped. If a `weekly` run goes red, use "Re-run failed jobs", not "Re-run all jobs": the counters are saved by the `persist` job, and a full rerun after a successful send would mail everyone again.
+
+```bash
+make subs-add EMAIL=friend@example.org   # edits the local, gitignored subscribers.txt
+make subs-remove EMAIL=friend@example.org
+make subs-list
+make subs-push                           # gh secret set SUBSCRIBERS (personal account)
+uv run veille-newsletter send --db build/veille.db --dry-run   # renders build/newsletter.html
+```
+
+Secrets to create in the repository settings: `SUBSCRIBERS`, `SMTP_HOST`, `SMTP_PORT` (587
+STARTTLS or 465), `SMTP_USER`, `SMTP_PASSWORD` (an app password), `NEWSLETTER_FROM` (for example
+`LLM watch <you@example.org>`) and `NEWSLETTER_CONTACT` (the address people write to to
+unsubscribe). Nothing private is stored in the repository.
+
 ## Deploy on GitHub Pages
 
 1. Push the repo to GitHub.
