@@ -391,3 +391,17 @@ test("the page leaves the logo and the settings gear to the shared shell", async
   expect(screen.queryByRole("link", { name: "Home" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
 });
+
+test("the reader header is the shared page head, in every state", async () => {
+  const ok = setup();
+  const heading = await screen.findByRole("heading", { name: "Agents at scale" });
+  expect(heading.closest("header")?.className).toContain("page-head");
+  ok.unmount();
+  setup({
+    load: async () => {
+      throw new Error("404");
+    },
+  });
+  await screen.findByRole("alert");
+  expect(document.querySelector("header")?.className).toContain("page-head");
+});

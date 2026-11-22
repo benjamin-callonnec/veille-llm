@@ -116,7 +116,7 @@ export function ReaderPage({
   if (error) {
     return (
       <div className="reader-shell">
-        <header className="reader-head"></header>
+        <header className="page-head reader-head"></header>
         <p role="alert">{error}</p>
       </div>
     );
@@ -124,7 +124,7 @@ export function ReaderPage({
   if (!item) {
     return (
       <div className="reader-shell">
-        <header className="reader-head"></header>
+        <header className="page-head reader-head"></header>
         <p className="muted">Loading…</p>
       </div>
     );
@@ -147,7 +147,7 @@ export function ReaderPage({
 
   return (
     <div className="reader-shell">
-      <header className="reader-head">
+      <header className="page-head reader-head">
         <h1>{item.title}</h1>
         <p className="hook">
           <strong>{item.hook}</strong>

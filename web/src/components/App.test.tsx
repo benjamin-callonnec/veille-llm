@@ -196,3 +196,9 @@ test("/ focuses the search box", async () => {
   await userEvent.keyboard("/");
   expect(document.activeElement).toBe(screen.getByRole("searchbox"));
 });
+
+test("the catalogue header is the shared page head, next to the logo", async () => {
+  render(<App load={loader([item({})])} />);
+  const heading = await screen.findByRole("heading", { name: "LLM watch" });
+  expect(heading.closest("header")?.className).toContain("page-head");
+});

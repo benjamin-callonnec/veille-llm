@@ -58,7 +58,7 @@ export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }
 
   return (
     <>
-      <header>
+      <header className="page-head">
         <h1>LLM watch</h1>
         <p className="muted" aria-live="polite">
           {catalogue

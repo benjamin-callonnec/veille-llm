@@ -25,12 +25,6 @@ main,
 header {
   padding: 32px 0 8px;
 }
-/* the logo is fixed in the top-left corner: keep narrow screens clear of it */
-@media (max-width: 900px) {
-  body {
-    padding-top: 52px;
-  }
-}
 h1 {
   margin: 0;
   font-size: 1.6rem;

@@ -51,3 +51,24 @@ def test_a_theme_can_be_forced_over_the_system_appearance():
         block = rule(TOKENS, f':root[data-theme="{theme}"]')
         for token in ("--bg", "--fg", "--card", "--accent", "--hl-yellow"):
             assert token in block, (theme, token)
+
+
+def px(declarations: str, prop: str) -> list[int]:
+    match = re.search(prop + r":\s*([^;]+);", declarations)
+    return [int(v) for v in re.findall(r"(-?\d+)px", match.group(1))] if match else []
+
+
+def test_the_page_head_starts_to_the_right_of_the_logo_on_every_page():
+    """Title and logo sit on one line: the head leaves room for the fixed logo (16px + 32px)."""
+    r = rule(CHROME, "header.page-head")
+    assert "max-width: none" in r
+    padding = px(r, "padding")  # top right bottom left
+    assert len(padding) == 4 and padding[3] >= 56, padding
+    assert px(r, "min-height") and px(r, "min-height")[0] >= 48
+
+
+def test_both_pages_use_the_same_page_head():
+    web = STYLES.parent
+    for page in ("components/App.tsx", "reader/ReaderPage.tsx"):
+        source = (web / page).read_text()
+        assert "page-head" in source, page

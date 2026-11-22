@@ -12,6 +12,8 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 - The "Read" link no longer carries a port written at build time (it was wrong when the front had been built for another port): it is relative to the catalogue page, so it works from the dev server and from the built front.
 
 ### Added
+- The keyboard shortcuts follow your keyboard: on a Mac they show ⌥ (Option), Return, ⇧ and fn with an arrow for PageUp/PageDown; on Windows and Linux they show Alt, Enter, Shift, PageUp and PageDown. The platform is detected from the browser.
+- The title of each page sits on the same line as the logo, to its right (the catalogue now has the same page head as the reader).
 - A shared app shell: the logo (home button, goes to the catalogue) is fixed in the top-left corner and the settings gear in the bottom-left corner, at the same place on every page, provided by one component (`AppShell`) so pages do not render them and any new page gets them for free. The gear opens the settings: theme (Auto follows the system, Papier light, Nuit dark; remembered) and the keyboard shortcuts of the current page. `?` opens and closes it. On the catalogue, `/` jumps to the search box.
 - Paper cards open the reader when you click anywhere on the card (an invisible link covers the card); the title still opens the original article in a new tab. The visible "Read" link is gone.
 - A logo for the web app: the "Lw" monogram in a rounded square, coloured by the Papier / Nuit theme. It is the favicon of both pages and the home button on every page.

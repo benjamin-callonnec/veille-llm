@@ -119,3 +119,26 @@ test("the question mark key toggles it, except while typing", async () => {
   await userEvent.keyboard("?");
   expect(screen.queryByRole("dialog")).toBeNull();
 });
+
+const kbds = () => Array.from(document.querySelectorAll("kbd")).map((k) => k.textContent);
+
+test("on a Mac the shortcuts show Option, Return and the Fn arrows", async () => {
+  render(<SettingsMenu shortcuts={READER_SHORTCUTS} storage={storage} platform="mac" />);
+  await userEvent.click(gear());
+  expect(kbds()).toContain("⌥");
+  expect(kbds()).toContain("Return");
+  expect(kbds()).toContain("fn");
+  expect(kbds()).not.toContain("Alt");
+  expect(kbds()).not.toContain("PageDown");
+  expect(screen.getByRole("dialog").textContent).toMatch(/Option/);
+});
+
+test("on Windows or Linux the shortcuts show Alt, Enter and PageUp/PageDown", async () => {
+  render(<SettingsMenu shortcuts={READER_SHORTCUTS} storage={storage} platform="other" />);
+  await userEvent.click(gear());
+  expect(kbds()).toContain("Alt");
+  expect(kbds()).toContain("Enter");
+  expect(kbds()).toContain("PageDown");
+  expect(kbds()).not.toContain("⌥");
+  expect(screen.getByRole("dialog").textContent).not.toMatch(/Option/);
+});

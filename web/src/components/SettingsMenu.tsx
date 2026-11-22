@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { isMac, keysFor } from "../lib/platform";
 import type { ShortcutGroup } from "../lib/shortcuts";
 import { applyTheme, defaultStorage, loadTheme, saveTheme, type Theme } from "../lib/theme";
 
@@ -15,10 +16,13 @@ const isTyping = (target: EventTarget | null) =>
 interface Props {
   shortcuts: ShortcutGroup[];
   storage?: Storage | null;
+  /** Which keyboard to show the shortcuts for; detected from the browser by default. */
+  platform?: "mac" | "other";
 }
 
 /** The gear fixed in the bottom-left corner of every page: theme and keyboard shortcuts. */
-export function SettingsMenu({ shortcuts, storage }: Props) {
+export function SettingsMenu({ shortcuts, storage, platform }: Props) {
+  const mac = platform ? platform === "mac" : isMac();
   const store = storage === undefined ? defaultStorage() : storage;
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => loadTheme(store));
@@ -69,9 +73,12 @@ export function SettingsMenu({ shortcuts, storage }: Props) {
                 {group.entries.map((entry) => (
                   <div key={entry.label} className="shortcut">
                     <dt>
-                      {entry.keys.map((k) => (
-                        <kbd key={k}>{k}</kbd>
-                      ))}
+                      {entry.keys
+                        .flatMap((k) => keysFor(k, mac))
+                        .map((cap, i) => (
+                          // biome-ignore lint/suspicious/noArrayIndexKey: a key cap can repeat in one shortcut
+                          <kbd key={`${cap}-${i}`}>{cap}</kbd>
+                        ))}
                     </dt>
                     <dd>{entry.label}</dd>
                   </div>
@@ -79,7 +86,7 @@ export function SettingsMenu({ shortcuts, storage }: Props) {
               </dl>
             </section>
           ))}
-          <p className="muted">Alt is Option on a Mac.</p>
+          {mac && <p className="muted">⌥ is the Option key, fn the Function key.</p>}
         </div>
       )}
       <button
