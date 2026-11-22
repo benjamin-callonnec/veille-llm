@@ -152,6 +152,29 @@
   mix-blend-mode: multiply;
   pointer-events: none;
 }
+.hl-flash {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: hl-flash-fade ease-out forwards;
+}
+@keyframes hl-flash-fade {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hl-flash {
+    animation: none;
+  }
+}
 .hl-yellow {
   background: var(--hl-yellow);
 }

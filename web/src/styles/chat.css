@@ -243,6 +243,11 @@
   font-size: 0.8rem;
   cursor: pointer;
 }
+.markdown .cite-doubt {
+  border-style: dashed;
+  border-color: var(--muted);
+  color: var(--muted);
+}
 .chat-error {
   color: #c0392b;
 }

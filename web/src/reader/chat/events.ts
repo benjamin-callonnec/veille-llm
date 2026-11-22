@@ -1,4 +1,51 @@
+export type CitationStatus =
+  | "verified"
+  | "wrong_page"
+  | "unverified"
+  | "page_only"
+  | "invalid_page";
+
+/** The server's verdict on one citation of the answer. */
+export interface Citation {
+  page: number;
+  quote: string | null;
+  status: CitationStatus;
+  section: string | null;
+  found_page?: number;
+}
+
+const STATUSES: readonly string[] = [
+  "verified",
+  "wrong_page",
+  "unverified",
+  "page_only",
+  "invalid_page",
+];
+
+/** Keep only well-formed citation verdicts (also used for stored messages). */
+export function toCitations(raw: unknown): Citation[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Citation[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.page !== "number" || !Number.isInteger(r.page)) continue;
+    if (typeof r.status !== "string" || !STATUSES.includes(r.status)) continue;
+    const citation: Citation = {
+      page: r.page,
+      quote: typeof r.quote === "string" ? r.quote : null,
+      status: r.status as CitationStatus,
+      section: typeof r.section === "string" ? r.section : null,
+    };
+    if (typeof r.found_page === "number" && Number.isInteger(r.found_page))
+      citation.found_page = r.found_page;
+    out.push(citation);
+  }
+  return out;
+}
+
 export type ChatEvent =
+  | { type: "citations"; items: Citation[] }
   | { type: "thinking_delta"; text: string }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; id: string; summary: string; is_error: boolean }
@@ -24,6 +71,8 @@ export function toEvent(raw: unknown): ChatEvent | null {
       return isStr(r.id) && isStr(r.summary)
         ? { type: "tool_result", id: r.id, summary: r.summary, is_error: r.is_error === true }
         : null;
+    case "citations":
+      return Array.isArray(r.items) ? { type: "citations", items: toCitations(r.items) } : null;
     case "done":
       return typeof r.duration_ms === "number"
         ? { type: "done", duration_ms: r.duration_ms }

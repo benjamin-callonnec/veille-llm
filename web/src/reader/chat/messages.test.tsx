@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { AssistantMessage, StoredAssistantMessage } from "./AssistantMessage";
 import type { StoredMessage } from "./api";
 import { Composer } from "./Composer";
+import { initialAssistant } from "./reducer";
 import { UserMessage } from "./UserMessage";
 
 const writeText = vi.fn(async () => {});
@@ -290,4 +291,41 @@ test("the model is shown quietly under the composer", () => {
   cleanup();
   const { container } = render(<Composer onSend={() => {}} onStop={() => {}} streaming={false} />);
   expect(container.querySelector(".composer-status")).toBeNull();
+});
+
+test("stored citations mark a doubtful chip, and malformed ones are ignored", () => {
+  render(
+    <StoredAssistantMessage
+      content={{
+        answer: 'See [p.2 "not in the paper"] and [p.3]',
+        citations: [
+          { page: 2, quote: "not in the paper", status: "unverified", section: null },
+          { page: "x" },
+        ] as never,
+      }}
+      onCite={() => {}}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "p.2" }).className).toContain("cite-doubt");
+  expect(screen.getByRole("button", { name: "p.3" }).className).toBe("cite");
+});
+
+test("a live answer uses the citations event of the stream", async () => {
+  const onCite = vi.fn();
+  const state = {
+    ...initialAssistant(0),
+    answer: 'See [p.2 "a stated quote"]',
+    citations: [
+      {
+        page: 2,
+        quote: "a stated quote",
+        status: "wrong_page" as const,
+        section: null,
+        found_page: 6,
+      },
+    ],
+  };
+  render(<AssistantMessage state={state} onToggleThinking={() => {}} onCite={onCite} />);
+  await userEvent.click(screen.getByRole("button", { name: "p.2" }));
+  expect(onCite).toHaveBeenCalledWith(6, "a stated quote");
 });

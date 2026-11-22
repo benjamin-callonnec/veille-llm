@@ -17,10 +17,14 @@ function download(name: string, text: string) {
 export function ChatPane({
   chat,
   onGo,
+  onCite = (page) => onGo(page),
   model,
 }: {
   chat: ReturnType<typeof useChat>;
+  /** The quote arrow of a user message. */
   onGo(page: number): void;
+  /** A citation chip of an answer, with the quote it carries (default: just go to the page). */
+  onCite?(page: number, quote?: string): void;
   /** The model that answers, shown quietly under the composer. */
   model?: string;
 }) {
@@ -74,7 +78,7 @@ export function ChatPane({
               key={`${m.id}-${m.seq}`}
               content={m.content}
               createdAt={m.created_at}
-              onCite={onGo}
+              onCite={onCite}
             />
           ),
         )}
@@ -82,7 +86,7 @@ export function ChatPane({
           <AssistantMessage
             state={chat.assistant}
             onToggleThinking={chat.toggleThinking}
-            onCite={onGo}
+            onCite={onCite}
           />
         )}
         {chat.error && (

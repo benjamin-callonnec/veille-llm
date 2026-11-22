@@ -102,10 +102,11 @@ const setup = (
     load?: () => Promise<ReaderItem>;
     chat?: ChatApi;
     hold?: Promise<void>;
+    reply?: string;
   } = {},
 ) => {
   const { api, rows } = fakeApi();
-  const chat = fakeChatApi("Streamed answer [p.3]", opts.hold);
+  const chat = fakeChatApi(opts.reply ?? "Streamed answer [p.3]", opts.hold);
   const open = opts.open ?? (async () => new FakeSource({ numPages: 5 }));
   const utils = render(
     <ReaderPage
@@ -222,6 +223,22 @@ test("a page citation in the answer and the quote arrow move the PDF", async () 
   await waitFor(() => expect(field.value).toBe("3"));
   await userEvent.click(screen.getByRole("button", { name: "Go to page 1" }));
   await waitFor(() => expect(field.value).toBe("1"));
+});
+
+test("clicking a citation with a quote goes to the page and flashes the quote", async () => {
+  setup({ reply: 'It says [p.3 "Text of page 3"]' });
+  await select();
+  await userEvent.type(
+    await screen.findByPlaceholderText("Ask about this passage…"),
+    "Where?{Enter}",
+  );
+  expect(document.querySelector("[data-flash]")).toBeNull();
+  await userEvent.click(await screen.findByRole("button", { name: "p.3" }));
+  const field = (await screen.findByRole("spinbutton", { name: "Page" })) as HTMLInputElement;
+  await waitFor(() => expect(field.value).toBe("3"));
+  await waitFor(() =>
+    expect(document.querySelector('[data-page="3"] [data-flash]')).not.toBeNull(),
+  );
 });
 
 test("a failing chat API shows an error line and the PDF stays usable", async () => {
