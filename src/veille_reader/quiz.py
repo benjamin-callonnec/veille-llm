@@ -10,6 +10,7 @@ Everything the model returns is untrusted JSON: it is validated, never executed 
 import asyncio
 import json
 import logging
+import random
 import re
 import unicodedata
 from collections.abc import Awaitable, Callable
@@ -37,7 +38,16 @@ MAKE_TIMEOUT = 120.0  # seconds
 GRADE_TIMEOUT = 60.0
 ATTEMPTS = 2
 NOTE_CHARS = 500
-KINDS = ("choice", "free")
+KINDS = ("choice", "multi", "truefalse", "cloze", "order", "free")
+REQUESTABLE = ("any", *KINDS)  # "any": the maker picks the kind that suits the content
+MIN_MULTI, MAX_MULTI = 4, 5
+MIN_STEPS, MAX_STEPS = 3, 5
+MAX_BLANKS = 2
+MAX_VARIANTS = 4
+MAX_WORD = 60  # one accepted word or phrase of a cloze blank
+MAX_GIVEN = 100  # what the user types for one blank
+BLANK = "___"
+TRUE_FALSE = ["True", "False"]
 
 # What the tutor writes at the end of its answer to start a quiz (the user asked, or accepted its
 # offer). The text after the colon is the focus; it may be empty. The web hides it.
@@ -133,6 +143,121 @@ def _leaks(question: str, secret: str) -> bool:
     return len(needle) >= MIN_QUOTE_CHARS and needle in flat
 
 
+_HIDDEN = "\u2581"  # stands in for a blank while the text is checked for markup (`__` is markup)
+_KIND_CHECKS: dict = {}
+
+
+def _blanks_hidden(raw: object) -> object:
+    return raw.replace(BLANK, _HIDDEN) if isinstance(raw, str) else raw
+
+
+def _index(value: object, size: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value < size:
+        raise QuizError("an option marked correct is out of range")
+    return value
+
+
+def _options(raw: object, low: int, high: int) -> list[str]:
+    if not isinstance(raw, list) or not low <= len(raw) <= high:
+        raise QuizError(
+            f"needs exactly {low} options" if low == high else f"needs {low} to {high} options"
+        )
+    clean = [_text(o, "option", MAX_OPTION) for o in raw]
+    if len({normalise(o) for o in clean}) != len(clean) or "" in {normalise(o) for o in clean}:
+        raise QuizError("the options must be distinct")
+    return clean
+
+
+def _check_choice(raw: dict, spec: dict, question: str) -> None:
+    clean = _options(raw.get("options"), N_OPTIONS, N_OPTIONS)
+    correct = raw.get("correct")
+    if isinstance(correct, bool) or not isinstance(correct, int) or not 0 <= correct < N_OPTIONS:
+        raise QuizError("exactly one option must be marked correct")
+    if _leaks(question, clean[correct]):
+        raise QuizError("the question gives away the answer")
+    spec["options"], spec["correct"] = clean, correct
+
+
+def _check_multi(raw: dict, spec: dict, question: str) -> None:
+    clean = _options(raw.get("options"), MIN_MULTI, MAX_MULTI)
+    correct = raw.get("correct")
+    if not isinstance(correct, list) or not 1 <= len(correct) <= len(clean) - 1:
+        raise QuizError("one or more options, but not all, must be marked correct")
+    picked = sorted({_index(c, len(clean)) for c in correct})
+    if len(picked) != len(correct):
+        raise QuizError("the correct options must be distinct")
+    if any(_leaks(question, clean[i]) for i in picked):
+        raise QuizError("the question gives away the answer")
+    spec["options"], spec["correct"] = clean, picked
+
+
+def _check_truefalse(raw: dict, spec: dict, question: str) -> None:
+    correct = raw.get("correct")
+    if not isinstance(correct, bool):
+        raise QuizError("a true or false quiz needs true or false as its answer")
+    spec["options"], spec["correct"] = list(TRUE_FALSE), 0 if correct else 1
+
+
+def _folded(text: str) -> str:
+    """Case, accents, punctuation and spacing folded away, for comparing typed words."""
+    base = unicodedata.normalize("NFKD", text).casefold()
+    base = "".join(ch for ch in base if not unicodedata.combining(ch))
+    return " ".join("".join(ch if ch.isalnum() else " " for ch in base).split())
+
+
+def _check_cloze(raw: dict, spec: dict, question: str) -> None:
+    blanks = question.count(BLANK)
+    if not 1 <= blanks <= MAX_BLANKS or "____" in question:
+        raise QuizError(f"a cloze quiz needs one or {MAX_BLANKS} blanks ({BLANK})")
+    answers = raw.get("answers")
+    if not isinstance(answers, list) or len(answers) != blanks:
+        raise QuizError("a cloze quiz needs the accepted words of each blank")
+    keys = []
+    for variants in answers:
+        if isinstance(variants, str):
+            variants = [variants]
+        if not isinstance(variants, list) or not 1 <= len(variants) <= MAX_VARIANTS:
+            raise QuizError(f"each blank takes one to {MAX_VARIANTS} accepted answers")
+        clean = [_text(v, "accepted answer", MAX_WORD) for v in variants]
+        folded = [_folded(v) for v in clean]
+        if "" in folded or len(set(folded)) != len(folded):
+            raise QuizError("the accepted answers must be distinct words")
+        keys.append(clean)
+    spec["answers"] = keys
+
+
+def _check_order(raw: dict, spec: dict, question: str) -> None:
+    steps = raw.get("steps")
+    if not isinstance(steps, list) or not MIN_STEPS <= len(steps) <= MAX_STEPS:
+        raise QuizError(f"an order quiz needs {MIN_STEPS} to {MAX_STEPS} steps")
+    clean = [_text(step, "step", MAX_OPTION) for step in steps]
+    if len({normalise(step) for step in clean}) != len(clean) or "" in {
+        normalise(s) for s in clean
+    }:
+        raise QuizError("the steps must be distinct")
+    shown = list(range(len(clean)))
+    while shown == sorted(shown):  # never show the right order
+        random.SystemRandom().shuffle(shown)
+    spec["steps"], spec["shown"] = clean, shown
+
+
+def _check_free(raw: dict, spec: dict, question: str) -> None:
+    reference = _text(raw.get("reference"), "reference answer", MAX_REFERENCE)
+    if _leaks(question, reference):
+        raise QuizError("the question gives away the answer")
+    spec["reference"] = reference
+
+
+_KIND_CHECKS.update(
+    choice=_check_choice,
+    multi=_check_multi,
+    truefalse=_check_truefalse,
+    cloze=_check_cloze,
+    order=_check_order,
+    free=_check_free,
+)
+
+
 def validate_quiz(raw: object, pages: list[str], outline: list[tuple[str, int]]) -> dict:
     """The full quiz (key included) or a QuizError. Nothing from `raw` is kept unchecked."""
     if not isinstance(raw, dict):
@@ -140,29 +265,18 @@ def validate_quiz(raw: object, pages: list[str], outline: list[tuple[str, int]])
     kind = raw.get("kind")
     if kind not in KINDS:
         raise QuizError("unknown kind of quiz")
-    question = _text(raw.get("question"), "question", MAX_QUESTION)
+    question = _text(
+        _blanks_hidden(raw.get("question")) if kind == "cloze" else raw.get("question"),
+        "question",
+        MAX_QUESTION,
+    )
+    if kind == "cloze":
+        question = question.replace(_HIDDEN, BLANK)
     if _LEAKY.search(question):
         raise QuizError("the question gives away the answer")
     spec: dict = {"kind": kind, "question": question, "options": None, "correct": None}
     spec["reference"] = None
-    if kind == "choice":
-        options = raw.get("options")
-        if not isinstance(options, list) or len(options) != N_OPTIONS:
-            raise QuizError(f"a choice quiz needs exactly {N_OPTIONS} options")
-        clean = [_text(o, "option", MAX_OPTION) for o in options]
-        if len({normalise(o) for o in clean}) != N_OPTIONS or "" in {normalise(o) for o in clean}:
-            raise QuizError("the options must be distinct")
-        correct = raw.get("correct")
-        if isinstance(correct, bool) or not isinstance(correct, int) or not 0 <= correct < 4:
-            raise QuizError("exactly one option must be marked correct")
-        if _leaks(question, clean[correct]):
-            raise QuizError("the question gives away the answer")
-        spec["options"], spec["correct"] = clean, correct
-    else:
-        reference = _text(raw.get("reference"), "reference answer", MAX_REFERENCE)
-        if _leaks(question, reference):
-            raise QuizError("the question gives away the answer")
-        spec["reference"] = reference
+    _KIND_CHECKS[kind](raw, spec, question)
     spec["explanation"] = _text(raw.get("explanation"), "explanation", MAX_EXPLANATION)
     spec["topic"] = _text(raw.get("topic"), "topic", MAX_TOPIC)
     page, quote = raw.get("page"), _text(raw.get("quote"), "quote", MAX_QUOTE_CHARS)
@@ -180,8 +294,13 @@ def validate_quiz(raw: object, pages: list[str], outline: list[tuple[str, int]])
 def public_quiz(quiz_id: int, spec: dict) -> dict:
     """What the client may see before it answers: the question and the options only."""
     content: dict = {"quiz_id": quiz_id, "kind": spec["kind"], "question": spec["question"]}
-    if spec["kind"] == "choice":
+    kind = spec["kind"]
+    if kind in ("choice", "multi", "truefalse"):
         content["options"] = list(spec["options"])
+    elif kind == "cloze":
+        content["blanks"] = len(spec["answers"])
+    elif kind == "order":
+        content["items"] = [spec["steps"][i] for i in spec["shown"]]
     return content
 
 
@@ -208,9 +327,21 @@ def result_of(store: ReaderStore, quiz: dict) -> dict | None:
         "answered_at": answer["answered_at"],
         "score": _score(store, quiz),
     }
-    if spec["kind"] == "choice":
+    kind = spec["kind"]
+    if kind in ("choice", "truefalse"):
         result["choice"] = int(answer["answer"])
         result["correct_choice"] = spec["correct"]
+    elif kind == "multi":
+        result["choices"] = json.loads(answer["answer"])
+        result["correct_choices"] = spec["correct"]
+    elif kind == "cloze":
+        words = json.loads(answer["answer"])
+        result["words"] = words
+        result["answers"] = [variants[0] for variants in spec["answers"]]
+        result["blank_ok"] = [_blank_ok(w, v) for w, v in zip(words, spec["answers"], strict=True)]
+    elif kind == "order":
+        result["order"] = json.loads(answer["answer"])
+        result["steps"] = list(spec["steps"])
     else:
         result["answer"] = answer["answer"]
         result["reference"] = spec["reference"]
@@ -245,12 +376,12 @@ async def create_quiz(
     item: dict,
     cid: int,
     paper: object,
-    kind: str = "choice",
+    kind: str = "any",
     focus: str = "",
     recent: list[str] | None = None,
 ) -> dict:
     """Make, validate and store one quiz, and add its card to the conversation."""
-    if kind not in KINDS:
+    if kind not in REQUESTABLE:
         raise QuizError("unknown kind of quiz")
     pages, outline = paper.pages, paper.outline  # type: ignore[attr-defined]
     if not any(p.strip() for p in pages):
@@ -262,6 +393,8 @@ async def create_quiz(
         try:
             reply = await asyncio.wait_for(maker(request), MAKE_TIMEOUT)
             spec = validate_quiz(parse_json(reply), pages, outline)
+            if kind != "any" and spec["kind"] != kind:
+                raise QuizError(f"a {spec['kind']} quiz was made, not a {kind} one")
         except QuizError as exc:
             failure = f"the quiz could not be made ({exc})"
             continue
@@ -299,6 +432,52 @@ async def _grade(grader: Grader, request: GradeRequest) -> tuple[bool, str]:
         raise AnswerError("grader_failed") from None
 
 
+def _blank_ok(given: str, accepted: list[str]) -> bool:
+    return _folded(given) in {_folded(v) for v in accepted}
+
+
+def _is_ints(values: object, low: int, high: int) -> bool:
+    return (
+        isinstance(values, list)
+        and low <= len(values) <= high
+        and all(isinstance(v, int) and not isinstance(v, bool) for v in values)
+    )
+
+
+def _exact(spec: dict, given: dict) -> tuple[bool, str]:
+    """Grade a closed answer without the model: (correct, the answer as stored) or bad_answer."""
+    kind = spec["kind"]
+    choice, choices, words, order = (given.get(k) for k in ("choice", "choices", "words", "order"))
+    if sum(v is not None for v in given.values()) != 1:
+        raise AnswerError("bad_answer")
+    if kind in ("choice", "truefalse"):
+        if not _is_ints([choice], 1, 1) or not 0 <= choice < len(spec["options"]):
+            raise AnswerError("bad_answer")
+        return choice == spec["correct"], str(choice)
+    if kind == "multi":
+        size = len(spec["options"])
+        if not _is_ints(choices, 1, size) or len(set(choices)) != len(choices):
+            raise AnswerError("bad_answer")
+        if not all(0 <= c < size for c in choices):
+            raise AnswerError("bad_answer")
+        ticked = sorted(choices)
+        return ticked == spec["correct"], json.dumps(ticked)
+    if kind == "cloze":
+        keys = spec["answers"]
+        if not isinstance(words, list) or len(words) != len(keys):
+            raise AnswerError("bad_answer")
+        if not all(isinstance(w, str) and 0 < len(w.strip()) <= MAX_GIVEN for w in words):
+            raise AnswerError("bad_answer")
+        words = [w.strip() for w in words]
+        right = all(_blank_ok(w, k) for w, k in zip(words, keys, strict=True))
+        return right, json.dumps(words)
+    # order: the positions in the shown list, in the order the user chose
+    size = len(spec["steps"])
+    if not _is_ints(order, size, size) or sorted(order) != list(range(size)):
+        raise AnswerError("bad_answer")
+    return [spec["shown"][i] for i in order] == list(range(size)), json.dumps(order)
+
+
 async def answer_quiz(
     store: ReaderStore,
     grader: Grader | None,
@@ -306,18 +485,24 @@ async def answer_quiz(
     quiz: dict,
     choice: int | None,
     text: str | None,
+    *,
+    choices: list[int] | None = None,
+    words: list[str] | None = None,
+    order: list[int] | None = None,
 ) -> dict:
     """Record the answer of a quiz and return the verdict, explanation and citation."""
     if quiz["answer"] is not None:
         raise AnswerError("already_answered")
     spec = quiz["spec"]
-    if spec["kind"] == "choice":
-        if text is not None or choice is None or not 0 <= choice < len(spec["options"]):
+    reasoning = ""
+    if spec["kind"] != "free":
+        if text is not None:
             raise AnswerError("bad_answer")
-        correct, reasoning, given = choice == spec["correct"], "", str(choice)
+        given_by_kind = {"choice": choice, "choices": choices, "words": words, "order": order}
+        correct, given = _exact(spec, given_by_kind)
     else:
         given = (text or "").strip()
-        if choice is not None or not given or len(given) > MAX_ANSWER:
+        if choice is not None or choices or words or order or not given or len(given) > MAX_ANSWER:
             raise AnswerError("bad_answer")
         if grader is None:
             raise AnswerError("no_grader")
@@ -368,7 +553,7 @@ async def quiz_after_turn(
         if maker is None or paper is None:
             raise QuizError("the quiz could not be made (the paper is not available)")
         await create_quiz(
-            store, maker, item_id, item, cid, paper, "choice", focus, recent_turns(store, cid)
+            store, maker, item_id, item, cid, paper, "any", focus, recent_turns(store, cid)
         )
     except QuizError as exc:
         store.add_message(

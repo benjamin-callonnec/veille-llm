@@ -25,6 +25,7 @@ from veille_reader.pdf import Fetcher, PdfError, arxiv_id, default_fetcher, ensu
 from veille_reader.quiz import (
     MAX_ANSWER,
     MAX_FOCUS,
+    MAX_GIVEN,
     AnswerError,
     Grader,
     QuizError,
@@ -100,13 +101,18 @@ class NoteIn(BaseModel):
 
 
 class QuizIn(BaseModel):
-    kind: Literal["choice", "free"] = "choice"
+    kind: Literal["any", "choice", "multi", "truefalse", "cloze", "order", "free"] = "any"
     focus: str = Field(default="", max_length=MAX_FOCUS)
 
 
 class QuizAnswerIn(BaseModel):
     choice: int | None = Field(default=None, ge=0, le=3)
     text: str | None = Field(default=None, max_length=MAX_ANSWER)
+    choices: list[int] | None = Field(default=None, max_length=5)
+    words: list[Annotated[str, Field(max_length=MAX_GIVEN)]] | None = Field(
+        default=None, max_length=2
+    )
+    order: list[int] | None = Field(default=None, max_length=5)
 
 
 class HighlightIn(BaseModel):
@@ -464,7 +470,15 @@ def create_app(
             return unknown("unknown_quiz")
         try:
             return await answer_quiz(
-                store, grader, current_items()[item_id], quiz, body.choice, body.text
+                store,
+                grader,
+                current_items()[item_id],
+                quiz,
+                body.choice,
+                body.text,
+                choices=body.choices,
+                words=body.words,
+                order=body.order,
             )
         except AnswerError as exc:
             status = {"bad_answer": 422, "already_answered": 409, "no_grader": 503}
