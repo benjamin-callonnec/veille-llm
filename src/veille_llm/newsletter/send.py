@@ -24,6 +24,7 @@ class SendResult:
     week: str
     sent: int = 0
     already_sent: bool = False
+    nothing_to_send: bool = False
     dry_run: bool = False
 
 
@@ -59,8 +60,9 @@ def send_newsletter(
         return result
 
     items = select_items(store, now)
-    if len(items) < MIN_ITEMS:
-        raise NewsletterError(f"only {len(items)} items this week, at least {MIN_ITEMS} needed")
+    if not items or len(items) < MIN_ITEMS:
+        result.nothing_to_send = True  # quiet week: no mail, no error, no marker
+        return result
     mail = render(items, week=week, contact=contact, now=now)
 
     if dry_run:

@@ -76,7 +76,9 @@ def main(
     finally:
         db.close()
 
-    if result.dry_run:
+    if result.nothing_to_send:
+        print(f"{result.week}: nothing interesting this week, no mail sent")
+    elif result.dry_run:
         print(f"dry run: rendered {result.week} into {args.out}")
     elif result.already_sent:
         print(f"{result.week} was already sent, nothing to do")

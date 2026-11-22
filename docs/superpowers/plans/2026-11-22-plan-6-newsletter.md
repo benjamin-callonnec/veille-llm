@@ -5,7 +5,7 @@ each subscriber, once per week, with no address ever in git, logs or the public 
 **Spec:** `docs/superpowers/specs/2026-11-21-veille-llm-design.md` sections 5.3 and 5.4.
 
 ## Decisions (mine unless the spec says so)
-- Selection: published items of the last 7 days (by `published`), best `score` first (ties: upvotes, then newest), at most 8. Fewer than 3: send nothing, exit 1 (GitHub mails the author).
+- Selection: published items of the last 7 days (by `published`), best `score` first (ties: upvotes, then newest), at most 8. No item: send nothing, exit 0 (author's decision: nothing interesting means no mail; `MIN_ITEMS = 0`).
 - Week id is the ISO week of the run (`2026-W47`). The marker table `newsletter(week, delivered, total)` lives in `veille.db`; it holds **counts only, never addresses or hashes** (the `data` branch is public). Recipients are sorted; a rerun resumes at `delivered`, so a partial failure never double-sends.
 - Subscribers: `SubscriberStore.list()`; `EnvSubscribers` (secret `SUBSCRIBERS`, comma separated) in CI, `FileSubscribers` (`subscribers.txt`, gitignored) locally. Lowercased, deduplicated, anything that is not a plain address (or contains CR/LF) is dropped and counted.
 - Delivery: SMTP (STARTTLS or SSL by port) from secrets `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `NEWSLETTER_FROM`, `NEWSLETTER_CONTACT` (unsubscribe mailto, also the `List-Unsubscribe` header). One mail per recipient, never a list in "To".

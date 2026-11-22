@@ -13,3 +13,4 @@ build/
 *.db
 web/node_modules/
 web/dist/
+.local/

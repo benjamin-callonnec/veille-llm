@@ -184,8 +184,8 @@ encodeur-décodeur ne sont plus des catégories par défaut.
 
 Job hebdomadaire. Il prend les 8 meilleurs items de la semaine par score parmi les items déjà
 classés, rend un template Jinja2 (HTML + version texte) et envoie via SMTP aux abonnés.
-Pas d'appel LLM : les hooks viennent de `core`. S'il y a moins de 3 items, il n'envoie rien et
-le workflow échoue pour que GitHub prévienne l'auteur par e-mail. L'envoi est idempotent : le
+Pas d'appel LLM : les hooks viennent de `core`. S'il n'y a aucun item intéressant, il n'envoie rien et ne
+considère pas cela comme une erreur (décision de l'auteur : `MIN_ITEMS = 0`). L'envoi est idempotent : le
 marqueur « semaine X envoyée » est dans `veille.db`, donc une relance ne renvoie rien.
 
 ### 5.5 Harnais de développement

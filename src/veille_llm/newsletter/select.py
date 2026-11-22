@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 from veille_llm.store import Store
 
-MIN_ITEMS = 3
+MIN_ITEMS = 0  # nothing interesting this week means no mail (not a failure)
 MAX_ITEMS = 8
 _FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 

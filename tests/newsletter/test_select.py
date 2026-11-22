@@ -47,5 +47,5 @@ def test_only_the_last_seven_days_and_at_most_eight_items():
     assert len(ids) == 8 and "old" not in ids and ids[0] == "n9"
 
 
-def test_min_items_is_three():
-    assert MIN_ITEMS == 3
+def test_no_minimum_number_of_items():
+    assert MIN_ITEMS == 0  # nothing interesting means no mail, not a failure

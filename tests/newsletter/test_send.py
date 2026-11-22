@@ -76,11 +76,17 @@ def test_failure_stops_without_leaking_the_address_and_a_rerun_resumes():
     assert store.newsletter_progress(WEEK) == (4, 4)
 
 
-def test_fewer_than_three_items_sends_nothing_and_fails():
-    store, mailer = seeded(2), Mailer()
-    with pytest.raises(NewsletterError, match="3"):
-        go(store, mailer)
+def test_a_week_without_items_sends_nothing_and_is_not_an_error():
+    store, mailer = seeded(0), Mailer()
+    result = go(store, mailer)
+    assert result.nothing_to_send and result.sent == 0
     assert mailer.sent == [] and store.newsletter_progress(WEEK) is None
+
+
+def test_even_a_single_item_is_worth_a_mail():
+    mailer = Mailer()
+    result = go(seeded(1), mailer)
+    assert result.sent == 4 and "1 items" in mailer.sent[0]["Subject"]
 
 
 def test_no_subscribers_is_an_error_not_a_silent_success():

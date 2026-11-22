@@ -63,3 +63,14 @@ def test_invalid_subscriber_entries_are_counted_not_printed(tmp_path, capsys):
     env = {**ENV, "SUBSCRIBERS": "a@x.org,garbage-entry"}
     code, out = run(tmp_path, [], env, Mailer(), capsys)
     assert code == 0 and "1 invalid" in out and "garbage-entry" not in out
+
+
+def test_a_week_without_items_exits_0_and_says_nothing_was_sent(tmp_path, capsys):
+    path = tmp_path / "empty.db"
+    from veille_llm.store import Store
+
+    Store(path).close()
+    mailer = Mailer()
+    code = main(["send", "--db", str(path)], env=ENV, mailer=mailer, now=NOW)
+    assert code == 0 and mailer.sent == []
+    assert "nothing interesting" in capsys.readouterr().out

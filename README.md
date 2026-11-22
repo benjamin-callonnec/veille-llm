@@ -31,8 +31,8 @@ env -u ANTHROPIC_API_KEY uv run veille-core run --db build/veille.db --out build
 ## Newsletter
 
 Every Monday 08:00 UTC `weekly.yml` sends the same mail (Jinja2, HTML and text) with the 8 best
-items of the last 7 days to each subscriber, one message per address, once per ISO week. Under 3
-items it sends nothing and fails, so GitHub e-mails the author. The delivery counters (counts
+items of the last 7 days to each subscriber, one message per address, once per ISO week. With no
+interesting item it sends nothing (and does not fail). The delivery counters (counts
 only, never addresses) live in `veille.db` on the `data` branch; a rerun after a partial failure
 resumes where it stopped.
 
