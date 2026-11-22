@@ -169,3 +169,15 @@ def test_serve_says_which_login_it_uses_when_there_is_no_token(tmp_path, monkeyp
             ]
         )
     assert "claude" in capsys.readouterr().out.lower()
+
+
+def test_the_serving_app_reports_the_tutor_model(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    cat = tmp_path / "c.json"
+    cat.write_text('{"items": []}', encoding="utf-8")
+    monkeypatch.setenv("VEILLE_READER_DATA_DIR", str(tmp_path / "d"))
+    monkeypatch.setenv("VEILLE_READER_CATALOGUE", str(cat))
+    monkeypatch.setenv("VEILLE_READER_STATIC", "")
+    client = TestClient(cli.reload_app(), base_url="http://127.0.0.1:8765")
+    assert client.get("/api/health").json()["model"].startswith("claude-")

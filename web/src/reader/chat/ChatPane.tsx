@@ -17,9 +17,12 @@ function download(name: string, text: string) {
 export function ChatPane({
   chat,
   onGo,
+  model,
 }: {
   chat: ReturnType<typeof useChat>;
   onGo(page: number): void;
+  /** The model that answers, shown quietly under the composer. */
+  model?: string;
 }) {
   const feed = useRef<HTMLDivElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll when content grows
@@ -28,16 +31,15 @@ export function ChatPane({
     if (el) el.scrollTop = el.scrollHeight;
   }, [chat.messages.length, chat.assistant?.answer, chat.assistant?.blocks.length]);
 
-  const lastAssistant = chat.messages.map((m) => m.role).lastIndexOf("assistant");
+  const lastUser = chat.messages.map((m) => m.role).lastIndexOf("user");
   return (
     <div className="chat">
-      <div className="chat-head">
+      <div className="chat-tools">
         <ConversationMenu
           disabled={chat.streaming}
           conversations={chat.conversations}
           currentId={chat.current?.id ?? null}
           onSelect={chat.select}
-          onCreate={chat.create}
           onRename={chat.rename}
           onDelete={chat.remove}
           onExport={async (id) => {
@@ -57,13 +59,18 @@ export function ChatPane({
         )}
         {chat.messages.map((m, i) =>
           m.role === "user" ? (
-            <UserMessage key={`${m.id}-${m.seq}`} message={m} onGo={onGo} />
+            <UserMessage
+              key={`${m.id}-${m.seq}`}
+              message={m}
+              onGo={onGo}
+              onRetry={i === lastUser && !chat.streaming ? chat.regenerate : undefined}
+            />
           ) : (
             <StoredAssistantMessage
               key={`${m.id}-${m.seq}`}
               content={m.content}
+              createdAt={m.created_at}
               onCite={onGo}
-              onRegenerate={i === lastAssistant && !chat.streaming ? chat.regenerate : undefined}
             />
           ),
         )}
@@ -82,7 +89,9 @@ export function ChatPane({
       </div>
       <Composer
         streaming={chat.streaming}
+        model={model}
         onStop={chat.stop}
+        onNew={chat.create}
         onSend={(text) => chat.send({ kind: "text", text })}
       />
     </div>

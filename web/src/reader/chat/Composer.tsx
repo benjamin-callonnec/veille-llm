@@ -1,13 +1,23 @@
 import { useState } from "react";
+import { IconButton } from "../../components/Icon";
 
 interface Props {
   onSend(text: string): void;
   onStop(): void;
+  /** Start a new conversation (the plus icon). */
+  onNew?(): void;
   streaming: boolean;
+  /** The model that answers, shown quietly under the input. */
+  model?: string;
 }
 
-export function Composer({ onSend, onStop, streaming }: Props) {
+/**
+ * One quiet pill: a plus (new conversation), the text, and on the right only what applies now:
+ * nothing while it is empty, a send icon once there is text, a stop icon while it answers.
+ */
+export function Composer({ onSend, onStop, onNew, streaming, model }: Props) {
   const [text, setText] = useState("");
+  const ready = text.trim().length > 0;
   const submit = () => {
     const value = text.trim();
     if (!value || streaming) return;
@@ -15,29 +25,52 @@ export function Composer({ onSend, onStop, streaming }: Props) {
     setText("");
   };
   return (
-    <div className="composer">
-      <textarea
-        aria-label="Message"
-        placeholder="Ask about the paper…"
-        rows={2}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-            e.preventDefault();
-            submit();
-          }
-        }}
-      />
-      {streaming ? (
-        <button type="button" onClick={onStop}>
-          Stop
-        </button>
-      ) : (
-        <button type="button" disabled={!text.trim()} onClick={submit}>
-          Send
-        </button>
-      )}
+    <div className="composer-wrap">
+      <div className="composer">
+        {onNew && (
+          <IconButton
+            icon="plus"
+            label="New conversation"
+            className="composer-new"
+            disabled={streaming}
+            onClick={onNew}
+            size={20}
+          />
+        )}
+        <textarea
+          aria-label="Message"
+          placeholder={streaming ? "Answering…" : "Ask about the paper…"}
+          rows={1}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+        />
+        {streaming ? (
+          <IconButton
+            icon="stop"
+            label="Stop"
+            className="composer-send"
+            onClick={onStop}
+            size={20}
+          />
+        ) : (
+          ready && (
+            <IconButton
+              icon="send"
+              label="Send"
+              className="composer-send"
+              onClick={submit}
+              size={20}
+            />
+          )
+        )}
+      </div>
+      {model && <p className="composer-status">{model}</p>}
     </div>
   );
 }

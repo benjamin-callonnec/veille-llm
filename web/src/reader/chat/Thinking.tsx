@@ -1,3 +1,4 @@
+import { Icon } from "../../components/Icon";
 import type { Block } from "./reducer";
 
 interface Props {
@@ -16,10 +17,10 @@ export function Thinking({ blocks, open, working, durationMs, onToggle }: Props)
   return (
     <div className="thinking">
       <button type="button" className="thinking-toggle" aria-expanded={open} onClick={onToggle}>
-        <span className="chevron" aria-hidden="true">
-          {open ? "▾" : "▸"}
-        </span>{" "}
         {label}
+        <span className="chevron">
+          <Icon name="chevron" size={14} />
+        </span>
       </button>
       {open && (
         <div className="thinking-body">

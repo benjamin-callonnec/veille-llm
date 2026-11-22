@@ -405,3 +405,36 @@ test("the reader header is the shared page head, in every state", async () => {
   await screen.findByRole("alert");
   expect(document.querySelector("header")?.className).toContain("page-head");
 });
+
+test("the model that answers is shown quietly under the composer", async () => {
+  const { api } = fakeApi();
+  render(
+    <ReaderPage
+      itemId="a1"
+      load={async () => item()}
+      open={async () => new FakeSource({ numPages: 5 })}
+      api={api}
+      chatApi={fakeChatApi().api}
+      health={async () => ({ model: "claude-sonnet-5-5" })}
+    />,
+  );
+  expect(await screen.findByText("Sonnet 5.5")).toBeTruthy();
+});
+
+test("a failing health check just leaves the model out", async () => {
+  const { api } = fakeApi();
+  render(
+    <ReaderPage
+      itemId="a1"
+      load={async () => item()}
+      open={async () => new FakeSource({ numPages: 5 })}
+      api={api}
+      chatApi={fakeChatApi().api}
+      health={async () => {
+        throw new Error("down");
+      }}
+    />,
+  );
+  expect(await screen.findByRole("textbox", { name: "Message" })).toBeTruthy();
+  expect(document.querySelector(".composer-status")).toBeNull();
+});

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { formatModel } from "../lib/time";
 import { type ChatApi, httpChatApi } from "./chat/api";
 import { ChatPane } from "./chat/ChatPane";
 import { useChat } from "./chat/useChat";
@@ -31,6 +32,12 @@ const MAX_QUOTE_RECTS = 200;
 const MAX_HIGHLIGHT_TEXT = 5000;
 const clip = (text: string) => text.slice(0, MAX_HIGHLIGHT_TEXT);
 
+async function fetchHealth(): Promise<{ model?: string }> {
+  const response = await fetch("/api/health");
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return (await response.json()) as { model?: string };
+}
+
 const pdfUrl = (id: string) => `/api/items/${encodeURIComponent(id)}/pdf`;
 
 const OPEN_ERRORS = {
@@ -45,6 +52,8 @@ interface Props {
   open?: (url: string) => Promise<PdfSource>;
   api?: HighlightsApi;
   chatApi?: ChatApi;
+  /** Where the model that answers is read from (the API health route by default). */
+  health?: () => Promise<{ model?: string }>;
 }
 
 export function ReaderPage({
@@ -53,6 +62,7 @@ export function ReaderPage({
   open = openPdf,
   api = httpApi,
   chatApi = httpChatApi,
+  health = fetchHealth,
 }: Props) {
   const [item, setItem] = useState<ReaderItem | null>(null);
   const [error, setError] = useState<string | null>(
@@ -64,6 +74,17 @@ export function ReaderPage({
   const [notice, setNotice] = useState<string | null>(null);
   const { highlights, add, remove, error: saveError } = useHighlights(itemId, api);
   const chat = useChat(itemId, chatApi);
+  const [model, setModel] = useState("");
+
+  useEffect(() => {
+    let current = true;
+    health()
+      .then((h) => current && setModel(formatModel(h.model)))
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [health]);
 
   useEffect(() => {
     if (!itemId) return;
@@ -163,7 +184,7 @@ export function ReaderPage({
           The highlight could not be saved.
         </p>
       )}
-      <PaneLayout pdf={pdfPane} chat={<ChatPane chat={chat} onGo={changePage} />} />
+      <PaneLayout pdf={pdfPane} chat={<ChatPane chat={chat} onGo={changePage} model={model} />} />
       {selection && (
         <SelectionBox
           quote={selection.quote}
