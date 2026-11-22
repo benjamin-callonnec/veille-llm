@@ -263,3 +263,82 @@ def test_main_writes_the_github_step_summary_when_asked(tmp_path, monkeypatch):
     main(args, sources=source([news("a")]), runner=Llm(), now=NOW)
     text = summary.read_text()
     assert "| classified | 1 |" in text and "| published | 1 |" in text
+
+
+class ConsolidatingLlm:
+    """Answers only the consolidation prompt, assigning every parked item to 'Agents'."""
+
+    def __init__(self):
+        self.calls = 0
+
+    async def __call__(self, prompt, options):
+        self.calls += 1
+        data = data_of(prompt)
+        assert "other_items" in data, "only the consolidation prompt is expected"
+        assignments = [{"id": i["id"], "category": "Agents"} for i in data["other_items"]]
+        return RawReply(json.dumps({"merges": [], "assignments": assignments}), 1, 1, None)
+
+
+def parked_store():
+    from veille_llm.models import Enrichment, Verdict
+
+    store = Store(":memory:")
+    rows = [(f"o{k:02d}", "Other") for k in range(8)] + [(f"a{k:02d}", "Agents") for k in range(4)]
+    items = [
+        Item(i, "src", "paper", f"T {i}", "S", "https://e.com", [], "2026-11-20T10:00:00Z")
+        for i, _ in rows
+    ]
+    store.upsert_items(items, STAMP)
+    store.save_verdicts([Verdict(i.id, True, 5, "paper", "h") for i in items])
+    store.save_enrichments([Enrichment(i, c, "H.", "B.") for i, c in rows])
+    return store
+
+
+def test_run_consolidates_categories_when_other_is_too_big(tmp_path):
+    store, llm = parked_store(), ConsolidatingLlm()
+    report = run(store, tmp_path / "c.json", [], llm)
+    assert llm.calls == 1 and report.reassigned == 8
+    cats = {
+        c["name"]: c["count"] for c in json.loads((tmp_path / "c.json").read_text())["categories"]
+    }
+    assert cats == {"Agents": 12}
+
+
+def test_consolidation_needs_one_batch_of_budget_and_counts_against_it(tmp_path):
+    llm = ConsolidatingLlm()
+    report = run(parked_store(), tmp_path / "c.json", [], llm, max_batches=1)
+    assert llm.calls == 1 and report.reassigned == 8
+    other = ConsolidatingLlm()
+    # budget already spent by a classification batch: no consolidation call
+    store = parked_store()
+    store.upsert_items([news("x")], STAMP)
+    spent = Llm()
+    run(store, tmp_path / "d.json", [news("x")], spent, max_batches=1)
+    assert spent.calls == 1 and other.calls == 0
+
+
+def test_consolidation_waits_while_hooks_are_still_pending(tmp_path):
+    store = parked_store()
+    llm = Llm()
+    report = run(store, tmp_path / "c.json", [news("fresh")], llm, max_batches=1)
+    assert llm.calls == 1 and report.reassigned == 0  # re-homed on a later run, hooks first
+
+
+def test_consolidation_repeats_while_other_stays_too_big_but_stops_when_it_is_not(tmp_path):
+    from veille_llm.models import Enrichment, Verdict
+
+    store = Store(":memory:")
+    rows = [(f"o{k:03d}", "Other") for k in range(130)] + [
+        (f"a{k:02d}", "Agents") for k in range(4)
+    ]
+    items = [
+        Item(i, "src", "paper", f"T {i}", "S", "https://e.com", [], "2026-11-20T10:00:00Z")
+        for i, _ in rows
+    ]
+    store.upsert_items(items, STAMP)
+    store.save_verdicts([Verdict(i.id, True, 5, "paper", "h") for i in items])
+    store.save_enrichments([Enrichment(i, c, "H.", "B.") for i, c in rows])
+    llm = ConsolidatingLlm()
+    report = run(store, tmp_path / "c.json", [], llm)
+    # 60 + 60 re-homed, then Other is 10 of 134 items (under 25%): no third call
+    assert llm.calls == 2 and report.reassigned == 120

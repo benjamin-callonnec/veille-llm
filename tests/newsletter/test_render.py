@@ -84,3 +84,9 @@ def test_urls_with_control_characters_are_never_linked_or_printed():
     for url in ("https://a.com/\nFAKE: line", "\x01https://a.com", "https://a.com/x\ty z"):
         mail = build([item(url=url, title="T")])
         assert "FAKE" not in mail.text and "a.com" not in mail.html and "a.com" not in mail.text
+
+
+def test_the_other_category_is_not_shown_as_a_label():
+    mail = build([item(category="Other")])
+    assert "Other" not in mail.html and "Other" not in mail.text
+    assert "paper" in mail.html.lower()

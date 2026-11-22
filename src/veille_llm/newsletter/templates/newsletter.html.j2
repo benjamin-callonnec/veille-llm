@@ -12,7 +12,7 @@
       <p style="margin:0 0 24px;color:#5f5f5a;font:14px/1.4 system-ui,sans-serif;">{{ date }} · the {{ items|length }} best items of the week</p>
 {% for item in items %}
       <div style="margin:0 0 24px;padding:16px;background:#ffffff;border:1px solid #e3e3dc;border-radius:10px;">
-        <p style="margin:0 0 6px;color:#5f5f5a;font:12px/1.3 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.04em;">{{ item.category }} · {{ item.type }}</p>
+        <p style="margin:0 0 6px;color:#5f5f5a;font:12px/1.3 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.04em;">{% if item.category != 'Other' %}{{ item.category }} · {% endif %}{{ item.type }}</p>
         <p style="margin:0 0 8px;font-size:18px;line-height:1.35;"><strong>{{ item.hook }}</strong></p>
 {% if item.brief %}
         <p style="margin:0 0 10px;color:#3a3a37;">{{ item.brief }}</p>

@@ -192,3 +192,57 @@ def test_autres_migration_is_idempotent_and_handles_a_missing_other(tmp_path):
     Store(path).close()
     again = Store(path)
     assert again.category_names() == ["Other"]
+
+
+def _enriched(store, rows):
+    """rows: (id, published, category)"""
+    items = [Item(i, "s", "paper", f"T {i}", "S", "https://e.com", [], p) for i, p, _ in rows]
+    store.upsert_items(items, NOW)
+    store.save_verdicts([Verdict(i.id, True, 5, "paper", "h") for i in items])
+    store.save_enrichments([Enrichment(i, c, f"Hook {i}.", "B.") for i, _, c in rows])
+
+
+def test_category_usage_counts_only_published_items_inside_the_window():
+    store = Store(":memory:")
+    _enriched(
+        store,
+        [
+            ("a", "2026-11-20T00:00:00Z", "Agents"),
+            ("b", "2026-11-19T00:00:00Z", "Agents"),
+            ("c", "2026-11-18T00:00:00Z", "Security"),
+            ("old", "2026-09-01T00:00:00Z", "Ancient"),
+        ],
+    )
+    usage = store.category_usage("2026-11-01T00:00:00Z")
+    assert usage == [("Agents", 2), ("Security", 1)]  # "Ancient" left the window: slot freed
+
+
+def test_rename_category_moves_every_item_and_keeps_the_category_table_in_sync():
+    store = Store(":memory:")
+    _enriched(store, [("a", "2026-11-20T00:00:00Z", "Tiny"), ("b", "2026-11-20T00:00:00Z", "Big")])
+    assert store.rename_category("Tiny", "Big") == 1
+    assert store.category_usage("2026-11-01T00:00:00Z") == [("Big", 2)]
+
+
+def test_reassign_other_only_touches_items_currently_in_other():
+    store = Store(":memory:")
+    _enriched(
+        store, [("a", "2026-11-20T00:00:00Z", "Other"), ("b", "2026-11-20T00:00:00Z", "Keep")]
+    )
+    assert store.reassign_other("a", "Agents") is True
+    assert store.reassign_other("b", "Agents") is False
+    assert dict(store.category_usage("2026-11-01T00:00:00Z")) == {"Agents": 1, "Keep": 1}
+
+
+def test_other_items_lists_newest_first_with_hook_and_respects_the_limit():
+    store = Store(":memory:")
+    _enriched(
+        store,
+        [
+            ("old", "2026-11-10T00:00:00Z", "Other"),
+            ("new", "2026-11-20T00:00:00Z", "Other"),
+            ("x", "2026-11-20T00:00:00Z", "Agents"),
+        ],
+    )
+    rows = store.other_items("2026-11-01T00:00:00Z", limit=1)
+    assert [r["id"] for r in rows] == ["new"] and rows[0]["hook"] == "Hook new."
