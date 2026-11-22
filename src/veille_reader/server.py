@@ -1,6 +1,8 @@
 """Local reader server: item metadata, cached arXiv PDFs and the reader front. Loopback only."""
 
+import asyncio
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
@@ -13,9 +15,12 @@ from pydantic import BaseModel, Field, model_validator
 from veille_reader import events
 from veille_reader.chat import stream_turn
 from veille_reader.events import AgentRunner
-from veille_reader.memory import MAX_NOTES
+from veille_reader.limits import AgentLimits
+from veille_reader.memory import MAX_NOTES, StoreMemory
+from veille_reader.paper import PaperError, load_paper
 from veille_reader.pdf import Fetcher, PdfError, arxiv_id, default_fetcher, ensure_pdf
 from veille_reader.storage import ReaderStore
+from veille_reader.tools import PaperTools
 
 LOCAL_HOSTS = {"127.0.0.1", "localhost"}
 
@@ -40,6 +45,7 @@ class QuoteIn(BaseModel):
 class MessageIn(BaseModel):
     kind: Literal["text", "ask_agent"]
     text: str | None = Field(default=None, max_length=8000)
+    raise_limit: bool = False
     quote: QuoteIn | None = None
     question: str | None = Field(default=None, max_length=8000)
 
@@ -113,6 +119,8 @@ def create_app(
     dev_origins: set[str] | frozenset[str] = frozenset(),
     dev_front: str | None = None,
     model: str | None = None,
+    agent_limits: AgentLimits | None = None,
+    tools_factory: Callable[[str, dict], tuple[PaperTools | None, list[str]]] | None = None,
 ) -> FastAPI:
     loaded = {"items": _load_items(catalogue_path), "mtime": catalogue_path.stat().st_mtime_ns}
 
@@ -129,6 +137,7 @@ def create_app(
     store = ReaderStore(data_dir)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.state.streaming = set()
+    app.state.store = store
     app.state.runner = runner or _no_agent
 
     @app.middleware("http")
@@ -226,6 +235,12 @@ def create_app(
             return unknown("unknown_conversation")
         return store.messages(cid)
 
+    @app.get("/api/items/{item_id}/conversations/{cid}/trace")
+    def conversation_trace(item_id: str, cid: int):  # noqa: ANN202
+        if store.conversation(item_id, cid) is None:
+            return unknown("unknown_conversation")
+        return store.traces(cid)
+
     @app.get("/api/items/{item_id}/conversations/{cid}/export")
     def export_conversation(item_id: str, cid: int):  # noqa: ANN202
         markdown = store.export_markdown(item_id, cid)
@@ -233,14 +248,44 @@ def create_app(
             return unknown("unknown_conversation")
         return Response(markdown, media_type="text/markdown; charset=utf-8")
 
-    async def run_turn(item_id: str, cid: int, kind: str | None, content: dict | None):  # noqa: ANN202
+    def default_tools(item_id: str, item: dict) -> tuple[PaperTools | None, list[str]]:
+        """The tutor's tools for this paper (from the cached PDF) and its pinned notes."""
+        notes = [n["text"] for n in store.memory_notes(item_id)]
+        try:
+            path = ensure_pdf(store, item_id, str(item.get("url", "")), fetch)
+            paper = load_paper(store, item_id, path)
+        except (PdfError, PaperError):
+            return None, notes
+        return PaperTools(paper, store.highlights(item_id), StoreMemory(store, item_id)), notes
+
+    async def run_turn(  # noqa: ANN202
+        item_id: str, cid: int, kind: str | None, content: dict | None, raise_limit: bool = False
+    ):
         streaming: set[int] = app.state.streaming
         streaming.add(cid)
 
+        item = current_items()[item_id]
+
         async def body():  # noqa: ANN202
             try:
+                try:
+                    tools, notes = await asyncio.to_thread(
+                        tools_factory or default_tools, item_id, item
+                    )
+                except Exception:  # noqa: BLE001 - the chat still works from the summary
+                    tools, notes = None, []
                 async for line in stream_turn(
-                    store, app.state.runner, current_items()[item_id], cid, kind, content
+                    store,
+                    app.state.runner,
+                    item,
+                    cid,
+                    kind,
+                    content,
+                    tools=tools,
+                    notes=notes,
+                    agent_limits=agent_limits,
+                    model=model or "",
+                    raise_limit=raise_limit,
                 ):
                     yield line
             finally:
@@ -260,7 +305,7 @@ def create_app(
             content = {"quote": body.quote.model_dump(), "question": body.question}
         else:
             content = {"text": body.text}
-        return await run_turn(item_id, cid, body.kind, content)
+        return await run_turn(item_id, cid, body.kind, content, body.raise_limit)
 
     @app.post("/api/items/{item_id}/conversations/{cid}/regenerate")
     async def regenerate(item_id: str, cid: int):  # noqa: ANN202

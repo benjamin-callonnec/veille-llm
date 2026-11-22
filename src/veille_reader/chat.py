@@ -10,6 +10,7 @@ import anyio
 from veille_llm.llm import redact
 from veille_reader import events
 from veille_reader.events import AgentRunner, RunRequest
+from veille_reader.limits import AgentLimits
 from veille_reader.storage import ReaderStore
 
 
@@ -44,6 +45,9 @@ class _Answer:
         self.answer = ""
         self.duration_ms: int | None = None
         self.error: dict | None = None
+        self.usage: dict | None = None
+        self.tool_log: list[dict] = []
+        self._tool_started: dict[str, tuple[str, float]] = {}
         self.started = time.monotonic()
 
     def apply(self, event: dict) -> None:
@@ -54,6 +58,7 @@ class _Answer:
             else:
                 self.blocks.append({"type": "thinking", "text": event["text"]})
         elif kind == "tool_use":
+            self._tool_started[event["id"]] = (event["name"], time.monotonic())
             self.blocks.append(
                 {
                     "type": "tool",
@@ -65,6 +70,14 @@ class _Answer:
                 }
             )
         elif kind == "tool_result":
+            name, began = self._tool_started.pop(event["id"], ("unknown", time.monotonic()))
+            self.tool_log.append(
+                {
+                    "name": name,
+                    "is_error": bool(event["is_error"]),
+                    "duration_ms": int((time.monotonic() - began) * 1000),
+                }
+            )
             for block in self.blocks:
                 if block["type"] == "tool" and block["id"] == event["id"]:
                     block["summary"] = event["summary"]
@@ -73,6 +86,7 @@ class _Answer:
             self.answer += event["text"]
         elif kind == "done":
             self.duration_ms = event["duration_ms"]
+            self.usage = event.get("usage")
         elif kind == "error":
             self.error = {"kind": event["kind"], "message": event["message"]}
 
@@ -86,9 +100,52 @@ class _Answer:
             "duration_ms": duration,
             "stopped": stopped,
         }
+        if self.usage:
+            content["usage"] = self.usage
         if self.error:
             content["error"] = self.error
         return content
+
+
+def session_cost(messages: list[dict]) -> float:
+    """What the answers of a conversation cost so far, as reported by the SDK."""
+    total = 0.0
+    for m in messages:
+        if m["role"] == "assistant":
+            total += float((m["content"].get("usage") or {}).get("cost_usd") or 0.0)
+    return total
+
+
+def session_refusal(
+    store: ReaderStore, cid: int, messages: list[dict], limits: AgentLimits, raise_limit: bool
+) -> str | None:
+    """A message when the conversation is over its budget, else None (raisable once)."""
+    spent = session_cost(messages)
+    raised = store.limit_raised(cid)
+    cap = limits.max_session_usd * (2 if raised else 1)
+    if spent < cap:
+        return None
+    if raise_limit and not raised:
+        store.mark_limit_raised(cid)
+        if spent < limits.max_session_usd * 2:
+            return None
+        raised = True
+    if raised:
+        return (
+            "This conversation already used its raised limit. Start a new conversation "
+            "to keep going."
+        )
+    return (
+        "This conversation reached its budget. Start a new conversation, or send your "
+        "message again with the limit raised (this can be done once per conversation)."
+    )
+
+
+def _refusal_runner(message: str) -> AgentRunner:
+    async def runner(request: RunRequest) -> AsyncIterator[dict]:
+        yield events.error("limit", message)
+
+    return runner
 
 
 async def stream_turn(
@@ -98,11 +155,22 @@ async def stream_turn(
     cid: int,
     kind: str | None,
     content: dict | None,
+    *,
+    tools: object = None,
+    notes: list[str] | None = None,
+    agent_limits: AgentLimits | None = None,
+    tool_limits: object = None,
+    model: str = "",
+    raise_limit: bool = False,
 ) -> AsyncIterator[str]:
     """Stream one turn. With `kind` None the last user message is run again (regenerate)."""
     if kind is not None and content is not None:
         store.add_message(cid, "user", kind, content)
     messages = store.messages(cid)
+    limits = agent_limits or AgentLimits()
+    refusal = session_refusal(store, cid, messages, limits, raise_limit)
+    if refusal is not None:
+        runner = _refusal_runner(refusal)
     turns = history_of(messages)
     last = turns[-1]
     request = RunRequest(
@@ -110,6 +178,10 @@ async def stream_turn(
         question=last["text"],
         history=turns[:-1],
         quote=last.get("quote"),
+        paper_tools=tools,
+        notes=list(notes or []),
+        tool_limits=tool_limits,
+        agent_limits=limits,
     )
     answer = _Answer()
     stopped = True
@@ -131,8 +203,21 @@ async def stream_turn(
     finally:
         # Save first, with no await before it: a cancelled request (Stop) is cancelled again at
         # every later await, so the answer must already be stored by then.
+        final = answer.content(stopped)
         try:
-            store.add_message(cid, "assistant", "assistant", answer.content(stopped))
+            store.add_message(cid, "assistant", "assistant", final)
+            usage = answer.usage or {}
+            store.add_trace(
+                cid,
+                duration_ms=int(final["duration_ms"]),
+                tools=answer.tool_log,
+                input_tokens=int(usage.get("input_tokens") or 0),
+                output_tokens=int(usage.get("output_tokens") or 0),
+                cost_usd=float(usage.get("cost_usd") or 0.0),
+                model=model,
+                stopped=stopped,
+                error_kind=(answer.error or {}).get("kind", ""),
+            )
         except sqlite3.IntegrityError:
             pass  # the conversation was deleted while the answer was being produced
         aclose = getattr(events_stream, "aclose", None)

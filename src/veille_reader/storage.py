@@ -62,6 +62,23 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX memory_notes_item ON memory_notes (item_id);
     """,
+    """
+    ALTER TABLE conversations ADD COLUMN limit_raised INTEGER NOT NULL DEFAULT 0;
+    CREATE TABLE traces (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        tools TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        cost_usd REAL NOT NULL,
+        model TEXT NOT NULL,
+        stopped INTEGER NOT NULL,
+        error_kind TEXT NOT NULL
+    );
+    CREATE INDEX traces_conversation ON traces (conversation_id);
+    """,
 ]
 
 
@@ -300,6 +317,72 @@ class ReaderStore:
                 "DELETE FROM memory_notes WHERE id = ? AND item_id = ?", (note_id, item_id)
             )
         return cursor.rowcount > 0
+
+    def limit_raised(self, conversation_id: int) -> bool:
+        row = self._con.execute(
+            "SELECT limit_raised FROM conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()
+        return bool(row and row[0])
+
+    def mark_limit_raised(self, conversation_id: int) -> None:
+        with self._con:
+            self._con.execute(
+                "UPDATE conversations SET limit_raised = 1 WHERE id = ?", (conversation_id,)
+            )
+
+    def add_trace(
+        self,
+        conversation_id: int,
+        *,
+        duration_ms: int,
+        tools: list[dict],
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float,
+        model: str,
+        stopped: bool,
+        error_kind: str,
+    ) -> None:
+        """What a turn did (tools, tokens, time), never what was said or read."""
+        with self._con:
+            self._con.execute(
+                "INSERT INTO traces (conversation_id, created_at, duration_ms, tools, input_tokens,"
+                " output_tokens, cost_usd, model, stopped, error_kind)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    conversation_id,
+                    self._now(),
+                    duration_ms,
+                    json.dumps(tools),
+                    input_tokens,
+                    output_tokens,
+                    cost_usd,
+                    model,
+                    int(stopped),
+                    error_kind,
+                ),
+            )
+
+    def traces(self, conversation_id: int) -> list[dict]:
+        rows = self._con.execute(
+            "SELECT created_at, duration_ms, tools, input_tokens, output_tokens, cost_usd, model,"
+            " stopped, error_kind FROM traces WHERE conversation_id = ? ORDER BY id",
+            (conversation_id,),
+        ).fetchall()
+        return [
+            {
+                "created_at": r[0],
+                "duration_ms": r[1],
+                "tools": json.loads(r[2]),
+                "input_tokens": r[3],
+                "output_tokens": r[4],
+                "cost_usd": r[5],
+                "model": r[6],
+                "stopped": bool(r[7]),
+                "error_kind": r[8],
+            }
+            for r in rows
+        ]
 
     def paper_text(self, item_id: str) -> dict | None:
         row = self._con.execute(
