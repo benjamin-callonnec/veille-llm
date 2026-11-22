@@ -130,3 +130,28 @@ def test_invalid_catalogue_is_a_clear_error(tmp_path):
     bad.write_text("{not json", encoding="utf-8")
     with pytest.raises(ValueError, match="catalogue"):
         create_app(tmp_path / "data", bad)
+
+
+def test_cross_site_requests_are_refused(client, calls):
+    cross = {"Sec-Fetch-Site": "cross-site"}
+    assert client.get("/api/items/a1/pdf", headers=cross).status_code == 403
+    assert (
+        client.get("/api/items/a1/pdf", headers={"Sec-Fetch-Site": "same-site"}).status_code == 403
+    )
+    assert (
+        client.get("/api/items/a1/pdf", headers={"Origin": "https://evil.example"}).status_code
+        == 403
+    )
+    assert calls == []
+
+
+def test_same_origin_requests_are_accepted(client):
+    assert client.get("/api/health", headers={"Sec-Fetch-Site": "same-origin"}).status_code == 200
+    assert client.get("/api/health", headers={"Sec-Fetch-Site": "none"}).status_code == 200
+    assert client.get("/api/health", headers={"Origin": "http://127.0.0.1:8765"}).status_code == 200
+
+
+def test_responses_forbid_framing_and_cross_origin_reads(client):
+    response = client.get("/api/health")
+    assert response.headers["x-frame-options"] == "SAMEORIGIN"
+    assert response.headers["cross-origin-resource-policy"] == "same-origin"

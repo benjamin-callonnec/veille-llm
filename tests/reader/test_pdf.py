@@ -122,3 +122,74 @@ def test_concurrent_requests_leave_one_valid_file(store):
     assert errors == []
     assert [p.name for p in store.pdfs_dir.iterdir()] == ["2401.01234.pdf"]
     assert (store.pdfs_dir / "2401.01234.pdf").read_bytes() == PDF
+
+
+def test_redirects_leaving_arxiv_are_refused():
+    from urllib.request import Request
+
+    from veille_reader.pdf import _ArxivOnly
+
+    handler = _ArxivOnly()
+    req = Request("https://arxiv.org/pdf/2401.01234")
+    for target in (
+        "https://evil.example/x.pdf",
+        "http://arxiv.org/pdf/2401.01234",
+        "https://arxiv.org.evil.com/pdf/2401.01234",
+        "https://arxiv.org:8443/pdf/2401.01234",
+    ):
+        with pytest.raises(OSError):
+            handler.redirect_request(req, None, 302, "Found", {}, target)
+    ok = handler.redirect_request(req, None, 302, "Found", {}, "https://arxiv.org/pdf/2401.01234v2")
+    assert ok is not None
+
+
+def test_default_fetcher_has_an_overall_deadline(monkeypatch):
+    from veille_reader import pdf
+
+    class Slow:
+        def read(self, n):
+            return b"x"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class Opener:
+        def open(self, url, timeout):
+            return Slow()
+
+    monkeypatch.setattr(pdf.urllib.request, "build_opener", lambda *h: Opener())
+    monkeypatch.setattr(pdf, "DEADLINE_SECONDS", 0)
+    with pytest.raises(TimeoutError):
+        pdf.default_fetcher("https://arxiv.org/pdf/2401.01234")
+
+
+def test_cached_pdf_is_not_blocked_by_another_download(store):
+    ensure_pdf(store, "cached", "https://arxiv.org/abs/2401.00001", lambda u: PDF)
+    started, release = threading.Event(), threading.Event()
+
+    def slow(url):
+        started.set()
+        release.wait(5)
+        return PDF
+
+    worker = threading.Thread(
+        target=lambda: ensure_pdf(store, "slow", "https://arxiv.org/abs/2401.00002", slow)
+    )
+    worker.start()
+    assert started.wait(5)
+    done = threading.Event()
+
+    def read_cached():
+        ensure_pdf(store, "cached", "https://arxiv.org/abs/2401.00001", lambda u: PDF)
+        done.set()
+
+    reader = threading.Thread(target=read_cached)
+    reader.start()
+    finished = done.wait(2)
+    release.set()
+    worker.join()
+    reader.join()
+    assert finished

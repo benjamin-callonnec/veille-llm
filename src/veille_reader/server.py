@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -28,6 +29,17 @@ def _hostname(header: str) -> str:
     return header.rsplit(":", 1)[0] if ":" in header else header
 
 
+def _cross_site(request: Request) -> bool:
+    """A page on another origin must not drive the server (it has side effects: downloads)."""
+    if request.headers.get("sec-fetch-site", "same-origin") not in {"same-origin", "none"}:
+        return True
+    origin = request.headers.get("origin")
+    if origin is None:
+        return False
+    host = urlsplit(origin).netloc
+    return host != request.headers.get("host", "")
+
+
 def create_app(
     data_dir: Path,
     catalogue_path: Path,
@@ -39,10 +51,15 @@ def create_app(
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.middleware("http")
-    async def local_host_only(request: Request, call_next):  # noqa: ANN001, ANN202
+    async def local_only(request: Request, call_next):  # noqa: ANN001, ANN202
         if _hostname(request.headers.get("host", "")) not in LOCAL_HOSTS:
             return JSONResponse({"reason": "forbidden_host"}, status_code=403)
-        return await call_next(request)
+        if _cross_site(request):
+            return JSONResponse({"reason": "cross_site"}, status_code=403)
+        response = await call_next(request)
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        return response
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

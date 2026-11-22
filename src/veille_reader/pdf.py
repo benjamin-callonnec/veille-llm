@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import threading
+import time
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
@@ -13,6 +14,8 @@ from veille_reader.storage import ReaderStore
 
 MAX_BYTES = 50 * 1024 * 1024
 TIMEOUT_SECONDS = 30
+DEADLINE_SECONDS = 120
+CHUNK = 64 * 1024
 ARXIV_HOST = "arxiv.org"
 
 _NEW_ID = r"\d{4}\.\d{4,5}(?:v\d+)?"
@@ -20,7 +23,13 @@ _OLD_ID = r"[a-z\-]+(?:\.[A-Z]{2})?/\d{7}(?:v\d+)?"
 _PATH = re.compile(rf"^/(?:abs|pdf)/({_NEW_ID}|{_OLD_ID})(?:\.pdf)?/?$")
 
 Fetcher = Callable[[str], bytes]
-_lock = threading.Lock()
+_locks: dict[str, threading.Lock] = {}
+_locks_guard = threading.Lock()
+
+
+def _lock_for(name: str) -> threading.Lock:
+    with _locks_guard:
+        return _locks.setdefault(name, threading.Lock())
 
 
 class PdfError(Exception):
@@ -47,15 +56,24 @@ def pdf_url(identifier: str) -> str:
 class _ArxivOnly(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
         parts = urlsplit(newurl)
-        if parts.scheme != "https" or parts.hostname != ARXIV_HOST:
+        if parts.scheme != "https" or parts.hostname != ARXIV_HOST or parts.port is not None:
             raise OSError(f"redirect outside {ARXIV_HOST} refused")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 def default_fetcher(url: str) -> bytes:
     opener = urllib.request.build_opener(_ArxivOnly)
+    deadline = time.monotonic() + DEADLINE_SECONDS
+    data = bytearray()
     with opener.open(url, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310
-        return response.read(MAX_BYTES + 1)
+        while len(data) <= MAX_BYTES:
+            if time.monotonic() >= deadline:
+                raise TimeoutError("download exceeded its deadline")
+            chunk = response.read(min(CHUNK, MAX_BYTES + 1 - len(data)))
+            if not chunk:
+                break
+            data += chunk
+    return bytes(data)
 
 
 def ensure_pdf(
@@ -66,7 +84,9 @@ def ensure_pdf(
         raise PdfError("no_pdf")
     name = identifier.replace("/", "_") + ".pdf"
     path = store.pdfs_dir / name
-    with _lock:
+    if path.is_file() and store.pdf_file(item_id) == name:
+        return path
+    with _lock_for(name):
         if path.is_file() and store.pdf_file(item_id) == name:
             return path
         try:
