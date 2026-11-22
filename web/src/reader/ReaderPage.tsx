@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
+import { type ChatApi, httpChatApi } from "./chat/api";
+import { ChatPane } from "./chat/ChatPane";
+import { useChat } from "./chat/useChat";
 import { HighlightsStrip } from "./HighlightsStrip";
 import { parseHash, writeHash } from "./lib/anchor";
 import { PaneLayout } from "./PaneLayout";
 import { PdfViewer, type Selection } from "./PdfViewer";
 import { openPdf } from "./pdf/pdfjsSource";
 import { PdfOpenError, type PdfSource } from "./pdf/source";
-import { type AskedQuestion, QuestionList } from "./QuestionList";
 import { SelectionBox } from "./SelectionBox";
 import { type HighlightsApi, httpApi, useHighlights } from "./useHighlights";
 
@@ -40,9 +42,16 @@ interface Props {
   load?: (id: string) => Promise<ReaderItem>;
   open?: (url: string) => Promise<PdfSource>;
   api?: HighlightsApi;
+  chatApi?: ChatApi;
 }
 
-export function ReaderPage({ itemId, load = loadItem, open = openPdf, api = httpApi }: Props) {
+export function ReaderPage({
+  itemId,
+  load = loadItem,
+  open = openPdf,
+  api = httpApi,
+  chatApi = httpChatApi,
+}: Props) {
   const [item, setItem] = useState<ReaderItem | null>(null);
   const [error, setError] = useState<string | null>(
     itemId ? null : "This item cannot be opened in the reader.",
@@ -50,8 +59,8 @@ export function ReaderPage({ itemId, load = loadItem, open = openPdf, api = http
   const [source, setSource] = useState<PdfSource | null>(null);
   const [page, setPage] = useState(() => parseHash(window.location.hash).page ?? 1);
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [questions, setQuestions] = useState<AskedQuestion[]>([]);
   const { highlights, add, remove, error: saveError } = useHighlights(itemId, api);
+  const chat = useChat(itemId, chatApi);
 
   useEffect(() => {
     if (!itemId) return;
@@ -132,7 +141,7 @@ export function ReaderPage({ itemId, load = loadItem, open = openPdf, api = http
           The highlight could not be saved.
         </p>
       )}
-      <PaneLayout pdf={pdfPane} chat={<QuestionList questions={questions} onGo={changePage} />} />
+      <PaneLayout pdf={pdfPane} chat={<ChatPane chat={chat} onGo={changePage} />} />
       {selection && (
         <SelectionBox
           quote={selection.quote}
@@ -144,7 +153,15 @@ export function ReaderPage({ itemId, load = loadItem, open = openPdf, api = http
               clip(selection.quote.text),
               selection.quote.rects,
             );
-            setQuestions((q) => [...q, { quote: selection.quote, question }]);
+            void chat.send({
+              kind: "ask_agent",
+              quote: {
+                text: selection.quote.text,
+                page: selection.quote.page,
+                rects: selection.quote.rects,
+              },
+              question,
+            });
             closeBox();
           }}
           onHighlight={(color) => {

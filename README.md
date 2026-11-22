@@ -60,7 +60,13 @@ The page shows the PDF (zoom, search with `/`, outline, PageUp/PageDown) next to
 chat; the divider can be dragged (or moved with the arrow keys) and each pane collapsed. Select a
 passage to get a small box: type a question about it (Enter), or pick a colour to highlight it, or
 copy it. Highlights are kept in `reader.db` and the page number stays in the URL. The tutor chat
-itself comes with issues #22 to #26 (parent: #17).
+chat is a streaming conversation with the tutor (Agent SDK on your subscription, no API key, no
+tools yet): answers stream token by token, a discreet "Thinking" line shows the reasoning (open while
+the agent works, folded when the answer starts, reopenable any time), `[p.N]` citations scroll the PDF,
+conversations are kept per paper (dropdown in the chat header: new, rename, delete, export to
+Markdown). The tutor uses Sonnet by default (`VEILLE_READER_MODEL` to change it) and, for now, only sees
+the title, summary and the passage you selected, not the full text (tools come with #23).
+Remaining pieces: #23 to #26 (parent: #17).
 
 ## Deploy on GitHub Pages
 
