@@ -37,6 +37,11 @@ def error(kind: str, message: str, usage: dict | None = None) -> dict:
     return event
 
 
+def citations(items: list[dict]) -> dict:
+    """The tutor's citations, checked against the paper (sent just before `done`)."""
+    return {"type": "citations", "items": items}
+
+
 def compaction(replaced: int) -> dict:
     return {"type": "compaction", "replaced": replaced}
 

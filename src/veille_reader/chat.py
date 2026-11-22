@@ -9,6 +9,7 @@ import anyio
 
 from veille_llm.llm import redact
 from veille_reader import events
+from veille_reader.citations import parse_citations, verify_citations
 from veille_reader.compaction import Summarizer, compact, current_history, needs_compaction
 from veille_reader.events import AgentRunner, RunRequest
 from veille_reader.limits import AgentLimits
@@ -28,6 +29,7 @@ class _Answer:
         self.duration_ms: int | None = None
         self.error: dict | None = None
         self.usage: dict | None = None
+        self.citations: list[dict] = []
         self.tool_log: list[dict] = []
         self._tool_started: dict[str, tuple[str, float]] = {}
         self.started = time.monotonic()
@@ -84,6 +86,8 @@ class _Answer:
             "duration_ms": duration,
             "stopped": stopped,
         }
+        if self.citations:
+            content["citations"] = self.citations
         if self.usage:
             content["usage"] = self.usage
         if self.error:
@@ -114,6 +118,17 @@ def session_refusal(
         "This conversation reached its budget. Start a new conversation, or send your "
         "message again with the limit raised (this can be done once per conversation)."
     )
+
+
+def check_citations(tools: object, text: str) -> list[dict]:
+    """Check the citations of an answer against the paper; nothing to check without the paper."""
+    paper = getattr(tools, "paper", None)
+    if paper is None or not text:
+        return []
+    try:
+        return verify_citations(paper.pages, paper.outline, parse_citations(text))
+    except Exception:  # noqa: BLE001 - a failed check must never break the answer
+        return []
 
 
 def _refusal_runner(message: str) -> AgentRunner:
@@ -180,6 +195,10 @@ async def stream_turn(
         try:
             async for event in events_stream:
                 answer.apply(event)
+                if event.get("type") == "done":
+                    answer.citations = check_citations(tools, answer.answer)
+                    if answer.citations:
+                        yield sse(events.citations(answer.citations))
                 yield sse(event)
                 if event.get("type") in ("done", "error"):
                     break
@@ -193,6 +212,8 @@ async def stream_turn(
     finally:
         # Save first, with no await before it: a cancelled request (Stop) is cancelled again at
         # every later await, so the answer must already be stored by then.
+        if not answer.citations:  # an answer cut short is checked too, quietly
+            answer.citations = check_citations(tools, answer.answer)
         final = answer.content(stopped)
         try:
             store.add_message(cid, "assistant", "assistant", final)

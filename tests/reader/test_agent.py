@@ -466,3 +466,9 @@ def test_a_failed_result_carries_its_cost_too(monkeypatch):
     )
     event = collect(request(), fake_query(result))[-1]
     assert event["kind"] == "failed" and event["usage"]["cost_usd"] == 0.2
+
+
+def test_the_tutor_is_told_to_quote_and_never_to_invent():
+    text = SYSTEM_PROMPT_TOOLS
+    assert '[p.N "' in text and "exact" in text.lower() and "never invent" in text.lower()
+    assert "reference list" in text.lower()

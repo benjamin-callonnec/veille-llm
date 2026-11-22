@@ -193,3 +193,12 @@ def test_cached_pdf_is_not_blocked_by_another_download(store):
     worker.join()
     reader.join()
     assert finished
+
+
+def test_the_test_suite_cannot_reach_the_real_network():
+    import pytest
+
+    from veille_reader.pdf import default_fetcher
+
+    with pytest.raises(OSError, match="network is disabled"):
+        default_fetcher("https://arxiv.org/pdf/2401.01234")

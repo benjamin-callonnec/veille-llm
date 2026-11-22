@@ -318,3 +318,68 @@ def test_the_session_cost_is_the_sum_of_the_traces(tmp_path):
         )
     assert store.session_cost(cid) == 0.75
     assert store.session_cost(999) == 0.0
+
+
+# --- citations are checked against the paper -------------------------------------------------
+
+CITED = (
+    events.text_delta('It reaches that [p.1 "attention page one"] and also '),
+    events.text_delta('[p.2 "a totally invented sentence"].'),
+    events.done(5),
+)
+
+
+def event_list(response):
+    return [json.loads(x[6:]) for x in response.text.split("\n\n") if x.startswith("data: ")]
+
+
+def test_citations_are_checked_before_the_answer_ends(tmp_path):
+    client, _ = client_for(tmp_path, recording(*CITED))
+    response = send(client, conv(client))
+    kinds = types(response)
+    assert kinds == [
+        "text_delta",
+        "text_delta",
+        "citations",
+        "done",
+    ]  # the check comes just before done
+    items = event_list(response)[2]["items"]
+    assert [(i["page"], i["status"]) for i in items] == [(1, "verified"), (2, "unverified")]
+    assert items[0]["section"] == "Intro" and items[0]["quote"] == "attention page one"
+
+
+def test_the_checked_citations_are_stored_with_the_answer(tmp_path):
+    client, _ = client_for(tmp_path, recording(*CITED))
+    cid = conv(client)
+    send(client, cid)
+    stored = client.get(f"/api/items/a1/conversations/{cid}/messages").json()[1]["content"]
+    assert [c["status"] for c in stored["citations"]] == ["verified", "unverified"]
+
+
+def test_an_answer_that_fails_halfway_still_stores_its_checked_citations(tmp_path):
+    runner = recording(
+        events.text_delta('Partly [p.1 "attention page one"]'), events.error("limit", "x")
+    )
+    client, _ = client_for(tmp_path, runner)
+    cid = conv(client)
+    response = send(client, cid)
+    assert "citations" not in types(response)  # nothing to announce: the answer did not finish
+    stored = client.get(f"/api/items/a1/conversations/{cid}/messages").json()[1]["content"]
+    assert stored["citations"][0]["status"] == "verified"
+
+
+def test_there_is_nothing_to_check_without_citations_or_without_the_paper(tmp_path):
+    plain = recording(events.text_delta("no citation here"), events.done(1))
+    client, _ = client_for(tmp_path, plain)
+    cid = conv(client)
+    assert "citations" not in types(send(client, cid))
+    assert (
+        "citations"
+        not in client.get(f"/api/items/a1/conversations/{cid}/messages").json()[1]["content"]
+    )
+    cited = recording(*CITED)
+    (tmp_path / "other").mkdir()
+    news_client, _ = client_for(tmp_path / "other", cited)
+    news = conv(news_client, "n1")
+    response = send(news_client, news, item="n1")
+    assert "citations" not in types(response)  # a news item has no paper to check against
