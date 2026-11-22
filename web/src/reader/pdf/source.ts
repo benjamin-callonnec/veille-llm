@@ -20,7 +20,14 @@ export interface OutlineEntry {
 export interface PdfSource {
   numPages: number;
   pageInfo(page: number): Promise<PageInfo>;
-  render(page: number, canvas: HTMLCanvasElement, scale: number): Promise<void>;
+  render(
+    page: number,
+    canvas: HTMLCanvasElement,
+    scale: number,
+    signal?: AbortSignal,
+  ): Promise<void>;
+  /** The page left the screen: free what the engine keeps for it. */
+  release?(page: number): void;
   textLayer(page: number): Promise<{ text: string; boxes: TextBox[] }>;
   outline(): Promise<OutlineEntry[]>;
   destroy(): void;

@@ -67,3 +67,53 @@ test("toPixelRects scales back to a page size", () => {
     { left: 100, top: 100, width: 300, height: 200 },
   ]);
 });
+
+describe("toQuote rectangle merging", () => {
+  const page = { x: 0, y: 0, width: 1000, height: 1000 };
+  test("pieces of one line are merged into one rectangle", () => {
+    const q = toQuote(
+      1,
+      "t",
+      [
+        { x: 100, y: 100, width: 100, height: 20 },
+        { x: 200, y: 101, width: 100, height: 20 },
+      ],
+      page,
+    );
+    expect(q?.rects).toHaveLength(1);
+    expect(round(q?.rects)?.[0]).toEqual([0.1, 0.1, 0.2, 0.021]);
+  });
+  test("a rectangle contained in another is dropped", () => {
+    const q = toQuote(
+      1,
+      "t",
+      [
+        { x: 100, y: 100, width: 400, height: 20 },
+        { x: 150, y: 102, width: 50, height: 16 },
+      ],
+      page,
+    );
+    expect(q?.rects).toHaveLength(1);
+  });
+  test("different lines stay separate", () => {
+    const q = toQuote(
+      1,
+      "t",
+      [
+        { x: 100, y: 100, width: 100, height: 20 },
+        { x: 100, y: 140, width: 100, height: 20 },
+      ],
+      page,
+    );
+    expect(q?.rects).toHaveLength(2);
+  });
+  test("never more than 200 rectangles", () => {
+    const many = Array.from({ length: 500 }, (_, i) => ({
+      x: 0,
+      y: i * 2,
+      width: 10,
+      height: 1,
+    }));
+    expect(toQuote(1, "t", many, page)?.rects.length).toBeLessThanOrEqual(200);
+  });
+});

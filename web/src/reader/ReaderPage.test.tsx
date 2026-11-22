@@ -190,3 +190,40 @@ test("the page in the URL is applied on load and kept up to date", async () => {
   await userEvent.type(field, "2{Enter}");
   await waitFor(() => expect(window.location.hash).toBe("#item=a1&page=2"));
 });
+
+test("a failed highlight save is reported to the user", async () => {
+  const { api } = setup();
+  (api.add as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("422"));
+  await select();
+  await userEvent.click(await screen.findByRole("button", { name: "Highlight red" }));
+  expect((await screen.findByRole("status")).textContent).toMatch(/highlight/i);
+});
+
+test("a very long selection is trimmed so the highlight can be saved", async () => {
+  const { api } = setup({
+    open: async () => new FakeSource({ numPages: 5, text: () => "x".repeat(6000) }),
+  });
+  Range.prototype.getClientRects = () =>
+    [{ x: 160, y: 130, width: 100, height: 20 }] as unknown as DOMRectList;
+  const span = (await screen.findAllByText("x".repeat(6000)))[0] as HTMLElement;
+  vi.spyOn(span.closest("[data-page]") as Element, "getBoundingClientRect").mockReturnValue({
+    x: 100,
+    y: 100,
+    width: 600,
+    height: 800,
+    left: 100,
+    top: 100,
+    right: 700,
+    bottom: 900,
+    toJSON: () => ({}),
+  });
+  const range = document.createRange();
+  range.selectNodeContents(span);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+  fireEvent.mouseUp(screen.getByTestId("pdf-scroll"));
+  await userEvent.click(await screen.findByRole("button", { name: "Highlight red" }));
+  await waitFor(() => expect(api.add).toHaveBeenCalled());
+  const body = (api.add as ReturnType<typeof vi.fn>).mock.calls[0]?.[1];
+  expect(body.text.length).toBeLessThanOrEqual(5000);
+});

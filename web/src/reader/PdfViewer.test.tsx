@@ -197,3 +197,54 @@ test("each text piece is stretched to the width pdf.js measured", async () => {
     Reflect.deleteProperty(HTMLElement.prototype, "offsetWidth");
   }
 });
+
+test("scrolling into pages never snaps the scroll position back", async () => {
+  const source = new FakeSource({ numPages: 300 });
+  setup({}, source);
+  await waitFor(() => expect(canvases().length).toBeGreaterThan(0));
+  act(() => {
+    scroller().scrollTop = 3648; // the middle of page 5
+    fireEvent.scroll(scroller());
+  });
+  await new Promise((r) => setTimeout(r, 60));
+  expect(scroller().scrollTop).toBe(3648);
+});
+
+test("a render in progress is cancelled when the zoom changes", async () => {
+  const { source } = setup();
+  await waitFor(() => expect(source.renders.length).toBeGreaterThan(0));
+  const first = source.renders[0]?.signal;
+  expect(first?.aborted).toBe(false);
+  await userEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+  expect(first?.aborted).toBe(true);
+});
+
+test("pages that leave the window are released", async () => {
+  const source = new FakeSource({ numPages: 300 });
+  setup({}, source);
+  await waitFor(() => expect(canvases().length).toBeGreaterThan(0));
+  act(() => {
+    scroller().scrollTop = 200_000;
+    fireEvent.scroll(scroller());
+  });
+  await waitFor(() => expect(source.released).toContain(1));
+});
+
+test("scrolled to the very bottom the last page is reported", async () => {
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+    configurable: true,
+    get: () => 8120,
+  });
+  try {
+    const source = new FakeSource({ numPages: 10 });
+    const { props } = setup({}, source);
+    await waitFor(() => expect(canvases().length).toBeGreaterThan(0));
+    act(() => {
+      scroller().scrollTop = 8120 - HEIGHT; // the browser cannot go further
+      fireEvent.scroll(scroller());
+    });
+    expect(props.onPageChange).toHaveBeenLastCalledWith(10);
+  } finally {
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
+  }
+});

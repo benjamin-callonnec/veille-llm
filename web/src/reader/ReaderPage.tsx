@@ -24,6 +24,9 @@ export async function loadItem(id: string): Promise<ReaderItem> {
   return (await response.json()) as ReaderItem;
 }
 
+const MAX_HIGHLIGHT_TEXT = 5000;
+const clip = (text: string) => text.slice(0, MAX_HIGHLIGHT_TEXT);
+
 const pdfUrl = (id: string) => `/api/items/${encodeURIComponent(id)}/pdf`;
 
 const OPEN_ERRORS = {
@@ -48,7 +51,7 @@ export function ReaderPage({ itemId, load = loadItem, open = openPdf, api = http
   const [page, setPage] = useState(() => parseHash(window.location.hash).page ?? 1);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [questions, setQuestions] = useState<AskedQuestion[]>([]);
-  const { highlights, add, remove } = useHighlights(itemId, api);
+  const { highlights, add, remove, error: saveError } = useHighlights(itemId, api);
 
   useEffect(() => {
     if (!itemId) return;
@@ -124,18 +127,33 @@ export function ReaderPage({ itemId, load = loadItem, open = openPdf, api = http
           <strong>{item.hook}</strong>
         </p>
       </header>
+      {saveError && (
+        <p role="status" className="muted">
+          The highlight could not be saved.
+        </p>
+      )}
       <PaneLayout pdf={pdfPane} chat={<QuestionList questions={questions} onGo={changePage} />} />
       {selection && (
         <SelectionBox
           quote={selection.quote}
           anchor={selection.anchor}
           onAsk={(question) => {
-            void add(selection.quote.page, "yellow", selection.quote.text, selection.quote.rects);
+            void add(
+              selection.quote.page,
+              "yellow",
+              clip(selection.quote.text),
+              selection.quote.rects,
+            );
             setQuestions((q) => [...q, { quote: selection.quote, question }]);
             closeBox();
           }}
           onHighlight={(color) => {
-            void add(selection.quote.page, color, selection.quote.text, selection.quote.rects);
+            void add(
+              selection.quote.page,
+              color,
+              clip(selection.quote.text),
+              selection.quote.rects,
+            );
             closeBox();
           }}
           onCopy={() => {

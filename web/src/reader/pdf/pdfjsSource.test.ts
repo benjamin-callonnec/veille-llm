@@ -68,3 +68,21 @@ test("a document without outline gives an empty list", async () => {
   });
   expect(await (await openPdf("/x.pdf")).outline()).toEqual([]);
 });
+
+test("a hostile page cannot produce more than 5000 text boxes", async () => {
+  const items = Array.from({ length: 6000 }, (_, i) => ({
+    str: `w${i}`,
+    transform: [1, 0, 0, 10, 0, 0],
+    width: 5,
+  }));
+  const page = {
+    getViewport: () => ({ transform: [1, 0, 0, 1, 0, 0], width: 600, height: 800 }),
+    getTextContent: async () => ({ items }),
+  };
+  getDocument.mockReturnValue({
+    promise: Promise.resolve({ numPages: 1, getPage: async () => page }),
+  });
+  const source = await openPdf("/x.pdf");
+  const { boxes } = await source.textLayer(1);
+  expect(boxes).toHaveLength(5000);
+});

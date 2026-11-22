@@ -1,3 +1,4 @@
+import { canvasRatio } from "./canvas";
 import type { OutlineEntry, PageInfo, PdfSource, TextBox } from "./source";
 import { PdfOpenError } from "./source";
 
@@ -36,6 +37,8 @@ export async function openPdf(url: string): Promise<PdfSource> {
   return new PdfJsSource(pdfjs, doc, task);
 }
 
+const MAX_TEXT_BOXES = 5000;
+
 class PdfJsSource implements PdfSource {
   numPages: number;
   private pages = new Map<number, ReturnType<Doc["getPage"]>>();
@@ -62,19 +65,35 @@ class PdfJsSource implements PdfSource {
     return { width: viewport.width, height: viewport.height };
   }
 
-  async render(n: number, canvas: HTMLCanvasElement, scale: number): Promise<void> {
+  async render(
+    n: number,
+    canvas: HTMLCanvasElement,
+    scale: number,
+    signal?: AbortSignal,
+  ): Promise<void> {
     const page = await this.page(n);
-    const ratio = window.devicePixelRatio || 1;
+    if (signal?.aborted) return;
+    const shown = page.getViewport({ scale });
+    const ratio = canvasRatio(shown.width, shown.height, window.devicePixelRatio || 1);
     const viewport = page.getViewport({ scale: scale * ratio });
     canvas.width = Math.floor(viewport.width);
     canvas.height = Math.floor(viewport.height);
-    canvas.style.width = `${viewport.width / ratio}px`;
-    canvas.style.height = `${viewport.height / ratio}px`;
+    canvas.style.width = `${shown.width}px`;
+    canvas.style.height = `${shown.height}px`;
+    const task = page.render({ canvas, viewport });
+    signal?.addEventListener("abort", () => task.cancel(), { once: true });
     try {
-      await page.render({ canvas, viewport }).promise;
+      await task.promise;
     } catch (error) {
       if ((error as { name?: string }).name !== "RenderingCancelledException") throw error;
     }
+  }
+
+  release(n: number): void {
+    this.pages
+      .get(n)
+      ?.then((page) => page.cleanup())
+      .catch(() => {});
   }
 
   async textLayer(n: number): Promise<{ text: string; boxes: TextBox[] }> {
@@ -83,6 +102,7 @@ class PdfJsSource implements PdfSource {
     const content = await page.getTextContent();
     const boxes: TextBox[] = [];
     for (const item of content.items) {
+      if (boxes.length >= MAX_TEXT_BOXES) break;
       if (!("str" in item) || !item.str) continue;
       const t = this.pdfjs.Util.transform(viewport.transform, item.transform);
       const height = Math.hypot(t[2] ?? 0, t[3] ?? 0);

@@ -11,7 +11,8 @@ interface Options {
 /** Test double: no drawing, just records what the viewer asked for. */
 export class FakeSource implements PdfSource {
   numPages: number;
-  renders: { page: number; scale: number }[] = [];
+  renders: { page: number; scale: number; signal?: AbortSignal }[] = [];
+  released: number[] = [];
   destroyed = false;
   private size: PageInfo;
   private textOf: (page: number) => string;
@@ -30,8 +31,17 @@ export class FakeSource implements PdfSource {
     return this.size;
   }
 
-  async render(page: number, _canvas: HTMLCanvasElement, scale: number): Promise<void> {
-    this.renders.push({ page, scale });
+  async render(
+    page: number,
+    _canvas: HTMLCanvasElement,
+    scale: number,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    this.renders.push({ page, scale, signal });
+  }
+
+  release(page: number): void {
+    this.released.push(page);
   }
 
   async textLayer(page: number): Promise<{ text: string; boxes: TextBox[] }> {

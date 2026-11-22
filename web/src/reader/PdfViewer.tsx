@@ -75,24 +75,30 @@ function PageView({
   // The invisible text uses another font than the PDF: stretch each piece to pdf.js' width.
   useLayoutEffect(() => {
     const spans = layer.current?.children ?? [];
+    // read every width first, then write every transform: one layout instead of one per span
+    const widths = boxes.map((_, i) => (spans[i] as HTMLElement | undefined)?.offsetWidth ?? 0);
     boxes.forEach((b, i) => {
       const el = spans[i] as HTMLElement | undefined;
-      if (!el) return;
-      el.style.transform = "";
-      const natural = el.offsetWidth;
-      if (natural > 0 && b.width > 0) el.style.transform = `scaleX(${(b.width * scale) / natural})`;
+      const natural = widths[i] ?? 0;
+      if (el)
+        el.style.transform =
+          natural > 0 && b.width > 0 ? `scaleX(${(b.width * scale) / natural})` : "";
     });
   }, [boxes, scale]);
 
   useEffect(() => {
     const el = canvas.current;
     if (!el) return;
-    source.render(page, el, scale).catch(() => {});
+    const controller = new AbortController();
+    source.render(page, el, scale, controller.signal).catch(() => {});
     return () => {
+      controller.abort();
       el.width = 0;
       el.height = 0;
     };
   }, [source, page, scale]);
+
+  useEffect(() => () => source.release?.(page), [source, page]);
 
   useEffect(() => {
     let current = true;
@@ -157,10 +163,15 @@ export function PdfViewer({ source, page, onPageChange, onSelection, highlights 
   const total = source.numPages;
 
   const base = sizes[1] ?? FALLBACK_SIZE;
-  const heights = useMemo(
-    () => Array.from({ length: total }, (_, i) => (sizes[i + 1] ?? base).height * scale),
-    [total, sizes, base, scale],
-  );
+  const computed = Array.from({ length: total }, (_, i) => (sizes[i + 1] ?? base).height * scale);
+  const previous = useRef<number[]>([]);
+  // Same heights, same array: a size that merely confirms the fallback must not re-anchor the scroll.
+  const heights =
+    previous.current.length === computed.length &&
+    previous.current.every((h, i) => h === computed[i])
+      ? previous.current
+      : computed;
+  previous.current = heights;
   const offsets = useMemo(() => pageOffsets(heights, GAP), [heights]);
 
   const refreshWindow = useCallback(() => {
@@ -172,11 +183,13 @@ export function PdfViewer({ source, page, onPageChange, onSelection, highlights 
     for (let i = 0; i < offsets.length; i++) {
       if ((offsets[i] ?? 0) <= top + 1) p = i + 1;
     }
+    if (el.scrollHeight > el.clientHeight && top + el.clientHeight >= el.scrollHeight - 2)
+      p = total;
     if (p !== current.current) {
       current.current = p;
       onPageChange(p);
     }
-  }, [heights, offsets, onPageChange]);
+  }, [heights, offsets, onPageChange, total]);
 
   useEffect(() => {
     source
