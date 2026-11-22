@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from veille_llm.llm import LlmError, LlmOutputError, Runner, complete_json, redact
+from veille_llm.llm import (
+    DEFAULT_MODEL,
+    LlmError,
+    LlmOutputError,
+    Runner,
+    complete_json,
+    redact,
+)
 from veille_llm.models import Item, Verdict
 from veille_llm.store import Store
 
@@ -53,7 +60,9 @@ class ClassifyOutcome:
     stopped: str | None = None
 
 
-async def classify_batch(items: list[Item], *, runner: Runner | None = None) -> list[Verdict]:
+async def classify_batch(
+    items: list[Item], *, runner: Runner | None = None, model: str = DEFAULT_MODEL
+) -> list[Verdict]:
     data = [
         {
             "id": i.id,
@@ -64,7 +73,9 @@ async def classify_batch(items: list[Item], *, runner: Runner | None = None) -> 
         }
         for i in items
     ]
-    result = await complete_json(INSTRUCTIONS, CLASSIFY_SCHEMA, data=data, runner=runner)
+    result = await complete_json(
+        INSTRUCTIONS, CLASSIFY_SCHEMA, data=data, model=model, runner=runner
+    )
     known = {i.id for i in items}
     seen: set[str] = set()
     verdicts = []
@@ -84,13 +95,15 @@ async def classify_batch(items: list[Item], *, runner: Runner | None = None) -> 
     return verdicts
 
 
-async def classify_pending(store: Store, *, runner: Runner | None = None) -> ClassifyOutcome:
+async def classify_pending(
+    store: Store, *, runner: Runner | None = None, model: str = DEFAULT_MODEL
+) -> ClassifyOutcome:
     outcome = ClassifyOutcome()
     pending = store.pending_classification()
     for start in range(0, len(pending), BATCH_SIZE):
         batch = pending[start : start + BATCH_SIZE]
         try:
-            verdicts = await classify_batch(batch, runner=runner)
+            verdicts = await classify_batch(batch, runner=runner, model=model)
         except LlmOutputError as exc:
             outcome.skipped_batches += 1
             outcome.skip_reasons.append(redact(str(exc))[:200])

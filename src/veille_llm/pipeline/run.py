@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from veille_llm.llm import RawReply, Runner, claude_runner
+from veille_llm.llm import DEFAULT_MODEL, RawReply, Runner, claude_runner
 from veille_llm.pipeline.categorize import enrich_pending
 from veille_llm.pipeline.classify import classify_pending
 from veille_llm.pipeline.export import export_catalogue
@@ -62,6 +62,7 @@ async def run_pipeline(
     out: Path,
     runner: Runner | None = None,
     upvotes: Callable[[], dict[str, int]] | None = None,
+    model: str = DEFAULT_MODEL,
 ) -> RunReport:
     report = RunReport()
     meter = _Meter(runner or claude_runner)
@@ -78,13 +79,13 @@ async def run_pipeline(
     )
     report.new = store.upsert_items(fresh, stamp)
 
-    classified = await classify_pending(store, runner=meter)
+    classified = await classify_pending(store, runner=meter, model=model)
     report.classified = classified.classified
     report.skipped_batches = classified.skipped_batches
     report.skip_reasons = list(classified.skip_reasons)
     report.stopped = classified.stopped
     if classified.stopped is None:  # never call the LLM again right after it stopped us
-        enriched = await enrich_pending(store, runner=meter)
+        enriched = await enrich_pending(store, runner=meter, model=model)
         report.enriched = enriched.enriched
         report.skipped_batches += enriched.skipped_batches
         report.skip_reasons += enriched.skip_reasons
@@ -129,6 +130,7 @@ def main(
     run.add_argument("--db", type=Path, default=Path("veille.db"))
     run.add_argument("--out", type=Path, default=Path("build/catalogue.json"))
     run.add_argument("--days", type=int, default=7)
+    run.add_argument("--model", default=DEFAULT_MODEL, help="Claude model used for every LLM call")
     args = parser.parse_args(argv)
 
     live = sources is None
@@ -145,6 +147,7 @@ def main(
                 now=now or datetime.now(UTC),
                 out=args.out,
                 runner=runner,
+                model=args.model,
                 upvotes=hf_upvotes if live else None,
             )
         )
