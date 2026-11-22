@@ -7,7 +7,16 @@ export function Card({ item }: { item: Item }) {
   const href = safeUrl(item.url);
   const read = item.type === "paper" ? readerUrl(item.id, import.meta.env.VITE_READER_URL) : null;
   return (
-    <article className="card">
+    <article className={read ? "card card-readable" : "card"}>
+      {read && (
+        // biome-ignore lint/a11y/useAnchorContent: an invisible overlay link, named by aria-label
+        <a
+          className="card-open"
+          href={read}
+          aria-label={`Open "${item.title}" in the reader`}
+          title="Read in the reader"
+        />
+      )}
       <h2>
         {href ? (
           <a href={href} rel="noopener noreferrer" target="_blank">
@@ -27,7 +36,6 @@ export function Card({ item }: { item: Item }) {
         <span>{date(item.published)}</span>
         <span>score {item.score}/10</span>
         {item.upvotes > 0 && <span>{item.upvotes} upvotes</span>}
-        {read && <a href={read}>Read</a>}
       </p>
     </article>
   );

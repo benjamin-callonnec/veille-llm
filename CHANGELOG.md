@@ -10,6 +10,8 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 - The "Read" link no longer carries a port written at build time (it was wrong when the front had been built for another port): it is relative to the catalogue page, so it works from the dev server and from the built front.
 
 ### Added
+- Keyboard shortcuts panel: a small gear in the bottom-right corner of the reader (or the `?` key) lists every shortcut, grouped (panes, PDF, selected passage, chat). The list lives in one place (`SHORTCUTS`) and a test checks it against the shortcuts the panes really use.
+- Paper cards open the reader when you click anywhere on the card (an invisible link covers the card); the title still opens the original article in a new tab. The visible "Read" link is gone.
 - A logo for the web app: the "Lw" monogram in a rounded square, coloured by the Papier / Nuit theme. It is the favicon of both pages, sits next to the title of the catalogue, and is the home button of the reader (click it to go back to the catalogue with all the articles; also shown while loading and when a paper cannot be opened).
 
 ## [0.12.0] - 2026-11-22

@@ -150,7 +150,8 @@
 .composer {
   display: flex;
   gap: 8px;
-  padding: 8px 12px 12px;
+  /* room on the right for the shortcuts gear, fixed in the corner */
+  padding: 8px 52px 12px 12px;
   border-top: 1px solid var(--border);
 }
 .composer textarea {

@@ -10,6 +10,7 @@ import { PdfViewer, type Selection } from "./PdfViewer";
 import { openPdf } from "./pdf/pdfjsSource";
 import { PdfOpenError, type PdfSource } from "./pdf/source";
 import { SelectionBox } from "./SelectionBox";
+import { ShortcutsMenu } from "./ShortcutsMenu";
 import { type HighlightsApi, httpApi, useHighlights } from "./useHighlights";
 
 export interface ReaderItem {
@@ -183,6 +184,7 @@ export function ReaderPage({
           The highlight could not be saved.
         </p>
       )}
+      <ShortcutsMenu />
       <PaneLayout pdf={pdfPane} chat={<ChatPane chat={chat} onGo={changePage} />} />
       {selection && (
         <SelectionBox

@@ -422,3 +422,8 @@ test("the home control is the logo: no text, an accessible name and a tooltip", 
   expect(home.querySelector("svg")).not.toBeNull();
   expect(home.textContent).toBe("Lw"); // the monogram only, no "Catalogue" label
 });
+
+test("the shortcuts gear is available in the reader", async () => {
+  setup();
+  expect(await screen.findByRole("button", { name: "Keyboard shortcuts" })).toBeTruthy();
+});

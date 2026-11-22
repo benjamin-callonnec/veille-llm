@@ -59,7 +59,8 @@ file is missing). The reader answers on your
 Claude subscription, so `make reader` removes `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
 `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_USE_BEDROCK` and `CLAUDE_CODE_USE_VERTEX` for its own processes only
 (your shell keeps them). `make reader-build` builds the front once and serves everything from the API
-server, without reload. A paper opens in `reader.html#item=<id>` with a "Read" link on paper cards; its
+server, without reload. Click a paper card to open it in `reader.html#item=<id>` (the title still opens the
+original article; the gear in the bottom-right corner, or `?`, lists the keyboard shortcuts); its
 arXiv PDF is fetched from arxiv.org on first use and cached in `.local/reader/pdfs/` (gitignored, never
 redistributed). Highlights, chats and scores live in `.local/reader/reader.db`. The public Pages build never
 contains the reader or the "Read" link. If port 8765 is taken (an older reader still running), stop it first.
