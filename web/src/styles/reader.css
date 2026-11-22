@@ -203,39 +203,63 @@
   text-align: left;
   color: var(--fg);
 }
+/* The colour dots belong to the interface: their colours are real in both themes (the page
+   highlights, drawn over a white page, are the .hl-* ones above). */
 .dot {
   width: 18px;
   height: 18px;
+  border: 0;
   border-radius: 50%;
   padding: 0;
+  cursor: pointer;
 }
+.dot.hl-yellow {
+  background: var(--dot-yellow);
+}
+.dot.hl-green {
+  background: var(--dot-green);
+}
+.dot.hl-red {
+  background: var(--dot-red);
+}
+.dot:hover,
+.dot:focus-visible,
 .dot[aria-pressed="true"] {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
 }
+
+/* The box next to a selected passage: one quiet pill, like the chat composer. */
 .selection-box {
   position: fixed;
   z-index: 10;
-  width: 260px;
+  width: 340px;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  background: var(--card);
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  background: var(--composer);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  border-radius: 24px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
-.selection-box input {
-  padding: 6px 8px;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--fg);
-}
-.selection-tools {
+.selection-dots {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+.selection-box input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 4px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+}
+.selection-box input::placeholder {
+  color: var(--muted);
 }
 .questions {
   list-style: none;

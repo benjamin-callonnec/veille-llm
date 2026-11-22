@@ -95,3 +95,44 @@ def test_your_question_is_a_neutral_bubble_not_an_accent_coloured_one():
 def test_the_composer_is_a_big_rounded_pill():
     r = rule(CHAT, ".composer")
     assert re.search(r"border-radius:\s*(2\d|3\d)px", r)
+
+
+def _token_blocks():
+    """The four places the theme tokens live: light, dark (system), light forced, dark forced."""
+    media = re.findall(r"@media \(prefers-color-scheme: dark\) \{\s*:root \{([^}]*)\}", TOKENS)
+    plain = re.findall(r"^:root \{([^}]*)\}", TOKENS, flags=re.M)
+    return {
+        "light": "\n".join(plain),
+        "dark system": "\n".join(media),
+        "light forced": rule(TOKENS, ':root[data-theme="light"]'),
+        "dark forced": rule(TOKENS, ':root[data-theme="dark"]'),
+    }
+
+
+def _color(block: str, token: str) -> str | None:
+    found = re.findall(rf"{re.escape(token)}:\s*(#[0-9a-fA-F]{{3,8}})", block)
+    return found[0].lower() if found else None
+
+
+def test_the_colour_dots_have_their_own_real_colours_in_every_theme():
+    """The page highlights are dark in Nuit (black text on a white page); the dots must not be."""
+    for name, block in _token_blocks().items():
+        dots = [_color(block, f"--dot-{c}") for c in ("yellow", "green", "red")]
+        assert all(dots), (name, dots)
+        assert len(set(dots)) == 3, (name, dots)
+        for background in ("--bg", "--card", "--composer"):
+            assert _color(block, background) not in dots, (name, background)
+
+
+def test_the_dots_use_the_dot_colours_and_the_page_highlights_keep_theirs():
+    reader = (STYLES / "reader.css").read_text()
+    for color in ("yellow", "green", "red"):
+        assert f"var(--dot-{color})" in rule(reader, f".dot.hl-{color}")
+        assert f"var(--hl-{color})" in rule(reader, f".hl-{color}")  # the page highlight
+
+
+def test_the_selection_box_is_a_quiet_rounded_pill():
+    reader = (STYLES / "reader.css").read_text()
+    box = rule(reader, ".selection-box")
+    assert re.search(r"border-radius:\s*(2\d|3\d)px", box)
+    assert "var(--composer)" in box

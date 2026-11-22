@@ -53,3 +53,28 @@ test("copy is an icon with a name and a tooltip, not a text button", () => {
   expect(copy.querySelector("svg")).not.toBeNull();
   expect(copy.className).toContain("icon-btn");
 });
+
+test("the send icon only appears once there is text, and it sends", async () => {
+  const h = setup();
+  expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
+  await userEvent.type(screen.getByPlaceholderText("Ask about this passage…"), "Why?");
+  const send = screen.getByRole("button", { name: "Send" });
+  expect(send.textContent).toBe("");
+  await userEvent.click(send);
+  expect(h.onAsk).toHaveBeenCalledWith("Why?");
+});
+
+test("a blank question shows no send icon", async () => {
+  setup();
+  await userEvent.type(screen.getByPlaceholderText("Ask about this passage…"), "   ");
+  expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
+});
+
+test("the colour dots are real buttons with a name and no text", () => {
+  setup();
+  for (const color of ["yellow", "green", "red"]) {
+    const dot = screen.getByRole("button", { name: `Highlight ${color}` });
+    expect(dot.textContent).toBe("");
+    expect(dot.getAttribute("title")).toBe(`Highlight ${color}`);
+  }
+});
