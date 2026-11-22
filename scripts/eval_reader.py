@@ -36,8 +36,17 @@ DEFAULT_CASES = ROOT / "evals" / "reader_cases.json"
 DEFAULT_DATA_DIR = ROOT / ".local" / "evals"
 RESULTS_DIR = ROOT / "evals" / "results"
 
-# "the paper does not say", "I cannot tell", "it doesn't mention"
-_HEDGE = re.compile(r"\bnot\b|\bcannot\b|\bno\b|n't\b", re.I)
+# "the paper does not say / cover / report", "I cannot tell", "it doesn't mention"; a bare "not"
+# or "no" is too loose (an answer can contain them while still giving a figure).
+_HEDGE = re.compile(
+    r"\b(?:does\s+not|do\s+not|did\s+not|doesn['’]t|didn['’]t|is\s+not|isn['’]t|was\s+not)\s+"
+    r"(?:\w+\s+){0,3}?(?:say|cover|report|mention|contain|include|address|discuss|evaluate|"
+    r"state|give|provide|specify|appear|answer|test|measure)"
+    r"|\b(?:cannot|can['’]t|could\s+not|couldn['’]t)\s+(?:\w+\s+){0,2}?(?:tell|say|find|answer)"
+    r"|\bno\s+(?:mention|information|score|result|answer)\b"
+    r"|\bnot\s+(?:covered|mentioned|reported|discussed|addressed|evaluated|included)\b",
+    re.I,
+)
 
 Runner = Callable[[RunRequest], object]
 

@@ -76,6 +76,15 @@ def test_abstention_needs_no_citation_and_a_hedge():
     assert ev.abstained_ok("It scores 90.", []) is False
 
 
+def test_abstention_is_not_fooled_by_a_stray_not_or_no():
+    assert ev.abstained_ok("The paper doesn't report a GLUE score.", []) is True
+    assert ev.abstained_ok("The paper does not cover this benchmark.", []) is True
+    assert ev.abstained_ok("There is no mention of GLUE in the paper.", []) is True
+    assert ev.abstained_ok("It reaches 90, not 80, on the task.", []) is False
+    assert ev.abstained_ok("No problem: the score is 90.", []) is False
+    assert ev.abstained_ok("The paper does not say [p.1].", [1]) is False
+
+
 # --- selection ---------------------------------------------------------------------------
 CASES = [
     {

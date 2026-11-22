@@ -80,7 +80,9 @@
     "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
     "question": "What are the layers, hidden size, attention heads and total parameters of BERT-base and BERT-large?",
     "expected_pages": [
-      3
+      3,
+      8,
+      9
     ],
     "expected_facts": [
       "110M",
@@ -93,6 +95,7 @@
     "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
     "question": "Why can't BERT be trained like a standard bidirectional language model, and how does the masked LM objective get around it?",
     "expected_pages": [
+      2,
       3,
       4
     ],
@@ -120,7 +123,8 @@
     "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
     "question": "What is the next sentence prediction task and how are its training examples built?",
     "expected_pages": [
-      4
+      4,
+      13
     ],
     "expected_facts": [
       "50%",
