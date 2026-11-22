@@ -1,165 +1,296 @@
+/* The chat, in the manner of Claude's own: your question in a quiet neutral bubble, the answer as
+   plain text across the pane, every action an icon that only shows when you hover the message. */
 .chat {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
-.chat-head {
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
+.chat-tools {
+  position: absolute;
+  top: 6px;
+  right: 40px;
+  z-index: 3;
 }
 .conversations {
   position: relative;
 }
-.conversations > button,
-.composer button,
-.chat .regenerate,
-.user-message button,
-.markdown .cite,
-.markdown .copy {
-  border: 1px solid var(--border);
-  background: var(--card);
-  color: var(--fg);
-  border-radius: 6px;
-  cursor: pointer;
-}
 .conversations ul {
   position: absolute;
+  right: 0;
   z-index: 6;
   margin: 4px 0 0;
-  padding: 4px;
+  padding: 6px;
   list-style: none;
-  min-width: 260px;
+  width: 300px;
+  max-height: 60vh;
+  overflow: auto;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
 .conversations li {
   display: flex;
-  gap: 4px;
-  padding: 2px 0;
+  align-items: center;
+  gap: 2px;
 }
-.conversations li .conv-title {
+.conv-title {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: left;
+  padding: 6px 8px;
   border: 0;
+  border-radius: 8px;
   background: transparent;
+  color: var(--muted);
+  cursor: pointer;
 }
+.conv-title:hover,
+.conv-title[aria-current="true"] {
+  color: var(--fg);
+  background: var(--bubble);
+}
+.conversations li .icon-btn {
+  width: 24px;
+  height: 24px;
+}
+
 .chat-feed {
   flex: 1;
   overflow: auto;
-  padding: 12px 16px;
+  padding: 44px 20px 12px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 22px;
 }
 .chat-empty {
   margin: 8px 0;
 }
+.turn {
+  display: flex;
+  flex-direction: column;
+}
+.turn-user {
+  align-items: flex-end;
+}
+
 .user-message {
-  align-self: flex-end;
-  max-width: 85%;
-  background: var(--accent);
-  color: var(--accent-fg);
-  border-radius: 14px;
-  padding: 8px 12px;
+  max-width: 90%;
+  padding: 10px 16px;
+  border-radius: 18px;
+  background: var(--bubble);
+  color: var(--fg);
 }
 .user-message p {
   margin: 0;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .user-message blockquote {
-  margin: 0 0 6px;
-  padding-left: 8px;
-  border-left: 3px solid currentColor;
-  font-size: 0.85rem;
-  opacity: 0.9;
+  margin: 0 0 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--muted);
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 .user-message blockquote button {
   margin-left: 8px;
+  border: 0;
   background: transparent;
-  color: inherit;
+  color: var(--accent);
+  cursor: pointer;
 }
+
+/* The actions of a message: nothing until you hover it (or tab into it, or you cannot hover). */
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.turn-user .msg-actions {
+  justify-content: flex-end;
+}
+.turn:hover .msg-actions,
+.turn:focus-within .msg-actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  .msg-actions {
+    opacity: 1;
+  }
+}
+.msg-time {
+  margin: 0 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 .assistant {
   max-width: 100%;
 }
 .thinking {
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 .thinking-toggle {
-  background: transparent;
-  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--muted);
-  font-size: 0.85rem;
+  font: inherit;
   cursor: pointer;
 }
+.thinking-toggle:hover {
+  color: var(--fg);
+}
+.thinking-toggle .chevron {
+  display: inline-flex;
+  transition: transform 0.12s;
+}
+.thinking-toggle[aria-expanded="true"] .chevron {
+  transform: rotate(90deg);
+}
 .thinking-body {
-  margin: 4px 0 6px 14px;
+  margin: 6px 0 8px 2px;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.88rem;
 }
 .thinking-text {
   margin: 2px 0;
   white-space: pre-wrap;
 }
 .thinking-tool {
+  margin: 2px 0;
   font-family: ui-monospace, monospace;
   font-size: 0.8rem;
-  margin: 2px 0;
+}
+
+.markdown {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 .markdown p {
-  margin: 0 0 0.7em;
-  margin-left: 0;
-  margin-right: 0;
+  margin: 0 0 0.9em;
 }
-.markdown pre {
-  overflow: auto;
-  padding: 10px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+.markdown ul,
+.markdown ol {
+  margin: 0 0 0.9em;
+  padding-left: 1.5em;
+}
+.markdown li {
+  margin: 0.3em 0;
+}
+.markdown a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  text-underline-offset: 2px;
+}
+.markdown code {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--bubble);
+  font-family: ui-monospace, monospace;
+  font-size: 0.88em;
 }
 .markdown .code {
   position: relative;
+  margin: 0 0 0.9em;
+}
+.markdown pre {
+  margin: 0;
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bubble);
+}
+.markdown pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.85em;
 }
 .markdown .copy {
   position: absolute;
-  right: 6px;
   top: 6px;
-  font-size: 0.75rem;
+  right: 6px;
+  width: 24px;
+  height: 24px;
 }
 .markdown table {
   border-collapse: collapse;
 }
 .markdown th,
 .markdown td {
+  padding: 4px 10px;
   border: 1px solid var(--border);
-  padding: 2px 8px;
 }
 .markdown .cite {
   padding: 0 6px;
-  font-size: 0.8rem;
-  color: var(--accent);
-  border-color: var(--accent);
+  border: 1px solid var(--accent);
   border-radius: 10px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.8rem;
+  cursor: pointer;
 }
 .chat-error {
   color: #c0392b;
 }
+
+/* The composer: one big quiet pill. Only what applies shows on the right. */
+.composer-wrap {
+  padding: 8px 16px 8px;
+}
 .composer {
   display: flex;
-  gap: 8px;
-  padding: 8px 12px 12px;
-  border-top: 1px solid var(--border);
+  align-items: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  background: var(--composer);
+}
+.composer:focus-within {
+  border-color: var(--muted);
 }
 .composer textarea {
   flex: 1;
+  min-width: 0;
+  max-height: 40vh;
+  padding: 7px 4px;
+  border: 0;
+  outline: none;
   resize: none;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--card);
+  background: transparent;
   color: var(--fg);
   font: inherit;
+  field-sizing: content;
+}
+.composer textarea::placeholder {
+  color: var(--muted);
+}
+.composer-new,
+.composer-send {
+  width: 32px;
+  height: 32px;
+}
+.composer-send {
+  color: var(--fg);
+}
+.composer-status {
+  margin: 6px 10px 0;
+  text-align: right;
+  color: var(--muted);
+  font-size: 0.8rem;
 }

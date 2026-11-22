@@ -282,3 +282,13 @@ def test_the_redirect_target_cannot_be_influenced_by_the_request(tmp_path, catal
         "/?next=https://evil.example", headers={"Referer": "https://evil.example"}
     )
     assert response.headers["location"] == "http://127.0.0.1:5173/"
+
+
+def test_health_names_the_model_only_when_the_server_was_given_one(tmp_path, catalogue):
+    plain = TestClient(create_app(tmp_path / "d1", catalogue), base_url="http://127.0.0.1:8765")
+    assert plain.get("/api/health").json() == {"status": "ok"}
+    named = TestClient(
+        create_app(tmp_path / "d2", catalogue, model="claude-sonnet-5-5"),
+        base_url="http://127.0.0.1:8765",
+    )
+    assert named.get("/api/health").json() == {"status": "ok", "model": "claude-sonnet-5-5"}

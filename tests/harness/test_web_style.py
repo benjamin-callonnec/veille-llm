@@ -73,3 +73,25 @@ def test_both_pages_use_the_same_page_head():
     for page in ("components/App.tsx", "reader/ReaderPage.tsx"):
         source = (web / page).read_text()
         assert "page-head" in source, page
+
+
+CHAT = (STYLES / "chat.css").read_text()
+
+
+def test_message_actions_are_hidden_until_hover_or_focus():
+    """Claude's behaviour: nothing under a message at rest; its actions show when you hover it."""
+    assert "opacity: 0" in rule(CHAT, ".msg-actions")
+    assert ".turn:hover .msg-actions" in CHAT and ".turn:focus-within .msg-actions" in CHAT
+    assert "opacity: 1" in rule(CHAT, ".turn:hover .msg-actions,\n.turn:focus-within .msg-actions")
+    # a touch screen cannot hover: the actions stay visible there
+    assert "@media (hover: none)" in CHAT
+
+
+def test_your_question_is_a_neutral_bubble_not_an_accent_coloured_one():
+    r = rule(CHAT, ".user-message")
+    assert "var(--bubble)" in r and "var(--accent" not in r
+
+
+def test_the_composer_is_a_big_rounded_pill():
+    r = rule(CHAT, ".composer")
+    assert re.search(r"border-radius:\s*(2\d|3\d)px", r)

@@ -100,6 +100,7 @@ def create_app(
     runner: AgentRunner | None = None,
     dev_origins: set[str] | frozenset[str] = frozenset(),
     dev_front: str | None = None,
+    model: str | None = None,
 ) -> FastAPI:
     loaded = {"items": _load_items(catalogue_path), "mtime": catalogue_path.stat().st_mtime_ns}
 
@@ -131,7 +132,7 @@ def create_app(
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
-        return {"status": "ok"}
+        return {"status": "ok", **({"model": model} if model else {})}
 
     @app.get("/api/items/{item_id}")
     def item(item_id: str):  # noqa: ANN202

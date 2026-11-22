@@ -138,3 +138,33 @@ header.page-head h1 {
 header.page-head .muted {
   margin: 0;
 }
+
+/* A button that is only an icon: quiet until hovered or focused. */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.icon-btn:hover,
+.icon-btn:focus-visible,
+.icon-btn[aria-expanded="true"] {
+  color: var(--fg);
+  background: var(--bubble);
+}
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: transparent;
+}
+.icon {
+  display: block;
+  flex: none;
+}

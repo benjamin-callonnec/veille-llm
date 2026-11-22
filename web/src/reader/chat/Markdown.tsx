@@ -4,6 +4,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { IconButton } from "../../components/Icon";
 
 interface Props {
   text: string;
@@ -46,14 +47,12 @@ export function Markdown({ text, onCite }: Props) {
       const code = codeText(node);
       return (
         <div className="code">
-          <button
-            type="button"
+          <IconButton
+            icon="copy"
+            label="Copy code"
             className="copy"
-            aria-label="Copy code"
             onClick={() => navigator.clipboard?.writeText(code).catch(() => {})}
-          >
-            Copy
-          </button>
+          />
           <pre>{children}</pre>
         </div>
       );

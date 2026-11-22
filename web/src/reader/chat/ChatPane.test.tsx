@@ -74,9 +74,9 @@ function makeApi(gate: Promise<void>) {
   return api;
 }
 
-function Host({ api, onGo }: { api: ChatApi; onGo: (p: number) => void }) {
+function Host({ api, onGo, model }: { api: ChatApi; onGo: (p: number) => void; model?: string }) {
   const chat = useChat("a1", api);
-  return <ChatPane chat={chat} onGo={onGo} />;
+  return <ChatPane chat={chat} onGo={onGo} model={model} />;
 }
 
 test("sending streams the answer, thinking folds when it starts and reopens on demand", async () => {
@@ -128,10 +128,43 @@ test("the conversation menu is disabled while an answer streams", async () => {
   });
   render(<Host api={makeApi(gate)} onGo={() => {}} />);
   await userEvent.type(await screen.findByRole("textbox", { name: "Message" }), "Q{Enter}");
-  const menu = await screen.findByRole("button", { name: /T ▾/ });
+  const menu = await screen.findByRole("button", { name: "Conversations" });
   expect((menu as HTMLButtonElement).disabled).toBe(true);
   open();
   await waitFor(() =>
-    expect((screen.getByRole("button", { name: /T ▾/ }) as HTMLButtonElement).disabled).toBe(false),
+    expect(
+      (screen.getByRole("button", { name: "Conversations" }) as HTMLButtonElement).disabled,
+    ).toBe(false),
   );
+});
+
+test("hover actions: retry only on the last question, copy on the answer, nothing in the header", async () => {
+  const api = makeApi(Promise.resolve());
+  render(<Host api={api} onGo={() => {}} model="Sonnet 5.5" />);
+  await userEvent.type(await screen.findByRole("textbox", { name: "Message" }), "Q{Enter}");
+  await screen.findByRole("button", { name: /Thought for/ });
+  expect(screen.getAllByRole("button", { name: "Retry" })).toHaveLength(1);
+  expect(screen.getAllByRole("button", { name: "Copy" }).length).toBeGreaterThanOrEqual(2);
+  expect(screen.queryByText("Regenerate")).toBeNull();
+  expect(screen.getByText("Sonnet 5.5")).toBeTruthy();
+  expect(document.querySelector(".chat-head")).toBeNull();
+});
+
+test("retry asks for another answer to the last question", async () => {
+  const api = makeApi(Promise.resolve());
+  const spy = vi.spyOn(api, "regenerate");
+  render(<Host api={api} onGo={() => {}} />);
+  await userEvent.type(await screen.findByRole("textbox", { name: "Message" }), "Q{Enter}");
+  await userEvent.click(await screen.findByRole("button", { name: "Retry" }));
+  expect(spy).toHaveBeenCalledTimes(1);
+});
+
+test("the plus icon of the composer starts a new empty conversation", async () => {
+  const api = makeApi(Promise.resolve());
+  render(<Host api={api} onGo={() => {}} />);
+  await userEvent.type(await screen.findByRole("textbox", { name: "Message" }), "Q{Enter}");
+  await screen.findByRole("button", { name: /Thought for/ });
+  await userEvent.click(screen.getByRole("button", { name: "New conversation" }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: /Thought for/ })).toBeNull());
+  expect(screen.getByText(/select a passage/i)).toBeTruthy();
 });
