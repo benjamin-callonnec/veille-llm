@@ -1,4 +1,4 @@
-.PHONY: catalogue reader reader-build subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
+.PHONY: catalogue reader reader-build reader-token subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
 
 install:
 	uv sync --locked
@@ -60,6 +60,12 @@ reader:
 	(cd web && VITE_READER_URL=$(READER_FRONT_URL) npx vite --mode reader --host 127.0.0.1 --port 5173 --strictPort) & \
 	env $(READER_NO_BILLING) uv run veille-reader serve --reload --dev-front $(READER_FRONT_URL) & \
 	wait
+
+# The reader needs a long-lived Claude token (the interactive login session expires and then the chat
+# fails with "OAuth session expired"). Run `claude setup-token` in a terminal, then `make reader-token`
+# to paste it: it goes to .env (git ignores it, mode 600) and is never printed.
+reader-token:
+	@uv run python scripts/reader_token.py
 
 # One process, no auto-reload: builds the front once and serves it from the API server.
 reader-build:

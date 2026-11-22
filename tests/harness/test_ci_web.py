@@ -104,3 +104,14 @@ def test_make_reader_sends_the_pages_to_the_hot_reload_server():
     makefile = (Path(__file__).resolve().parents[2] / "Makefile").read_text()
     recipe = makefile.split("\nreader:")[1].split("\n\n")[0]
     assert "--dev-front $(READER_FRONT_URL)" in recipe
+
+
+def test_the_token_setup_is_documented_ignored_and_never_committed():
+    root = Path(__file__).resolve().parents[2]
+    makefile = (root / "Makefile").read_text()
+    assert "\nreader-token:" in makefile and "scripts/reader_token.py" in makefile
+    example = (root / ".env.example").read_text()
+    assert "CLAUDE_CODE_OAUTH_TOKEN=" in example
+    assert "sk-ant" not in example  # the example holds no secret
+    ignore = (root / ".gitignore").read_text().splitlines()
+    assert ".env" in ignore and "!.env.example" in ignore

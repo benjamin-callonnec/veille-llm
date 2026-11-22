@@ -60,6 +60,16 @@ the shell with its list of shortcuts.
 
 ## Reader (local only)
 
+**Claude login for the chat.** The tutor answers on your Claude subscription. The interactive login
+session of the `claude` CLI can expire ("OAuth session expired and could not be refreshed"); a long-lived
+token does not. GitHub secrets cannot be read back, so create a new one: run `claude setup-token` in a
+terminal (it prints a token starting with `sk-ant-` valid for about a year), then `make reader-token` and
+paste it (hidden). It is written to `.env` (ignored by git, refused by a pre-commit hook, mode 600) and
+never printed or logged; the reader loads only `CLAUDE_CODE_OAUTH_TOKEN` from that file (never anything
+that bills per token) and a token already set in your shell wins. `make reader` says which login it uses
+at startup. You can also keep the token in any secret manager and export `CLAUDE_CODE_OAUTH_TOKEN` before
+`make reader`. If it fails again the chat tells you what to do.
+
 `make reader` starts the local reader with **auto-reload**: the API (`veille-reader serve --reload`,
 `127.0.0.1:8765`) restarts when a Python file changes and the front (Vite, `127.0.0.1:5173`)
 hot-reloads. Open `http://127.0.0.1:5173`: any change to the front shows up at once, without restarting or even

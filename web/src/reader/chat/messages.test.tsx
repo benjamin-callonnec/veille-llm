@@ -139,3 +139,25 @@ test("composer: Stop replaces Send while streaming", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Stop" }));
   expect(onStop).toHaveBeenCalled();
 });
+
+test("an authentication error shows its instructions as plain text", () => {
+  render(
+    <StoredAssistantMessage
+      content={{
+        answer: "",
+        blocks: [],
+        duration_ms: 1,
+        stopped: false,
+        error: {
+          kind: "auth",
+          message: "Claude could not authenticate this session. Run `make reader-token` <b>now</b>",
+        },
+      }}
+      onCite={() => {}}
+    />,
+  );
+  const alert = screen.getByRole("alert");
+  expect(alert.textContent).toContain("make reader-token");
+  expect(alert.textContent).toContain("<b>now</b>");
+  expect(document.querySelector("b")).toBeNull();
+});

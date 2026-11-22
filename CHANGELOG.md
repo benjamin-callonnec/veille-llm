@@ -12,6 +12,7 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 - The "Read" link no longer carries a port written at build time (it was wrong when the front had been built for another port): it is relative to the catalogue page, so it works from the dev server and from the built front.
 
 ### Added
+- The chat no longer depends on the expiring interactive Claude login: `make reader-token` saves a long-lived token (from `claude setup-token`) to `.env` (git-ignored, mode 600, hidden input, never printed), and the reader loads `CLAUDE_CODE_OAUTH_TOKEN` from the environment or from that file (only that key, never a variable that bills per token). `make reader` states which login it uses; a permissive `.env` triggers a warning; an expired session now shows a clear message in the chat (`auth` error) instead of a raw error.
 - `make reader`: opening the API port (`http://127.0.0.1:8765`) now redirects the pages to the hot-reload front on 5173, so front changes always show up without relaunching; the static build on 8765 was what looked "not reloaded". (`veille-reader serve --reload --dev-front URL`.)
 - The keyboard shortcuts follow your keyboard: on a Mac they show ⌘ (Command), Return, ⇧ and fn with an arrow for PageUp/PageDown; on Windows and Linux they show Ctrl, Enter, Shift, PageUp and PageDown. The platform is detected from the browser.
 - The title of each page sits on the same line as the logo, to its right (the catalogue now has the same page head as the reader).
