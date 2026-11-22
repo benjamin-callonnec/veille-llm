@@ -18,7 +18,8 @@ from veille_llm.store import Store
 
 MAX_CATEGORIES = 12
 FALLBACK_CATEGORY = "Autres"
-HOOK_MAX = 200
+HOOK_MAX = 160
+BRIEF_MAX = 400
 
 ENRICH_SCHEMA = {
     "type": "object",
@@ -31,8 +32,9 @@ ENRICH_SCHEMA = {
                     "id": {"type": "string"},
                     "category": {"type": "string", "minLength": 1, "maxLength": 120},
                     "hook": {"type": "string", "maxLength": 400},
+                    "brief": {"type": "string", "maxLength": 600},
                 },
-                "required": ["id", "category", "hook"],
+                "required": ["id", "category", "hook", "brief"],
                 "additionalProperties": False,
             },
         }
@@ -44,10 +46,13 @@ ENRICH_SCHEMA = {
 INSTRUCTIONS = (
     "You write the entries of a personal watch on LLM research and news. For each item in the "
     "data, choose a category: reuse one of existing_categories whenever it fits, and only create "
-    "a new short category (at most 3 words) when none fits. Then write a hook: one or two plain "
-    "sentences (at most 200 characters) saying why the item matters, with no link, no markup and "
-    'no hype. Return one entry per item as {"items": [{"id": ..., "category": ..., '
-    '"hook": ...}]}, using the same id.'
+    "a new short category (at most 3 words) when none fits. Then write a hook: one or two very "
+    "short sentences (at most 120 characters) that make the reader want to open the item, "
+    "without lying, exaggerating or promising what the item does not deliver. Then write a "
+    "brief: two or three plain sentences (at most 300 characters) saying what the item is and "
+    "finds, in your own words. Hook and brief use no link, no markup and no hype, and they do "
+    'not repeat each other. Return one entry per item as {"items": [{"id": ..., '
+    '"category": ..., "hook": ..., "brief": ...}]}, using the same id.'
 )
 
 
@@ -87,11 +92,11 @@ def normalise_category(name: str, existing: list[str]) -> str:
     return FALLBACK_CATEGORY
 
 
-def hook_is_safe(hook: str) -> bool:
+def hook_is_safe(hook: str, limit: int = HOOK_MAX) -> bool:
     text = hook.strip()
     return (
         bool(text)
-        and len(text) <= HOOK_MAX
+        and len(text) <= limit
         and not any(marker in text.lower() for marker in ("http", "<", ">"))
     )
 
@@ -138,13 +143,20 @@ async def enrich_pending(
         seen: set[str] = set()
         enrichments = []
         for entry in result.data["items"]:
-            if entry["id"] not in wanted or entry["id"] in seen or not hook_is_safe(entry["hook"]):
+            if (
+                entry["id"] not in wanted
+                or entry["id"] in seen
+                or not hook_is_safe(entry["hook"])
+                or not hook_is_safe(entry["brief"], BRIEF_MAX)
+            ):
                 continue
             seen.add(entry["id"])
             category = normalise_category(entry["category"], known)
             if category not in known:
                 known.append(category)
-            enrichments.append(Enrichment(entry["id"], category, entry["hook"].strip()))
+            enrichments.append(
+                Enrichment(entry["id"], category, entry["hook"].strip(), entry["brief"].strip())
+            )
         store.save_enrichments(enrichments)
         outcome.enriched += len(enrichments)
     return outcome

@@ -32,3 +32,4 @@ class Enrichment:
     item_id: str
     category: str
     hook: str
+    brief: str = ""

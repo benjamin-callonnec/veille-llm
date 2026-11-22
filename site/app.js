@@ -11,7 +11,7 @@ function el(tag, props = {}, children = []) {
 }
 
 function formatDate(iso) {
-  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function visiblePapers() {
@@ -31,7 +31,7 @@ function paperCard(paper) {
     el("h2", {}, [el("a", { href: paper.url, target: "_blank", rel: "noopener", textContent: paper.title })]),
     el("div", { className: "byline", textContent: `${formatDate(paper.published)} · ${authors}${upvotes}` }),
     el("div", { className: "tags" }, paper.topics.map((t) => el("span", { className: "tag", textContent: labels[t] }))),
-    el("details", {}, [el("summary", { textContent: "Résumé" }), el("p", { textContent: paper.summary })]),
+    el("details", {}, [el("summary", { textContent: "Summary" }), el("p", { textContent: paper.summary })]),
   ]);
 }
 
@@ -45,7 +45,7 @@ function render() {
 }
 
 function renderChips() {
-  const entries = [["", "Tous"], ...Object.entries(state.data.topics)];
+  const entries = [["", "All"], ...Object.entries(state.data.topics)];
   $("chips").replaceChildren(
     ...entries.map(([topic, label]) => {
       const chip = el("button", { className: "chip", type: "button", textContent: label });
@@ -68,7 +68,7 @@ async function init() {
     $("meta").textContent = "Impossible de charger data.json (lance `make build` puis `make serve`).";
     return;
   }
-  $("meta").textContent = `Mis à jour le ${formatDate(state.data.generated_at)} · sources : arXiv (cs.CL, cs.LG, cs.AI) et Hugging Face Papers`;
+  $("meta").textContent = `Updated on ${formatDate(state.data.generated_at)} · sources: arXiv (cs.CL, cs.LG, cs.AI) and Hugging Face Papers`;
   $("search").addEventListener("input", (e) => { state.query = e.target.value; render(); });
   $("trending").addEventListener("change", (e) => { state.trendingOnly = e.target.checked; render(); });
   renderChips();
