@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 from datetime import UTC, datetime
 
@@ -239,3 +240,26 @@ def test_first_capped_run_already_publishes_something(tmp_path):
     report = run(store, out, items, Llm(), max_batches=3)
     assert report.classified == 15 * 2 and report.enriched > 0
     assert json.loads(out.read_text())["items"]
+
+
+def test_run_reports_progress_for_each_phase_and_batch(tmp_path):
+    from veille_llm.pipeline.progress import Progress
+
+    out = io.StringIO()
+    progress = Progress(out, github=True)
+    items = [news(f"{n:02d}") for n in range(20)]
+    run(Store(":memory:"), tmp_path / "c.json", items, Llm(), progress=progress)
+    text = out.getvalue()
+    assert "::group::" in text and text.count("::endgroup::") == text.count("::group::")
+    assert "[classify] batch 1/2" in text and "[classify] batch 2/2" in text
+    assert "[hooks] batch 1/2" in text and "[hooks] batch 2/2" in text
+    assert "http" not in text and "sk-ant" not in text
+
+
+def test_main_writes_the_github_step_summary_when_asked(tmp_path, monkeypatch):
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    args = ["run", "--db", str(tmp_path / "v.db"), "--out", str(tmp_path / "c.json")]
+    main(args, sources=source([news("a")]), runner=Llm(), now=NOW)
+    text = summary.read_text()
+    assert "| classified | 1 |" in text and "| published | 1 |" in text

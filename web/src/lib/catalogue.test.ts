@@ -4,11 +4,11 @@ import {
   chipCategories,
   countsByCategory,
   DEFAULT_FILTERS,
+  type Item,
   parseCatalogue,
   readHash,
   safeUrl,
   writeHash,
-  type Item,
 } from "./catalogue";
 
 const item = (over: Partial<Item>): Item => ({
@@ -38,7 +38,7 @@ describe("parseCatalogue", () => {
       items: [old],
     });
     expect(cat.items).toHaveLength(1);
-    expect(cat.items[0]!.brief).toBe("");
+    expect(cat.items[0]?.brief).toBe("");
   });
 
   test("drops malformed items instead of failing the whole page", () => {
@@ -62,7 +62,10 @@ describe("parseCatalogue", () => {
         item({ id: "neg", score: -4 }),
       ],
     });
-    expect(cat.items.map((i) => [i.id, i.score])).toEqual([["big", 10], ["neg", 0]]);
+    expect(cat.items.map((i) => [i.id, i.score])).toEqual([
+      ["big", 10],
+      ["neg", 0],
+    ]);
   });
 
   test("rejects a payload that is not a catalogue", () => {
@@ -83,9 +86,34 @@ describe("safeUrl", () => {
 
 describe("applyFilters", () => {
   const items = [
-    item({ id: "1", category: "Agents", type: "paper", score: 9, upvotes: 1, published: "2026-11-18T00:00:00Z", title: "Alpha agents" }),
-    item({ id: "2", category: "Security", type: "news", score: 4, upvotes: 50, published: "2026-11-21T00:00:00Z", title: "Beta" }),
-    item({ id: "3", category: "Other", type: "benchmark", score: 7, upvotes: 5, published: "2026-11-20T00:00:00Z", title: "Gamma", hook: "About robots" }),
+    item({
+      id: "1",
+      category: "Agents",
+      type: "paper",
+      score: 9,
+      upvotes: 1,
+      published: "2026-11-18T00:00:00Z",
+      title: "Alpha agents",
+    }),
+    item({
+      id: "2",
+      category: "Security",
+      type: "news",
+      score: 4,
+      upvotes: 50,
+      published: "2026-11-21T00:00:00Z",
+      title: "Beta",
+    }),
+    item({
+      id: "3",
+      category: "Other",
+      type: "benchmark",
+      score: 7,
+      upvotes: 5,
+      published: "2026-11-20T00:00:00Z",
+      title: "Gamma",
+      hook: "About robots",
+    }),
   ];
   const ids = (f: Partial<typeof DEFAULT_FILTERS>) =>
     applyFilters(items, { ...DEFAULT_FILTERS, ...f }).map((i) => i.id);
@@ -130,13 +158,23 @@ describe("countsByCategory", () => {
     item({ id: "3", category: "Security", type: "news" }),
   ];
   test("counts follow the type and search filters but not the category filter", () => {
-    const counts = countsByCategory(items, { ...DEFAULT_FILTERS, types: ["news"], categories: ["Security"] });
+    const counts = countsByCategory(items, {
+      ...DEFAULT_FILTERS,
+      types: ["news"],
+      categories: ["Security"],
+    });
     expect(Object.fromEntries(counts)).toEqual({ Agents: 1, Security: 1 });
   });
 });
 
 describe("chipCategories", () => {
-  const counts = new Map([["Other", 50], ["A", 10], ["B", 30], ["C", 20], ["D", 5]]);
+  const counts = new Map([
+    ["Other", 50],
+    ["A", 10],
+    ["B", 30],
+    ["C", 20],
+    ["D", 5],
+  ]);
   test("most frequent first, 'Other' always last, rest goes to the menu", () => {
     const { chips, more } = chipCategories(counts, [], 2);
     expect(chips).toEqual(["B", "C"]);
@@ -155,7 +193,12 @@ describe("chipCategories", () => {
 
 describe("hash state", () => {
   test("round-trips filters", () => {
-    const f = { categories: ["Agents", "AI Security"], types: ["paper"], query: "kv cache", sort: "date" as const };
+    const f = {
+      categories: ["Agents", "AI Security"],
+      types: ["paper"],
+      query: "kv cache",
+      sort: "date" as const,
+    };
     expect(readHash(writeHash(f))).toEqual(f);
   });
   test("default filters give an empty hash", () => {

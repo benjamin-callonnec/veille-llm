@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from veille_llm.llm import (
@@ -107,9 +108,13 @@ async def enrich_pending(
     runner: Runner | None = None,
     model: str = DEFAULT_MODEL,
     max_batches: int | None = None,
+    on_batch: Callable[[int, int], None] | None = None,
 ) -> EnrichOutcome:
     outcome = EnrichOutcome()
     pending = store.pending_enrichment()
+    total = -(-len(pending) // BATCH_SIZE)
+    if max_batches is not None:
+        total = min(total, max_batches)
     for start in range(0, len(pending), BATCH_SIZE):
         if max_batches is not None and start // BATCH_SIZE >= max_batches:
             outcome.capped = True
@@ -135,6 +140,8 @@ async def enrich_pending(
         except LlmOutputError as exc:
             outcome.skipped_batches += 1
             outcome.skip_reasons.append(redact(str(exc))[:200])
+            if on_batch:
+                on_batch(start // BATCH_SIZE + 1, total)
             continue
         except LlmError as exc:
             outcome.stopped = redact(f"{type(exc).__name__}: {exc}")
@@ -159,4 +166,6 @@ async def enrich_pending(
             )
         store.save_enrichments(enrichments)
         outcome.enriched += len(enrichments)
+        if on_batch:
+            on_batch(start // BATCH_SIZE + 1, total)
     return outcome

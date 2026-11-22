@@ -1,14 +1,14 @@
 import { useMemo } from "react";
-import { useCatalogue, fetchCatalogue } from "../hooks/useCatalogue";
+import { fetchCatalogue, useCatalogue } from "../hooks/useCatalogue";
 import { useFilters } from "../hooks/useFilters";
-import { Card } from "./Card";
 import {
   applyFilters,
   chipCategories,
   countsByCategory,
-  TYPES,
   type SortKey,
+  TYPES,
 } from "../lib/catalogue";
+import { Card } from "./Card";
 
 const SORT_LABELS: Record<SortKey, string> = { trending: "Trending", date: "Date", score: "Score" };
 const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -16,7 +16,10 @@ const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }) {
   const { catalogue, error } = useCatalogue(load);
   const items = useMemo(() => catalogue?.items ?? [], [catalogue]);
-  const known = useMemo(() => (catalogue ? new Set(items.map((i) => i.category)) : null), [catalogue, items]);
+  const known = useMemo(
+    () => (catalogue ? new Set(items.map((i) => i.category)) : null),
+    [catalogue, items],
+  );
   const { filters, setFilters, toggle } = useFilters(known);
 
   const counts = useMemo(() => countsByCategory(items, filters), [items, filters]);
@@ -43,7 +46,9 @@ export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }
         <p className="muted" aria-live="polite">
           {catalogue
             ? `Updated ${new Date(catalogue.generated_at).toLocaleDateString("en-US")} · ${shown.length} of ${items.length} items`
-            : error ? "" : "Loading…"}
+            : error
+              ? ""
+              : "Loading…"}
         </p>
       </header>
       {error && <p role="alert">The catalogue could not be loaded. Try again later.</p>}
@@ -52,7 +57,6 @@ export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }
           <div className="controls">
             <input
               type="search"
-              role="searchbox"
               placeholder="Search titles, hooks and summaries"
               aria-label="Search"
               value={filters.query}
@@ -65,25 +69,30 @@ export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }
                 onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value as SortKey }))}
               >
                 {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
-                  <option key={k} value={k}>{SORT_LABELS[k]}</option>
+                  <option key={k} value={k}>
+                    {SORT_LABELS[k]}
+                  </option>
                 ))}
               </select>
             </label>
           </div>
-          <div className="chips" role="group" aria-label="Categories">
+          <fieldset className="chips">
+            <legend>Categories</legend>
             {chips.map((c) => chip(c, "categories", c, counts.get(c) ?? 0))}
             {more.length > 0 && (
               <details className="more">
                 <summary>+{more.length} more</summary>
-                <div className="chips" role="group" aria-label="More categories">
+                <fieldset className="chips">
+                  <legend>More categories</legend>
                   {more.map((c) => chip(c, "categories", c, counts.get(c) ?? 0))}
-                </div>
+                </fieldset>
               </details>
             )}
-          </div>
-          <div className="chips" role="group" aria-label="Type">
+          </fieldset>
+          <fieldset className="chips">
+            <legend>Type</legend>
             {TYPES.map((t) => chip(t, "types", capitalise(t)))}
-          </div>
+          </fieldset>
           {shown.length === 0 ? (
             <p className="muted">No items match these filters.</p>
           ) : (

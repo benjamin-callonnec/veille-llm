@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { parseCatalogue, type Catalogue } from "../lib/catalogue";
+import { type Catalogue, parseCatalogue } from "../lib/catalogue";
 
 export const CATALOGUE_URL: string = import.meta.env.VITE_CATALOGUE_URL ?? "catalogue.json";
 

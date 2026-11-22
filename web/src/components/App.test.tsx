@@ -1,8 +1,8 @@
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { App } from "./App";
 import type { Item } from "../lib/catalogue";
+import { App } from "./App";
 
 const item = (over: Partial<Item>): Item => ({
   id: "a",

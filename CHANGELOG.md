@@ -5,6 +5,18 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-22
+
+### Added
+- Run progress for GitHub Actions logs: log groups per phase (collect, classify, hooks, export), one line per LLM batch (position, items, tokens, cost, elapsed, eta), a heartbeat line every minute, and a Markdown summary in `GITHUB_STEP_SUMMARY`. Only counts and durations are printed.
+- Pre-commit hooks for the web app, limited to staged `web/` files: Biome (format and lint, about 0.1 s), `tsc` with an incremental cache (about 2 s) and Vitest on the related tests only. `npm run check` also runs Biome.
+
+### Changed
+- Cards: the title is small and grey, the hook larger and bold, so the two no longer look alike.
+
+### Fixed
+- Chip groups are real `fieldset`/`legend` elements (accessibility).
+
 ## [0.5.0] - 2026-11-22
 
 ### Added
