@@ -95,6 +95,12 @@ export function safeUrl(url: string): string | null {
   }
 }
 
+/** Link to the local reader for an item; null when the reader is not configured. */
+export function readerUrl(itemId: string, base: string | undefined): string | null {
+  if (!base || !safeUrl(base)) return null;
+  return `${base.replace(/\/+$/, "")}/reader.html#item=${encodeURIComponent(itemId)}`;
+}
+
 function matches(item: Item, f: Filters, ignoreCategory = false): boolean {
   if (!ignoreCategory && f.categories.length && !f.categories.includes(item.category)) return false;
   if (f.types.length && !f.types.includes(item.type)) return false;

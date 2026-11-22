@@ -1,26 +1,4 @@
-/* Papier (light) and Nuit (dark), chosen only by the system appearance. */
-:root {
-  --bg: #fafaf7;
-  --fg: #1c1c1a;
-  --muted: #5f5f5a;
-  --card: #ffffff;
-  --border: #e3e3dc;
-  --accent: #2f5fd0;
-  --accent-fg: #ffffff;
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #131312;
-    --fg: #ecece6;
-    --muted: #a3a39b;
-    --card: #1b1b19;
-    --border: #2d2d2a;
-    --accent: #7ea0f0;
-    --accent-fg: #101010;
-  }
-}
+@import "./tokens.css";
 
 * {
   box-sizing: border-box;
