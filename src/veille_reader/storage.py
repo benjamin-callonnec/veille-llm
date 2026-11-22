@@ -85,6 +85,23 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE memory_notes ADD COLUMN source TEXT NOT NULL DEFAULT 'user';
     """,
+    """
+    CREATE TABLE quizzes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id TEXT NOT NULL,
+        conversation_id INTEGER,
+        created_at TEXT NOT NULL,
+        spec TEXT NOT NULL
+    );
+    CREATE INDEX quizzes_item ON quizzes (item_id);
+    CREATE TABLE quiz_answers (
+        quiz_id INTEGER PRIMARY KEY REFERENCES quizzes(id) ON DELETE CASCADE,
+        answered_at TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        correct INTEGER NOT NULL,
+        reasoning TEXT NOT NULL
+    );
+    """,
 ]
 
 
@@ -432,6 +449,97 @@ class ReaderStore:
                 " VALUES (?, ?, ?, ?)",
                 (item_id, json.dumps(pages), json.dumps(outline), self._now()),
             )
+
+    def add_quiz(self, item_id: str, conversation_id: int | None, spec: dict) -> int:
+        """Keep a quiz with its answer on the server side; `spec` is the validated full quiz."""
+        with self._con:
+            cursor = self._con.execute(
+                "INSERT INTO quizzes (item_id, conversation_id, created_at, spec)"
+                " VALUES (?, ?, ?, ?)",
+                (item_id, conversation_id, self._now(), json.dumps(spec)),
+            )
+        return int(cursor.lastrowid)
+
+    def quiz(self, item_id: str, quiz_id: int) -> dict | None:
+        """The quiz with its private spec and its answer (None while unanswered)."""
+        row = self._con.execute(
+            "SELECT q.id, q.item_id, q.conversation_id, q.created_at, q.spec,"
+            " a.answered_at, a.answer, a.correct, a.reasoning"
+            " FROM quizzes q LEFT JOIN quiz_answers a ON a.quiz_id = q.id"
+            " WHERE q.id = ? AND q.item_id = ?",
+            (quiz_id, item_id),
+        ).fetchone()
+        if row is None:
+            return None
+        answered = row[5] is not None
+        return {
+            "id": row[0],
+            "item_id": row[1],
+            "conversation_id": row[2],
+            "created_at": row[3],
+            "spec": json.loads(row[4]),
+            "answer": (
+                {
+                    "answered_at": row[5],
+                    "answer": row[6],
+                    "correct": bool(row[7]),
+                    "reasoning": row[8],
+                }
+                if answered
+                else None
+            ),
+        }
+
+    def add_quiz_answer(self, quiz_id: int, answer: str, correct: bool, reasoning: str) -> bool:
+        """Record the one answer of a quiz; False when it was already answered."""
+        try:
+            with self._con:
+                self._con.execute(
+                    "INSERT INTO quiz_answers (quiz_id, answered_at, answer, correct, reasoning)"
+                    " VALUES (?, ?, ?, ?, ?)",
+                    (quiz_id, self._now(), answer, int(correct), reasoning),
+                )
+        except sqlite3.IntegrityError:
+            return False
+        return True
+
+    def quiz_history(self, item_id: str) -> list[dict]:
+        """Answered quizzes of a paper, newest first (question and verdict, never the key)."""
+        rows = self._con.execute(
+            "SELECT q.id, q.conversation_id, q.spec, a.answered_at, a.correct"
+            " FROM quizzes q JOIN quiz_answers a ON a.quiz_id = q.id"
+            " WHERE q.item_id = ? ORDER BY a.answered_at DESC, q.id DESC",
+            (item_id,),
+        ).fetchall()
+        history = []
+        for qid, cid, spec, at, correct in rows:
+            spec = json.loads(spec)
+            history.append(
+                {
+                    "id": qid,
+                    "conversation_id": cid,
+                    "question": spec["question"],
+                    "kind": spec["kind"],
+                    "topic": spec["topic"],
+                    "page": spec["page"],
+                    "answered_at": at,
+                    "correct": bool(correct),
+                }
+            )
+        return history
+
+    def quiz_score(self, item_id: str, conversation_id: int | None = None) -> dict:
+        """Answers and right answers for a paper, or for one conversation (a session)."""
+        sql = (
+            "SELECT COUNT(*), COALESCE(SUM(a.correct), 0) FROM quiz_answers a"
+            " JOIN quizzes q ON q.id = a.quiz_id WHERE q.item_id = ?"
+        )
+        args: list = [item_id]
+        if conversation_id is not None:
+            sql += " AND q.conversation_id = ?"
+            args.append(conversation_id)
+        total, correct = self._con.execute(sql, args).fetchone()
+        return {"total": int(total), "correct": int(correct)}
 
     def close(self) -> None:
         self._con.close()

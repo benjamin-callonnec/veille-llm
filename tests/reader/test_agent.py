@@ -15,6 +15,7 @@ from veille_reader.agent import (
 )
 from veille_reader.events import RunRequest
 from veille_reader.paper import PaperText
+from veille_reader.quiz import QUIZ_PROMPT
 from veille_reader.tools import Limits, PaperTools, ToolBudget
 
 ITEM = {"id": "a1", "title": "Agents at scale", "hook": "A bold hook", "brief": "A short brief"}
@@ -298,7 +299,7 @@ def test_the_tutor_gets_exactly_the_paper_tools_and_no_builtin_ones(monkeypatch)
         "mcp__paper__session_memory",
     ]
     assert options.tools == [] and options.strict_mcp_config is True
-    assert options.system_prompt == SYSTEM_PROMPT_TOOLS
+    assert options.system_prompt == SYSTEM_PROMPT_TOOLS + QUIZ_PROMPT
     limits = AgentLimits()
     assert options.max_turns == limits.max_turns == 8
     assert options.max_budget_usd == limits.max_message_usd == 0.5
