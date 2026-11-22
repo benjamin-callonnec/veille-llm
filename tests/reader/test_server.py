@@ -178,3 +178,53 @@ def test_catalogue_changes_are_picked_up(client, catalogue):
 
 def test_ipv6_literal_is_not_a_local_host(client):
     assert client.get("/api/health", headers={"Host": "[::1]:8765"}).status_code == 403
+
+
+HL = {"page": 2, "color": "yellow", "text": "a passage", "rects": [[0.1, 0.2, 0.3, 0.05]]}
+
+
+def test_highlights_post_get_delete(client):
+    created = client.post("/api/items/a1/highlights", json=HL)
+    assert created.status_code == 201
+    body = created.json()
+    assert body["page"] == 2 and body["color"] == "yellow" and body["rects"] == HL["rects"]
+    assert client.get("/api/items/a1/highlights").json() == [body]
+    assert client.delete(f"/api/items/a1/highlights/{body['id']}").status_code == 204
+    assert client.get("/api/items/a1/highlights").json() == []
+    assert client.delete(f"/api/items/a1/highlights/{body['id']}").status_code == 404
+
+
+def test_highlights_unknown_item_is_404(client):
+    assert client.get("/api/items/nope/highlights").status_code == 404
+    assert client.post("/api/items/nope/highlights", json=HL).status_code == 404
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"color": "blue"},
+        {"page": 0},
+        {"text": "x" * 5001},
+        {"rects": [[0, 0, 1, 1]] * 201},
+        {"rects": [[0, 0, 1.5, 1]]},
+        {"rects": [[-0.1, 0, 1, 1]]},
+        {"rects": [[0, 0, 1]]},
+    ],
+)
+def test_invalid_highlights_are_rejected_and_not_stored(client, patch):
+    assert client.post("/api/items/a1/highlights", json={**HL, **patch}).status_code == 422
+    assert client.get("/api/items/a1/highlights").json() == []
+
+
+def test_cross_site_highlight_post_is_refused(client):
+    response = client.post(
+        "/api/items/a1/highlights", json=HL, headers={"Sec-Fetch-Site": "cross-site"}
+    )
+    assert response.status_code == 403
+    assert client.get("/api/items/a1/highlights").json() == []
+
+
+def test_delete_cannot_reach_another_items_highlight(client):
+    hid = client.post("/api/items/a1/highlights", json=HL).json()["id"]
+    assert client.delete(f"/api/items/b1/highlights/{hid}").status_code == 404
+    assert len(client.get("/api/items/a1/highlights").json()) == 1
