@@ -385,45 +385,9 @@ test("asking while an answer is streaming keeps the box and says to wait", async
   release();
 });
 
-test("a home link goes back to the catalogue with all the articles", async () => {
+test("the page leaves the logo and the settings gear to the shared shell", async () => {
   setup();
-  const home = await screen.findByRole("link", { name: "Back to the catalogue" });
-  expect(home.getAttribute("href")).toBe("./");
-  expect(home.getAttribute("rel")).toBeNull(); // same site: a normal link
-});
-
-test("the way home is also offered when the paper cannot be opened", async () => {
-  setup({
-    load: async () => {
-      throw new Error("404");
-    },
-  });
-  await screen.findByRole("alert");
-  expect(screen.getByRole("link", { name: "Back to the catalogue" }).getAttribute("href")).toBe(
-    "./",
-  );
-});
-
-test("the way home is offered while loading and when the PDF fails", async () => {
-  setup({
-    open: async () => {
-      throw new PdfOpenError("invalid");
-    },
-  });
-  expect(screen.getByRole("link", { name: "Back to the catalogue" })).toBeTruthy();
-  await screen.findByRole("alert");
-  expect(screen.getByRole("link", { name: "Back to the catalogue" })).toBeTruthy();
-});
-
-test("the home control is the logo: no text, an accessible name and a tooltip", async () => {
-  setup();
-  const home = await screen.findByRole("link", { name: "Back to the catalogue" });
-  expect(home.getAttribute("title")).toBe("Back to the catalogue");
-  expect(home.querySelector("svg")).not.toBeNull();
-  expect(home.textContent).toBe("Lw"); // the monogram only, no "Catalogue" label
-});
-
-test("the shortcuts gear is available in the reader", async () => {
-  setup();
-  expect(await screen.findByRole("button", { name: "Keyboard shortcuts" })).toBeTruthy();
+  await screen.findByRole("heading", { name: "Agents at scale" });
+  expect(screen.queryByRole("link", { name: "Home" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
 });

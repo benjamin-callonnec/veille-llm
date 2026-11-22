@@ -1,0 +1,121 @@
+/* The logo and the settings gear: fixed, at the same place on every page. */
+.home-logo {
+  position: fixed;
+  top: 12px;
+  left: 16px;
+  z-index: 30;
+  display: inline-flex;
+  border-radius: 8px;
+  opacity: 0.95;
+}
+.home-logo:hover,
+.home-logo:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings {
+  position: fixed;
+  bottom: 12px;
+  left: 16px;
+  z-index: 30;
+}
+.settings-gear {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--muted);
+  opacity: 0.7;
+  cursor: pointer;
+}
+.settings-gear:hover,
+.settings-gear:focus-visible,
+.settings-gear[aria-expanded="true"] {
+  opacity: 1;
+  color: var(--fg);
+}
+.settings-panel {
+  position: absolute;
+  left: 0;
+  bottom: 36px;
+  width: 300px;
+  max-height: 70vh;
+  overflow: auto;
+  padding: 10px 14px;
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  font-size: 0.85rem;
+}
+.settings-panel h2 {
+  margin: 8px 0 4px;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.settings-panel fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.settings-panel .theme-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+.settings-panel dl {
+  margin: 0;
+}
+.shortcut {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+.shortcut dt {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.shortcut dd {
+  margin: 0;
+  text-align: right;
+  color: var(--muted);
+}
+.settings-panel kbd {
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--bg);
+  font: inherit;
+  font-size: 0.75rem;
+}
+.settings-panel .muted {
+  margin: 8px 0 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

@@ -49,6 +49,14 @@ STARTTLS or 465), `SMTP_USER`, `SMTP_PASSWORD` (an app password), `NEWSLETTER_FR
 `LLM watch <you@example.org>`) and `NEWSLETTER_CONTACT` (the address people write to to
 unsubscribe). Nothing private is stored in the repository.
 
+## App shell and settings
+
+Every page is rendered inside `AppShell` (`web/src/components/AppShell.tsx`), which provides the logo (home
+button to the catalogue, top-left) and the settings gear (bottom-left) at the same place on every page.
+The gear opens the settings: theme (Auto follows the system, Papier light, Nuit dark, remembered in the
+browser) and the keyboard shortcuts of the page; `?` opens it too. A new page only has to be put inside
+the shell with its list of shortcuts.
+
 ## Reader (local only)
 
 `make reader` starts the local reader with **auto-reload**: the API (`veille-reader serve --reload`,
@@ -60,7 +68,7 @@ Claude subscription, so `make reader` removes `ANTHROPIC_API_KEY`, `ANTHROPIC_AU
 `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_USE_BEDROCK` and `CLAUDE_CODE_USE_VERTEX` for its own processes only
 (your shell keeps them). `make reader-build` builds the front once and serves everything from the API
 server, without reload. Click a paper card to open it in `reader.html#item=<id>` (the title still opens the
-original article; the gear in the bottom-right corner, or `?`, lists the keyboard shortcuts); its
+original article); its
 arXiv PDF is fetched from arxiv.org on first use and cached in `.local/reader/pdfs/` (gitignored, never
 redistributed). Highlights, chats and scores live in `.local/reader/reader.db`. The public Pages build never
 contains the reader or the "Read" link. If port 8765 is taken (an older reader still running), stop it first.

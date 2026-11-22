@@ -1,60 +1,27 @@
 import { useEffect, useRef, useState } from "react";
+import type { ShortcutGroup } from "../lib/shortcuts";
+import { applyTheme, defaultStorage, loadTheme, saveTheme, type Theme } from "../lib/theme";
 
-export interface Shortcut {
-  keys: string[];
-  label: string;
-}
-
-export interface ShortcutGroup {
-  title: string;
-  entries: Shortcut[];
-}
-
-/** Every keyboard shortcut of the reader, in one place (the panel below is built from it). */
-export const SHORTCUTS: ShortcutGroup[] = [
-  {
-    title: "Panes",
-    entries: [
-      { keys: ["Alt", "1"], label: "Toggle the PDF pane" },
-      { keys: ["Alt", "2"], label: "Toggle the chat pane" },
-      { keys: ["←", "→"], label: "Resize the panes (on the divider)" },
-    ],
-  },
-  {
-    title: "PDF",
-    entries: [
-      { keys: ["PageUp"], label: "Previous page" },
-      { keys: ["PageDown"], label: "Next page" },
-      { keys: ["+"], label: "Zoom in" },
-      { keys: ["-"], label: "Zoom out" },
-      { keys: ["/"], label: "Search in the paper" },
-      { keys: ["Esc"], label: "Close the search" },
-    ],
-  },
-  {
-    title: "Selected passage",
-    entries: [
-      { keys: ["Enter"], label: "Send the question" },
-      { keys: ["Esc"], label: "Close" },
-    ],
-  },
-  {
-    title: "Chat",
-    entries: [
-      { keys: ["Enter"], label: "Send the message" },
-      { keys: ["Shift", "Enter"], label: "New line" },
-    ],
-  },
-  { title: "Help", entries: [{ keys: ["?"], label: "Show or hide this list" }] },
-];
+const THEME_LABELS: Record<Theme, string> = {
+  auto: "Auto (follows the system)",
+  light: "Papier (light)",
+  dark: "Nuit (dark)",
+};
 
 const isTyping = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
 
-/** A small gear in the bottom-right corner that lists the keyboard shortcuts. */
-export function ShortcutsMenu() {
+interface Props {
+  shortcuts: ShortcutGroup[];
+  storage?: Storage | null;
+}
+
+/** The gear fixed in the bottom-left corner of every page: theme and keyboard shortcuts. */
+export function SettingsMenu({ shortcuts, storage }: Props) {
+  const store = storage === undefined ? defaultStorage() : storage;
   const [open, setOpen] = useState(false);
+  const [theme, setTheme] = useState<Theme>(() => loadTheme(store));
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -75,11 +42,27 @@ export function ShortcutsMenu() {
     };
   }, []);
 
+  const choose = (next: Theme) => {
+    setTheme(next);
+    applyTheme(next);
+    saveTheme(store, next);
+  };
+
   return (
-    <div className="shortcuts" ref={root}>
+    <div className="settings" ref={root}>
       {open && (
-        <div className="shortcuts-panel" role="dialog" aria-label="Keyboard shortcuts">
-          {SHORTCUTS.map((group) => (
+        <div className="settings-panel" role="dialog" aria-label="Settings">
+          <fieldset>
+            <legend className="sr-only">Theme</legend>
+            <h2>Theme</h2>
+            {(Object.keys(THEME_LABELS) as Theme[]).map((t) => (
+              <label key={t} className="theme-choice">
+                <input type="radio" name="theme" checked={theme === t} onChange={() => choose(t)} />
+                {THEME_LABELS[t]}
+              </label>
+            ))}
+          </fieldset>
+          {shortcuts.map((group) => (
             <section key={group.title}>
               <h2>{group.title}</h2>
               <dl>
@@ -101,9 +84,9 @@ export function ShortcutsMenu() {
       )}
       <button
         type="button"
-        className="shortcuts-gear"
-        aria-label="Keyboard shortcuts"
-        title="Keyboard shortcuts (?)"
+        className="settings-gear"
+        aria-label="Settings"
+        title="Settings (?)"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >

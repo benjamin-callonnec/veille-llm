@@ -189,8 +189,10 @@ test("a slow older response never overwrites a newer catalogue", async () => {
   expect(screen.getByText("Newer")).toBeTruthy();
 });
 
-test("the catalogue header shows the logo next to the title", async () => {
+test("/ focuses the search box", async () => {
   render(<App load={loader([item({})])} />);
-  const heading = await screen.findByRole("heading", { name: "LLM watch" });
-  expect(heading.parentElement?.querySelector("svg")).not.toBeNull();
+  await screen.findByRole("heading", { name: "LLM watch" });
+  expect(screen.queryByRole("link", { name: "Home" })).toBeNull(); // the shell provides it
+  await userEvent.keyboard("/");
+  expect(document.activeElement).toBe(screen.getByRole("searchbox"));
 });

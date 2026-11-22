@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { Logo } from "../components/Logo";
 import { type ChatApi, httpChatApi } from "./chat/api";
 import { ChatPane } from "./chat/ChatPane";
 import { useChat } from "./chat/useChat";
@@ -10,7 +9,6 @@ import { PdfViewer, type Selection } from "./PdfViewer";
 import { openPdf } from "./pdf/pdfjsSource";
 import { PdfOpenError, type PdfSource } from "./pdf/source";
 import { SelectionBox } from "./SelectionBox";
-import { ShortcutsMenu } from "./ShortcutsMenu";
 import { type HighlightsApi, httpApi, useHighlights } from "./useHighlights";
 
 export interface ReaderItem {
@@ -32,20 +30,6 @@ const MAX_QUOTE_TEXT = 5000;
 const MAX_QUOTE_RECTS = 200;
 const MAX_HIGHLIGHT_TEXT = 5000;
 const clip = (text: string) => text.slice(0, MAX_HIGHLIGHT_TEXT);
-
-/** Back to the catalogue page (index.html next to reader.html). */
-function HomeLink() {
-  return (
-    <a
-      className="home-link"
-      href="./"
-      aria-label="Back to the catalogue"
-      title="Back to the catalogue"
-    >
-      <Logo size={28} />
-    </a>
-  );
-}
 
 const pdfUrl = (id: string) => `/api/items/${encodeURIComponent(id)}/pdf`;
 
@@ -132,9 +116,7 @@ export function ReaderPage({
   if (error) {
     return (
       <div className="reader-shell">
-        <header className="reader-head">
-          <HomeLink />
-        </header>
+        <header className="reader-head"></header>
         <p role="alert">{error}</p>
       </div>
     );
@@ -142,9 +124,7 @@ export function ReaderPage({
   if (!item) {
     return (
       <div className="reader-shell">
-        <header className="reader-head">
-          <HomeLink />
-        </header>
+        <header className="reader-head"></header>
         <p className="muted">Loading…</p>
       </div>
     );
@@ -168,7 +148,6 @@ export function ReaderPage({
   return (
     <div className="reader-shell">
       <header className="reader-head">
-        <HomeLink />
         <h1>{item.title}</h1>
         <p className="hook">
           <strong>{item.hook}</strong>
@@ -184,7 +163,6 @@ export function ReaderPage({
           The highlight could not be saved.
         </p>
       )}
-      <ShortcutsMenu />
       <PaneLayout pdf={pdfPane} chat={<ChatPane chat={chat} onGo={changePage} />} />
       {selection && (
         <SelectionBox
