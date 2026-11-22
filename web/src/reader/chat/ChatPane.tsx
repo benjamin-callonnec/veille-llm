@@ -25,7 +25,7 @@ export function ChatPane({
   onGo,
   onCite = (page) => onGo(page),
   model,
-  itemId = "",
+  itemId: itemProp = "",
   quizApi = httpQuizApi,
 }: {
   chat: ReturnType<typeof useChat>;
@@ -39,6 +39,8 @@ export function ChatPane({
   itemId?: string;
   quizApi?: QuizApi;
 }) {
+  // the paper is the chat's own: the prop is only an override (a card must never post with no id)
+  const itemId = itemProp || chat.itemId;
   const [quizBusy, setQuizBusy] = useState(false);
   const [quizError, setQuizError] = useState(false);
   async function startQuiz() {

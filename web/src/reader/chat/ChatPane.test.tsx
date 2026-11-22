@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import type { ChatApi, Conversation, StoredMessage } from "./api";
 import { ChatPane } from "./ChatPane";
 import type { ChatEvent } from "./events";
+import type { QuizApi } from "./quizApi";
 import { useChat } from "./useChat";
 
 afterEach(cleanup);
@@ -244,4 +245,44 @@ test("a citation chip goes through onCite when given, onGo stays for the quote a
   await userEvent.click(await screen.findByRole("button", { name: "p.3" }));
   expect(onCite).toHaveBeenCalledWith(3);
   expect(onGo).not.toHaveBeenCalled();
+});
+
+function QuizHost({ api, quizApi }: { api: ChatApi; quizApi: QuizApi }) {
+  const chat = useChat("a1", api);
+  return <ChatPane chat={chat} onGo={() => {}} quizApi={quizApi} />;
+}
+
+test("a quiz card answers for the paper of the chat even when the pane got no itemId prop", async () => {
+  const api = makeApi(Promise.resolve());
+  const conv: Conversation = { id: 1, item_id: "a1", title: "T", created_at: "", updated_at: "" };
+  api.listConversations = async () => [conv];
+  api.messages = async () => [
+    {
+      id: 5,
+      seq: 1,
+      role: "system",
+      kind: "quiz",
+      content: {
+        quiz_id: 9,
+        kind: "choice",
+        question: "Why?",
+        options: ["a1x", "b1x", "c1x", "d1x"],
+      },
+      created_at: "",
+    },
+  ];
+  const answer = vi.fn(async () => ({
+    correct: true,
+    explanation: "Because.",
+    quote: "because",
+    page: 1,
+    section: null,
+    choice: 0,
+    correct_choice: 0,
+    score: { paper: { total: 1, correct: 1 }, session: null },
+  }));
+  render(<QuizHost api={api} quizApi={{ start: vi.fn(), answer } as never} />);
+  await userEvent.click(await screen.findByRole("button", { name: /a1x/ }));
+  await userEvent.click(screen.getByRole("button", { name: "Check answer" }));
+  await waitFor(() => expect(answer).toHaveBeenCalledWith("a1", 9, { choice: 0 }));
 });
