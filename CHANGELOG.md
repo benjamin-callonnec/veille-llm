@@ -5,6 +5,9 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+### Fixed
+- `make subs-add` and `subs-remove` explain the `EMAIL=` variable when it is missing (passing the address as a bare argument used to give a confusing error).
+
 ## [0.7.0] - 2026-11-22
 
 ### Added

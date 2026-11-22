@@ -25,3 +25,15 @@ def test_gitignore_blocks_private_files():
     assert ".env" in lines
     assert ".env.*" in lines
     assert "!.env.example" in lines
+
+
+def test_subs_add_and_remove_explain_the_email_variable_when_it_is_missing():
+    import subprocess
+
+    for target in ("subs-add", "subs-remove"):
+        result = subprocess.run(
+            ["make", "-s", target, "someone@example.org"],  # a common mistake: no EMAIL=
+            cwd=ROOT, capture_output=True, text=True,
+        )  # fmt: skip
+        assert result.returncode != 0
+        assert f"usage: make {target} EMAIL=" in result.stdout + result.stderr
