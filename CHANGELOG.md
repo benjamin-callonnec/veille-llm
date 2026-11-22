@@ -21,6 +21,7 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 - After each answer the tutor offers up to 3 suggested follow-up questions (validated, one click to send); suggestions containing `[placeholders]` fill the composer and Tab jumps from one placeholder to the next. Drafts are kept per conversation.
 - Eval: page recall counts a case as found when any of its valid pages is cited; the tutor now says so, without citing, when the paper does not answer.
 - The highlights drawn on the page keep their light colours in the dark theme.
+- Quizzes (#25): a "Quiz me" icon (or just ask the tutor) makes a question from the paper, multiple choice or free answer. Each question is validated, grounded in a verified quote and page, and the right answer and explanation stay on the server until you reply. A free answer is graded against the paper with the reasoning shown. Scores are kept per paper and per quiz, and a wrong answer leaves a note in the session memory so the tutor revisits it.
 
 ## [0.11.0] - 2026-11-22
 

@@ -130,7 +130,14 @@ to the local reader and passed to the tutor as image blocks; text inside an imag
 instructions. After each answer, up to three suggested follow-up questions appear as chips (one click
 sends them; a suggestion with `[placeholders]` fills the composer, Tab jumps to the next one). Drafts
 are kept per conversation. Images are not deleted with their conversation.
-Remaining pieces: #25 (quizzes, in progress) and #26 (voice) (parent: #17).
+**Quizzes (#25).** The "Quiz me" icon in the chat corner (or asking the tutor for a quiz) adds a quiz
+card: multiple choice or a free answer, each question grounded in a verified quote and page. The right
+answer and the explanation never leave the server before you reply; then the card shows the verdict,
+the explanation with its citation chip and your score on the paper. Free answers are graded against the
+paper with the reasoning shown. A wrong answer writes a short note in the session memory. Routes for
+the history and score exist (`/api/items/<id>/quizzes`); there is no history screen yet. Design and
+rulings: `docs/superpowers/specs/2026-11-22-reader-quiz-design.md`.
+Remaining piece: #26 (voice) (parent: #17).
 
 ## Deploy on GitHub Pages
 
