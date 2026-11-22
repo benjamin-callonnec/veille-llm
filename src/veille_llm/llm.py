@@ -89,7 +89,7 @@ SYSTEM_PROMPT = (
 _FENCE = re.compile(r"^```(?:json)?\s*\n(.*)\n```$", re.DOTALL)
 
 
-DEFAULT_MODEL = "claude-sonnet-5-5"
+DEFAULT_MODEL = "claude-haiku-5-5"
 
 
 @dataclass(frozen=True)

@@ -160,10 +160,12 @@ def test_run_reports_skipped_batches_and_token_usage(tmp_path):
     assert report.skipped_batches == 0
 
 
-def test_main_model_option_reaches_every_llm_call_and_defaults_to_sonnet(tmp_path):
+def test_main_model_option_reaches_every_llm_call_and_defaults_to_haiku(tmp_path):
     args = ["run", "--db", str(tmp_path / "v.db"), "--out", str(tmp_path / "c.json")]
-    haiku, default = Llm(), Llm()
-    main([*args, "--model", "claude-haiku-5-5"], sources=source([news("a")]), runner=haiku, now=NOW)
+    sonnet, default = Llm(), Llm()
+    main(
+        [*args, "--model", "claude-sonnet-5-5"], sources=source([news("a")]), runner=sonnet, now=NOW
+    )
     main(args, sources=source([news("b")]), runner=default, now=NOW)
-    assert haiku.models == {"claude-haiku-5-5"}
-    assert default.models == {"claude-sonnet-5-5"}
+    assert sonnet.models == {"claude-sonnet-5-5"}
+    assert default.models == {"claude-haiku-5-5"}
