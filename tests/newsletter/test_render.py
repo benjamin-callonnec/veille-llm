@@ -69,3 +69,12 @@ def test_a_contact_that_is_not_a_plain_address_is_refused():
 
     with pytest.raises(ValueError):
         render([item()], week="2026-W48", contact="x@y.org\r\nBcc: z@y.org", now=NOW)
+
+
+def test_text_version_is_not_html_escaped():
+    text = build([item(hook="Q&A beats <RAG> on cost")]).text
+    assert "Q&A beats <RAG> on cost" in text
+
+
+def test_html_version_escapes_ampersands():
+    assert "Q&amp;A" in build([item(hook="Q&A")]).html

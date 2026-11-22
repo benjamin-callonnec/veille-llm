@@ -1,0 +1,17 @@
+LLM watch - {{ date }}
+The {{ items|length }} best items of the week ({{ week }})
+
+{% for item in items %}
+{{ loop.index }}. {{ item.hook }}
+   {{ item.category }} / {{ item.type }}
+{% if item.brief %}
+   {{ item.brief }}
+{% endif %}
+{% set href = item.url|safe_url %}
+   {{ item.title }}{% if href %}: {{ href }}{% endif %}
+
+
+{% endfor %}
+--
+You get this because the author added you by hand.
+To stop receiving it, write to {{ contact }}.
