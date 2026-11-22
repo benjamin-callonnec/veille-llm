@@ -14,6 +14,8 @@ interface Props {
   draftKey?: string;
   /** Put this text in the composer (a new `n` each time); a `[placeholder]` is selected. */
   fill?: { text: string; n: number } | null;
+  /** The first suggested prompt: Tab on an empty composer fills it in (then Enter sends). */
+  tabFill?: string;
   /** Whether there is something typed (the suggestions fold away then). */
   onDirty?(dirty: boolean): void;
 }
@@ -35,6 +37,7 @@ export function Composer({
   model,
   draftKey = "new",
   fill = null,
+  tabFill,
   onDirty,
 }: Props) {
   const [text, setText] = useState(() => loadDraft(draftKey));
@@ -58,14 +61,18 @@ export function Composer({
   }, [draftKey]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: only a new fill acts
-  useEffect(() => {
-    if (!fill) return;
-    setText(fill.text);
-    saveDraft(draftKey, fill.text);
-    const first = nextPlaceholder(fill.text, 0, 0);
-    pending.current = first ?? { start: fill.text.length, end: fill.text.length };
+  const put = (value: string) => {
+    setText(value);
+    saveDraft(draftKey, value);
+    const first = nextPlaceholder(value, 0, 0);
+    pending.current = first ?? { start: value.length, end: value.length };
     setGuided(first !== null);
     setSelectTick((n) => n + 1);
+  };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only a new fill acts
+  useEffect(() => {
+    if (fill) put(fill.text);
   }, [fill]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs after a fill was rendered
@@ -181,6 +188,15 @@ export function Composer({
               if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 submit();
+              } else if (
+                e.key === "Tab" &&
+                !e.shiftKey &&
+                tabFill &&
+                !text &&
+                images.length === 0
+              ) {
+                e.preventDefault();
+                put(tabFill);
               } else if (e.key === "Tab" && guided) {
                 const el = e.currentTarget;
                 const next = nextPlaceholder(text, el.selectionStart, el.selectionEnd, e.shiftKey);

@@ -4,12 +4,15 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { AssistantMessage, StoredAssistantMessage } from "./AssistantMessage";
 import type { StoredMessage } from "./api";
 import { Composer } from "./Composer";
+import { resetDrafts } from "./drafts";
 import { initialAssistant } from "./reducer";
 import { UserMessage } from "./UserMessage";
 
 const writeText = vi.fn(async () => {});
 
 beforeEach(() => {
+  sessionStorage.clear();
+  resetDrafts(); // an earlier test may have left an unsent draft
   writeText.mockClear();
   vi.stubGlobal("navigator", { clipboard: { writeText } });
 });
@@ -323,4 +326,36 @@ test("a live answer uses the citations event of the stream", async () => {
   render(<AssistantMessage state={state} onToggleThinking={() => {}} onCite={onCite} />);
   await userEvent.click(screen.getByRole("button", { name: "p.2" }));
   expect(onCite).toHaveBeenCalledWith(6, "a stated quote");
+});
+
+test("Tab on an empty composer fills it with the suggested prompt, and Enter sends it", async () => {
+  const props = composer({ tabFill: "Why divide by the square root of d_k?" });
+  box().focus();
+  await userEvent.tab();
+  expect((box() as HTMLTextAreaElement).value).toBe("Why divide by the square root of d_k?");
+  expect(document.activeElement).toBe(box()); // focus stays in the composer
+  await userEvent.keyboard("{Enter}");
+  expect(props.onSend).toHaveBeenCalledWith("Why divide by the square root of d_k?");
+});
+
+test("Tab selects the first [placeholder] of a suggestion it fills", async () => {
+  composer({ tabFill: "Explain the intuition behind [equation]" });
+  box().focus();
+  await userEvent.tab();
+  const area = box() as HTMLTextAreaElement;
+  expect(area.value.slice(area.selectionStart, area.selectionEnd)).toBe("[equation]");
+});
+
+test("Tab does nothing special once something is typed", async () => {
+  composer({ tabFill: "A suggestion" });
+  await userEvent.type(box(), "my own");
+  await userEvent.tab();
+  expect((box() as HTMLTextAreaElement).value).toBe("my own");
+});
+
+test("Tab does nothing special when there is no suggestion", async () => {
+  composer();
+  box().focus();
+  await userEvent.tab();
+  expect((box() as HTMLTextAreaElement).value).toBe("");
 });

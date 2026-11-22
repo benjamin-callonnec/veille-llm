@@ -161,11 +161,16 @@ export function ChatPane({
         )}
         {suggestions.length > 0 && (
           <ul className="suggestions" aria-label="Suggested questions">
-            {suggestions.map((q) => (
+            {suggestions.map((q, i) => (
               <li key={q}>
                 <button type="button" className="suggestion" onClick={() => pick(q)}>
                   {q}
                 </button>
+                {i === 0 && (
+                  <kbd className="suggestion-key" title="Press Tab to put it in the box">
+                    Tab
+                  </kbd>
+                )}
               </li>
             ))}
           </ul>
@@ -188,6 +193,7 @@ export function ChatPane({
         onStop={chat.stop}
         draftKey={chat.current ? `c${chat.current.id}` : "new"}
         fill={fill}
+        tabFill={suggestions[0]}
         onDirty={setDirty}
         onSend={(text, files) => void send(text, files)}
       />

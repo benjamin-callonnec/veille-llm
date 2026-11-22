@@ -385,6 +385,19 @@
   text-align: left;
   cursor: pointer;
 }
+.suggestions li {
+  display: flex;
+  align-items: center;
+}
+.suggestion-key {
+  margin-left: 8px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--bubble);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.72rem;
+}
 .suggestions .suggestion:hover {
   color: var(--fg);
   border-color: var(--muted);
