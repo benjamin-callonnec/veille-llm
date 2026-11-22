@@ -187,9 +187,9 @@ async def _run(
     elif classified.stopped is None:
         report.capped = report.capped or bool(store.pending_enrichment())
 
-    # Tidy the categories once every hook is written and some budget is left (one LLM call).
-    budget_left = max_batches is None or max_batches - meter.calls >= 1
-    if report.stopped is None and budget_left and not store.pending_enrichment():
+    # Tidy the categories (at most CONSOLIDATE_ROUNDS small calls, outside the batch budget:
+    # otherwise a big backlog spends the whole cap and "Other" never gets fixed).
+    if report.stopped is None:
         progress.group("Categories")
         for _ in range(CONSOLIDATE_ROUNDS):  # each call re-homes up to 60 parked items
             tidy = await consolidate(store, since=window_start, runner=meter, model=model)
@@ -200,8 +200,7 @@ async def _run(
                 f"merged={tidy.merged} reassigned={tidy.reassigned} skipped={tidy.skipped}"
             )
             made_progress = tidy.merged + tidy.reassigned > 0
-            still_budget = max_batches is None or max_batches - meter.calls >= 1
-            if tidy.skipped or tidy.stopped or not made_progress or not still_budget:
+            if tidy.skipped or tidy.stopped or not made_progress:
                 break
         progress.endgroup()
 

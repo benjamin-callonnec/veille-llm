@@ -304,24 +304,30 @@ def test_run_consolidates_categories_when_other_is_too_big(tmp_path):
     assert cats == {"Agents": 12}
 
 
-def test_consolidation_needs_one_batch_of_budget_and_counts_against_it(tmp_path):
+class Both(Llm):
+    """Classification and hooks like `Llm`, consolidation like `ConsolidatingLlm`."""
+
+    async def __call__(self, prompt, options):
+        if "other_items" in prompt:
+            self.calls += 1
+            data = data_of(prompt)
+            assignments = [{"id": i["id"], "category": "Agents"} for i in data["other_items"]]
+            return RawReply(json.dumps({"merges": [], "assignments": assignments}), 1, 1, None)
+        return await super().__call__(prompt, options)
+
+
+def test_consolidation_runs_even_when_the_batch_budget_is_spent_and_hooks_are_pending(tmp_path):
+    # Real run: 14 classification + 6 hook batches used the whole cap of 20, and "Other" stayed
+    # at 49% because consolidation waited for spare budget. It has its own small allowance.
+    llm = Both()
+    report = run(parked_store(), tmp_path / "c.json", [news("fresh")], llm, max_batches=1)
+    assert report.reassigned == 8 and report.capped
+
+
+def test_consolidation_does_not_consume_the_batch_budget(tmp_path):
     llm = ConsolidatingLlm()
     report = run(parked_store(), tmp_path / "c.json", [], llm, max_batches=1)
     assert llm.calls == 1 and report.reassigned == 8
-    other = ConsolidatingLlm()
-    # budget already spent by a classification batch: no consolidation call
-    store = parked_store()
-    store.upsert_items([news("x")], STAMP)
-    spent = Llm()
-    run(store, tmp_path / "d.json", [news("x")], spent, max_batches=1)
-    assert spent.calls == 1 and other.calls == 0
-
-
-def test_consolidation_waits_while_hooks_are_still_pending(tmp_path):
-    store = parked_store()
-    llm = Llm()
-    report = run(store, tmp_path / "c.json", [news("fresh")], llm, max_batches=1)
-    assert llm.calls == 1 and report.reassigned == 0  # re-homed on a later run, hooks first
 
 
 def test_consolidation_repeats_while_other_stays_too_big_but_stops_when_it_is_not(tmp_path):

@@ -5,6 +5,11 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-22
+
+### Fixed
+- Category consolidation never ran on a big backlog: 14 classification and 6 hook batches used the whole cap of 20, so "Other" stayed at 49% of the catalogue. Consolidation now has its own allowance (3 small calls at most) and no longer waits for spare budget or for every hook to be written.
+
 ## [0.8.0] - 2026-11-22
 
 ### Added
