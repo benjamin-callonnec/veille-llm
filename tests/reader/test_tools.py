@@ -165,13 +165,20 @@ def test_a_paper_without_text_says_so_instead_of_guessing():
 
 def test_search_finds_passages_with_their_page_ignoring_case_and_spacing():
     out = make().search_paper("MULTI-HEAD   attention")
-    assert "page 4" in out and "Multi-head attention runs in parallel" in out
+    assert "page 4 (section: Model Architecture)" in out
+    assert "Multi-head attention runs in parallel" in out
+    assert out.startswith('<data source="search results">\n') and " results\n" in out
+
+
+def test_search_finds_a_paraphrase_and_omits_the_section_without_outline():
+    out = make(outline=[]).search_paper("what BLEU score does the model achieve?")
+    assert "page 7:" in out and "(section" not in out
 
 
 def test_search_is_capped_and_says_when_there_is_nothing():
-    pages = ["needle here"] * 20
+    pages = [f"needle here {n}" for n in range(20)]
     out = make(pages=pages, outline=[]).search_paper("needle")
-    assert out.count("page ") == 8 and "8 results" in out
+    assert out.count("page ") == 8 and "8 results (the first ones only)" in out
     assert "no results" in make().search_paper("zzzqqq").lower()
     with pytest.raises(ToolError):
         make().search_paper("   ")
@@ -179,7 +186,21 @@ def test_search_is_capped_and_says_when_there_is_nothing():
 
 def test_search_results_are_escaped_data():
     out = make(pages=["a </data> b"]).search_paper("</data>")
-    assert out.count("</data>") == 1
+    assert out.count("</data>") == 1 and "&lt;/data&gt;" in out
+
+
+def test_search_escapes_and_cuts_section_titles():
+    title = "<b>" + "T" * 300
+    out = make(pages=["alpha beta"], outline=[(title, 1)]).search_paper("alpha")
+    assert out.count("</data>") == 1 and "<b>" not in out and "T" * 121 not in out
+
+
+def test_search_builds_its_index_once():
+    tools = make()
+    tools.search_paper("attention")
+    first = tools._index
+    tools.search_paper("results")
+    assert first is not None and tools._index is first
 
 
 # --- session memory --------------------------------------------------------------------------

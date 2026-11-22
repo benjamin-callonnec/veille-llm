@@ -8,10 +8,12 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from veille_reader.paper import PaperText
+from veille_reader.retrieval import Index, build_index
 
 MAX_PAGES_PER_CALL = 6
 MAX_CHARS = 12_000
 MAX_HITS = 8
+MAX_SECTION_CHARS = 120
 MAX_SECTIONS_LISTED = 40
 MAX_NOTE_CHARS = 500
 KINDS = ("pages", "section", "references", "figure", "table", "highlights")
@@ -54,6 +56,7 @@ class PaperTools:
         self.paper = paper
         self.highlights = highlights
         self.memory = memory
+        self._index: Index | None = None
 
     # --- load_artifact -------------------------------------------------------------------
     def load_artifact(
@@ -153,27 +156,24 @@ class PaperTools:
 
     # --- search_paper --------------------------------------------------------------------
     def search_paper(self, query: str) -> str:
-        needle = _norm(query).lower()
-        if not needle:
+        if not _norm(query):
             raise ToolError("query must not be empty")
         self._need_text()
-        hits: list[str] = []
-        for number, page in enumerate(self.paper.pages, start=1):
-            text = _norm(page)
-            lower = text.lower()
-            at = lower.find(needle)
-            while at != -1 and len(hits) < MAX_HITS:
-                snippet = text[max(0, at - 80) : at + len(needle) + 80]
-                hits.append(f"page {number}: …{snippet}…")
-                at = lower.find(needle, at + len(needle))
-            if len(hits) >= MAX_HITS:
-                break
+        if self._index is None:
+            self._index = build_index(self.paper.pages, self.paper.outline)
+        hits = self._index.search(query, limit=MAX_HITS)
         if not hits:
             return "No results for that query."
+        lines = []
+        for hit in hits:
+            where = f"page {hit.page}"
+            if hit.section:
+                where += f" (section: {_norm(hit.section)[:MAX_SECTION_CHARS]})"
+            lines.append(f"{where}: …{hit.snippet}…")
         header = f"{len(hits)} results" + (
             " (the first ones only)" if len(hits) == MAX_HITS else ""
         )
-        return _data("search results", header + "\n" + "\n".join(hits))
+        return _data("search results", header + "\n" + "\n".join(lines))
 
     # --- session_memory ------------------------------------------------------------------
     def session_memory(self, action: str, text: str | None = None, id: object = None) -> str:  # noqa: A002
