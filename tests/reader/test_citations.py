@@ -90,7 +90,9 @@ def test_a_page_that_does_not_exist_is_flagged():
 
 def test_a_citation_without_a_quote_is_page_only():
     [v] = verdicts("[p.3]")
-    assert v["status"] == "page_only" and v["section"] == "Model Architecture"
+    assert v["status"] == "page_only"
+    # a section starts on page 3, so a bare page cannot tell which section is meant: no guess
+    assert v["section"] is None
 
 
 def test_a_too_short_quote_proves_nothing_so_it_counts_as_page_only():
@@ -104,11 +106,61 @@ def test_the_same_citation_twice_is_listed_once():
     assert [(v["page"], v["status"]) for v in out] == [(4, "verified"), (3, "page_only")]
 
 
-def test_the_section_is_the_last_outline_entry_before_the_page():
-    assert verdicts("[p.1]")[0]["section"] is None  # before the first section
-    assert verdicts("[p.2]")[0]["section"] == "Introduction"
-    assert verdicts("[p.3]")[0]["section"] == "Model Architecture"
-    assert verdicts("[p.4]", outline=[])[0]["section"] is None
+def test_a_bare_page_gets_a_section_only_when_the_whole_page_is_inside_one():
+    outline = [("Introduction", 1), ("Methods", 3)]
+    pages = ["intro one", "intro two", "methods start", "methods go on"]
+    assert (
+        verdicts("[p.2]", pages, outline)[0]["section"] == "Introduction"
+    )  # no section starts there
+    assert verdicts("[p.4]", pages, outline)[0]["section"] == "Methods"
+    assert verdicts("[p.3]", pages, outline)[0]["section"] is None  # "Methods" starts on page 3
+    assert verdicts("[p.1]", pages, outline)[0]["section"] is None
+    assert verdicts("[p.4]", pages, [])[0]["section"] is None
+
+
+DENSE = [
+    "Title page\nAbstract text.",
+    "1 Introduction\nRecurrent models are slow because they are sequential.\n"
+    "2 Background\nSelf-attention relates different positions of a single sequence.\n"
+    "3 Model Architecture\nThe encoder is a stack of six identical layers with two sub-layers.",
+    "More of the architecture here, with the decoder stack.\n4 Results\nThe big model scores well.",
+]
+DENSE_OUTLINE = [("Introduction", 2), ("Background", 2), ("Model Architecture", 2), ("Results", 3)]
+
+
+def test_the_section_follows_the_position_of_the_quote_on_a_page_with_several_sections():
+    cases = {
+        "recurrent models are slow because": "Introduction",
+        "self-attention relates different positions": "Background",
+        "the encoder is a stack of six identical layers": "Model Architecture",
+    }
+    for quote, section in cases.items():
+        [v] = verdicts(f'[p.2 "{quote}"]', DENSE, DENSE_OUTLINE)
+        assert v["status"] == "verified" and v["section"] == section, quote
+
+
+def test_text_before_the_first_heading_of_a_page_belongs_to_the_section_before():
+    [v] = verdicts('[p.3 "more of the architecture here"]', DENSE, DENSE_OUTLINE)
+    assert v["section"] == "Model Architecture"  # the section that was open at the end of page 2
+    [after] = verdicts('[p.3 "the big model scores well"]', DENSE, DENSE_OUTLINE)
+    assert after["section"] == "Results"
+
+
+def test_a_word_of_the_body_that_looks_like_a_title_is_not_a_heading():
+    pages = [
+        "x",
+        "1 Introduction\nBackground work is discussed here at length for you.\n"
+        "2 Background\nreal background starts.",
+    ]
+    outline = [("Introduction", 2), ("Background", 2)]
+    [v] = verdicts('[p.2 "background work is discussed here"]', pages, outline)
+    assert v["section"] == "Introduction"
+
+
+def test_a_misplaced_quote_gets_the_section_of_where_it_really_is():
+    [v] = verdicts('[p.3 "the encoder is a stack of six identical layers"]', DENSE, DENSE_OUTLINE)
+    assert v["status"] == "wrong_page" and v["found_page"] == 2
+    assert v["section"] == "Model Architecture"
 
 
 def test_normalise_is_idempotent_and_ignores_punctuation_and_spacing():
@@ -126,3 +178,9 @@ def test_a_big_document_is_checked_quickly():
     )
     assert out[0]["status"] == "unverified"
     assert time.monotonic() - started < 3
+
+
+def test_when_no_heading_can_be_found_in_the_text_the_section_is_unknown_not_guessed():
+    pages = ["no heading line here, only running text about attention and heads"]
+    [v] = verdicts('[p.1 "running text about attention"]', pages, [("Introduction", 1)])
+    assert v["status"] == "verified" and v["section"] is None

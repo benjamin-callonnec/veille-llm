@@ -345,7 +345,8 @@ def test_citations_are_checked_before_the_answer_ends(tmp_path):
     ]  # the check comes just before done
     items = event_list(response)[2]["items"]
     assert [(i["page"], i["status"]) for i in items] == [(1, "verified"), (2, "unverified")]
-    assert items[0]["section"] == "Intro" and items[0]["quote"] == "attention page one"
+    assert items[0]["section"] is None  # the heading is not in the text: we do not guess
+    assert items[0]["quote"] == "attention page one"
 
 
 def test_the_checked_citations_are_stored_with_the_answer(tmp_path):

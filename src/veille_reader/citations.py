@@ -46,12 +46,70 @@ def normalise(text: str) -> str:
     return "".join(ch for ch in folded if ch.isalnum())
 
 
+def _offsets(text: str) -> tuple[str, list[int]]:
+    """The normalised text and, for each of its characters, where it came from in the raw text."""
+    chars: list[str] = []
+    where: list[int] = []
+    for i, ch in enumerate(text):
+        for c in normalise(ch):
+            chars.append(c)
+            where.append(i)
+    return "".join(chars), where
+
+
+def _section_at(
+    pages: list[str], outline: list[tuple[str, int]], page: int, needle: str
+) -> str | None:
+    """The section a quote is in. Several sections can start on one page (a small paper, a dense
+    page): the heading line just before the quote decides; text above the first heading of the
+    page belongs to the section that was open at the end of the page before."""
+    starting = [title for title, start in outline if start == page]
+    if not starting:
+        return _section(outline, page)
+    before = _section(outline, page - 1)
+    text = pages[page - 1]
+    normalised, where = _offsets(text)
+    at = normalised.find(needle)
+    if at < 0:
+        return before
+    quote_at = where[at]
+    best: tuple[int, str] | None = None
+    seen_heading = False
+    offset = 0
+    for line in text.split("\n"):
+        flat = normalise(line)
+        for title in starting:
+            wanted = normalise(title)
+            # a heading line is the title, maybe with a section number in front
+            if wanted and flat.endswith(wanted) and len(flat) - len(wanted) <= 4:
+                seen_heading = True
+                if offset <= quote_at and (best is None or offset >= best[0]):
+                    best = (offset, title)
+        offset += len(line) + 1
+    if best:
+        return best[1]
+    # above the first heading of the page: the section left open by the page before; and when no
+    # heading can be found in the text at all, we do not know
+    return before if seen_heading else None
+
+
 def _section(outline: list[tuple[str, int]], page: int) -> str | None:
     title = None
     for name, start in sorted(outline, key=lambda entry: entry[1]):
         if start <= page:
             title = name
     return title
+
+
+def _section_of(
+    pages: list[str], outline: list[tuple[str, int]], status: str, page: int, needle: str
+) -> str | None:
+    if status == "invalid_page":
+        return None
+    if status in ("verified", "wrong_page"):
+        return _section_at(pages, outline, page, needle)
+    # no usable quote: a bare page names a section only if the whole page lies inside one
+    return None if any(start == page for _, start in outline) else _section(outline, page)
 
 
 def verify_citations(
@@ -84,8 +142,6 @@ def verify_citations(
                 verdict["status"] = "wrong_page"
                 verdict["found_page"] = elsewhere
                 target = elsewhere
-        verdict["section"] = (
-            _section(outline, target) if verdict["status"] != "invalid_page" else None
-        )
+        verdict["section"] = _section_of(pages, outline, verdict["status"], target, needle)
         verdicts.append(verdict)
     return verdicts
