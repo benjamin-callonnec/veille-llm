@@ -71,3 +71,20 @@ def test_both_pages_declare_the_favicon_and_it_exists():
     for page in ("index.html", "reader.html"):
         html = (web / page).read_text()
         assert 'rel="icon"' in html and "favicon.svg" in html, page
+
+
+def test_make_catalogue_downloads_the_published_catalogue_safely():
+    makefile = (Path(__file__).resolve().parents[2] / "Makefile").read_text()
+    assert "\ncatalogue:" in makefile
+    recipe = makefile.split("\ncatalogue:")[1].split("\n\n")[0]
+    assert "benjamin-callonnec.github.io/veille-llm/catalogue.json" in makefile
+    assert "build/catalogue.json" in recipe and "curl" in recipe
+    # download to a temporary file, validate it, then move it into place (never a half file)
+    assert ".tmp" in recipe and "mv " in recipe and "items" in recipe
+
+
+def test_make_reader_fetches_the_catalogue_when_it_is_missing():
+    makefile = (Path(__file__).resolve().parents[2] / "Makefile").read_text()
+    for target in ("reader", "reader-build"):
+        recipe = makefile.split(f"\n{target}:")[1].split("\n\n")[0]
+        assert "$(MAKE) catalogue" in recipe, target

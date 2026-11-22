@@ -6,6 +6,7 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 ## [Unreleased]
 
 ### Fixed
+- The local catalogue showed no briefs: `build/catalogue.json` was an old local file from before briefs existed. `make catalogue` now downloads the published catalogue (with hooks and briefs) into `build/catalogue.json` safely (temporary file, validated, then moved), and `make reader` / `make reader-build` run it when the file is missing.
 - The "Read" link no longer carries a port written at build time (it was wrong when the front had been built for another port): it is relative to the catalogue page, so it works from the dev server and from the built front.
 
 ### Added

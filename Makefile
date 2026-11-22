@@ -1,4 +1,4 @@
-.PHONY: reader reader-build subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
+.PHONY: catalogue reader reader-build subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
 
 install:
 	uv sync --locked
@@ -31,6 +31,16 @@ serve: web-build
 	cp build/catalogue.json web/dist/catalogue.json
 	cd web/dist && python3 -m http.server 8000
 
+# The published catalogue (what the daily pipeline built, with hooks and briefs), for local use.
+# `build/catalogue.json` is only a copy: refresh it with `make catalogue`.
+CATALOGUE_URL ?= https://benjamin-callonnec.github.io/veille-llm/catalogue.json
+catalogue:
+	@mkdir -p build
+	@curl -fsS --max-time 60 "$(CATALOGUE_URL)" -o build/catalogue.json.tmp || { rm -f build/catalogue.json.tmp; echo "could not download $(CATALOGUE_URL)"; exit 1; }
+	@python3 -c "import json; d = json.load(open('build/catalogue.json.tmp')); assert d['items'], 'no items'" || { rm -f build/catalogue.json.tmp; echo "the downloaded catalogue is not valid"; exit 1; }
+	@mv build/catalogue.json.tmp build/catalogue.json
+	@echo "build/catalogue.json refreshed from $(CATALOGUE_URL)"
+
 # Local paper reader (#17): never built by CI or published on Pages.
 # `make reader` runs both servers with auto-reload: the API restarts when a Python file changes and
 # the front hot-reloads (Vite). Open the "Read" links from http://127.0.0.1:5173.
@@ -40,7 +50,7 @@ READER_NO_BILLING = -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BA
 	-u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_VERTEX
 READER_FRONT_URL ?= http://127.0.0.1:5173
 reader:
-	@test -f build/catalogue.json || { echo "build/catalogue.json missing: run veille-core first"; exit 1; }
+	@test -f build/catalogue.json || $(MAKE) catalogue
 	@echo "Reader: open $(READER_FRONT_URL)  (API on http://127.0.0.1:8765, Ctrl+C stops both)"
 	@trap 'kill 0' INT TERM EXIT; \
 	(cd web && VITE_READER_URL=$(READER_FRONT_URL) npx vite --mode reader --host 127.0.0.1 --port 5173 --strictPort) & \
@@ -49,7 +59,7 @@ reader:
 
 # One process, no auto-reload: builds the front once and serves it from the API server.
 reader-build:
-	@test -f build/catalogue.json || { echo "build/catalogue.json missing: run veille-core first"; exit 1; }
+	@test -f build/catalogue.json || $(MAKE) catalogue
 	cd web && VITE_READER_URL=http://127.0.0.1:8765 npx vite build --mode reader
 	env $(READER_NO_BILLING) uv run veille-reader serve
 
