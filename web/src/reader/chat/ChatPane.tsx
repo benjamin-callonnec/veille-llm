@@ -6,6 +6,8 @@ import { toPayload } from "./attachments";
 import { Composer } from "./Composer";
 import { ConversationMenu } from "./ConversationMenu";
 import { toSuggestions } from "./events";
+import { QuizCard } from "./QuizCard";
+import { httpQuizApi, type QuizApi } from "./quizApi";
 import { UserMessage } from "./UserMessage";
 import type { useChat } from "./useChat";
 
@@ -23,6 +25,8 @@ export function ChatPane({
   onGo,
   onCite = (page) => onGo(page),
   model,
+  itemId = "",
+  quizApi = httpQuizApi,
 }: {
   chat: ReturnType<typeof useChat>;
   /** The quote arrow of a user message. */
@@ -31,7 +35,27 @@ export function ChatPane({
   onCite?(page: number, quote?: string): void;
   /** The model that answers, shown quietly under the composer. */
   model?: string;
+  /** The paper, for the quiz routes. */
+  itemId?: string;
+  quizApi?: QuizApi;
 }) {
+  const [quizBusy, setQuizBusy] = useState(false);
+  const [quizError, setQuizError] = useState(false);
+  async function startQuiz() {
+    setQuizBusy(true);
+    setQuizError(false);
+    try {
+      const id = chat.current?.id ?? (await chat.create());
+      if (id === null) return;
+      await quizApi.start(itemId, id);
+      await chat.refresh();
+    } catch {
+      setQuizError(true);
+    } finally {
+      setQuizBusy(false);
+    }
+  }
+
   const feed = useRef<HTMLDivElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll when content grows
   useEffect(() => {
@@ -67,6 +91,13 @@ export function ChatPane({
           onClick={chat.create}
           size={18}
         />
+        <IconButton
+          icon="quiz"
+          label="Quiz me"
+          disabled={chat.streaming || quizBusy || !itemId}
+          onClick={startQuiz}
+          size={18}
+        />
         <ConversationMenu
           disabled={chat.streaming}
           conversations={chat.conversations}
@@ -90,7 +121,15 @@ export function ChatPane({
           </p>
         )}
         {chat.messages.map((m, i) =>
-          m.role === "system" ? (
+          m.kind === "quiz" ? (
+            <QuizCard
+              key={`${m.id}-${m.seq}`}
+              itemId={itemId}
+              content={m.content}
+              api={quizApi}
+              onCite={onCite}
+            />
+          ) : m.role === "system" ? (
             <p key={`${m.id}-${m.seq}`} className="compaction-note">
               Earlier messages were summarised to keep the conversation light.
             </p>
@@ -128,6 +167,12 @@ export function ChatPane({
               </li>
             ))}
           </ul>
+        )}
+        {quizBusy && <p className="muted chat-empty">Writing a question from the paper…</p>}
+        {quizError && (
+          <p role="alert" className="chat-error">
+            The quiz could not be made. Try again.
+          </p>
         )}
         {chat.error && (
           <p role="alert" className="chat-error">

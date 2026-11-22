@@ -13,7 +13,8 @@ export type IconName =
   | "trash"
   | "chevron"
   | "compose"
-  | "close";
+  | "close"
+  | "quiz";
 
 /** One line style for every icon of the app: 24px grid, round caps, drawn in the current colour. */
 const SHAPES: Record<IconName, ReactNode> = {
@@ -29,6 +30,13 @@ const SHAPES: Record<IconName, ReactNode> = {
     <>
       <path d="M12 5H7.5A2.5 2.5 0 0 0 5 7.5v9A2.5 2.5 0 0 0 7.5 19h9a2.5 2.5 0 0 0 2.5-2.5V12" />
       <path d="M17.5 4.5a1.8 1.8 0 0 1 2.5 2.5L12 15l-3.5 1 1-3.5z" />
+    </>
+  ),
+  quiz: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M9.6 9.5a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.2 1-1.2 1.8" />
+      <circle cx="12" cy="16.6" r="0.6" fill="currentColor" />
     </>
   ),
   copy: (

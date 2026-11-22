@@ -197,7 +197,9 @@ export function ReaderPage({
       )}
       <PaneLayout
         pdf={pdfPane}
-        chat={<ChatPane chat={chat} onGo={changePage} onCite={cite} model={model} />}
+        chat={
+          <ChatPane chat={chat} onGo={changePage} onCite={cite} model={model} itemId={itemId} />
+        }
       />
       {selection && (
         <SelectionBox

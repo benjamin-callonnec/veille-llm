@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { timeAgo } from "../../lib/time";
+import { stripQuizMarker } from "../lib/quiz";
 import { CopyButton } from "./CopyButton";
 import { type Citation, toCitations } from "./events";
 import { Markdown } from "./Markdown";
@@ -32,7 +33,9 @@ function Body(p: BodyProps) {
           durationMs={p.durationMs}
           onToggle={p.onToggle}
         />
-        {p.answer && <Markdown text={p.answer} citations={p.citations} onCite={p.onCite} />}
+        {p.answer && (
+          <Markdown text={stripQuizMarker(p.answer)} citations={p.citations} onCite={p.onCite} />
+        )}
         {p.stopped && <p className="muted">Stopped.</p>}
         {p.error && (
           <p role="alert" className="chat-error">

@@ -389,3 +389,107 @@
   color: var(--fg);
   border-color: var(--muted);
 }
+/* A quiz card: quiet rows, no boxes; the answer and its explanation appear after the reply. */
+.quiz {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+}
+.quiz-question {
+  margin: 0;
+  font-weight: 600;
+}
+.quiz-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.quiz-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--bubble);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.quiz-option > span:nth-child(2) {
+  flex: 1;
+}
+.quiz-option:hover:not(:disabled),
+.quiz-picked {
+  border-color: var(--muted);
+}
+.quiz-option:disabled {
+  cursor: default;
+}
+.quiz-letter {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.quiz-right {
+  border-color: var(--accent);
+}
+.quiz-wrong {
+  border-style: dashed;
+  border-color: var(--muted);
+  color: var(--muted);
+}
+.quiz-free {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--composer);
+  color: var(--fg);
+  font: inherit;
+  resize: vertical;
+}
+.quiz-given {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bubble);
+}
+.quiz-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.quiz-feedback p {
+  margin: 0 0 6px;
+}
+.quiz-verdict {
+  font-weight: 600;
+}
+.quiz-yes {
+  color: var(--accent);
+}
+.quiz-no {
+  color: var(--muted);
+}
+.quiz-source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.quiz .cite {
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.quiz-score {
+  font-size: 0.8rem;
+}

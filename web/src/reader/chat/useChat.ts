@@ -190,8 +190,8 @@ export function useChat(
     [loadMessages],
   );
 
-  const create = useCallback(async () => {
-    if (busy.current) return;
+  const create = useCallback(async (): Promise<number | null> => {
+    if (busy.current) return null;
     try {
       setError(false);
       const made = await api.createConversation(itemId, "New conversation");
@@ -199,10 +199,17 @@ export function useChat(
       setCurrentId(made.id);
       currentRef.current = made.id;
       setMessages([]);
+      return made.id;
     } catch {
       setError(true);
+      return null;
     }
   }, [api, itemId]);
+
+  /** Load the current conversation again (a card was added by another route). */
+  const refresh = useCallback(async () => {
+    if (currentRef.current !== null) await loadMessages(currentRef.current);
+  }, [loadMessages]);
 
   const rename = useCallback(
     async (id: number, title: string) => {
@@ -261,6 +268,7 @@ export function useChat(
     rename,
     remove,
     exportMarkdown,
+    refresh,
     toggleThinking: toggle,
   };
 }

@@ -18,6 +18,7 @@ from veille_llm.llm import (
 from veille_reader import events
 from veille_reader.events import RunRequest
 from veille_reader.limits import AgentLimits
+from veille_reader.quiz import QUIZ_PROMPT
 from veille_reader.suggestions import with_rule
 from veille_reader.tools import KINDS, Limits, PaperTools, ToolBudget, ToolError
 
@@ -320,7 +321,7 @@ async def sdk_runner(request: RunRequest, query: Callable | None = None) -> Asyn
         extra = {
             "mcp_servers": {"paper": create_sdk_mcp_server("paper", tools=sdk_tools)},
             "allowed_tools": [f"{TOOL_PREFIX}{t.name}" for t in sdk_tools],
-            "system_prompt": with_rule(SYSTEM_PROMPT_TOOLS),
+            "system_prompt": with_rule(SYSTEM_PROMPT_TOOLS + QUIZ_PROMPT),
             "max_turns": limits.max_turns,
             "max_budget_usd": limits.max_message_usd,
         }

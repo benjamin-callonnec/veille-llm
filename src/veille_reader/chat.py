@@ -3,7 +3,7 @@
 import json
 import sqlite3
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 
 import anyio
 
@@ -171,6 +171,7 @@ async def stream_turn(
     model: str = "",
     raise_limit: bool = False,
     summarizer: Summarizer | None = None,
+    after_turn: Callable[[str], Awaitable[None]] | None = None,
 ) -> AsyncIterator[str]:
     """Stream one turn. With `kind` None the last user message is run again (regenerate)."""
     if kind is not None and content is not None:
@@ -269,3 +270,5 @@ async def stream_turn(
                     await aclose()
                 except Exception:  # noqa: BLE001, S110 - closing a finished generator is best effort
                     pass
+    if after_turn is not None and not stopped and answer.error is None:
+        await after_turn(answer.answer)  # after the answer is stored: a card goes after it
