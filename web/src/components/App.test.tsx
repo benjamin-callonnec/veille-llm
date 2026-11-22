@@ -188,3 +188,17 @@ test("a slow older response never overwrites a newer catalogue", async () => {
   expect(screen.queryByText("Older")).toBeNull();
   expect(screen.getByText("Newer")).toBeTruthy();
 });
+
+test("/ focuses the search box", async () => {
+  render(<App load={loader([item({})])} />);
+  await screen.findByRole("heading", { name: "LLM watch" });
+  expect(screen.queryByRole("link", { name: "Home" })).toBeNull(); // the shell provides it
+  await userEvent.keyboard("/");
+  expect(document.activeElement).toBe(screen.getByRole("searchbox"));
+});
+
+test("the catalogue header is the shared page head, next to the logo", async () => {
+  render(<App load={loader([item({})])} />);
+  const heading = await screen.findByRole("heading", { name: "LLM watch" });
+  expect(heading.closest("header")?.className).toContain("page-head");
+});

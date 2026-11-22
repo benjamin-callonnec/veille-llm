@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { fetchCatalogue, useCatalogue } from "../hooks/useCatalogue";
 import { useFilters } from "../hooks/useFilters";
 import {
@@ -25,6 +25,23 @@ export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }
   const counts = useMemo(() => countsByCategory(items, filters), [items, filters]);
   const shown = useMemo(() => applyFilters(items, filters), [items, filters]);
   const { chips, more } = chipCategories(counts, filters.categories);
+  const search = useRef<HTMLInputElement>(null);
+
+  // "/" jumps to the search box, unless you are already typing somewhere
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target;
+      const typing =
+        target instanceof HTMLElement &&
+        (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
+      if (e.key === "/" && !typing && !e.altKey && !e.ctrlKey && !e.metaKey && search.current) {
+        e.preventDefault();
+        search.current.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const chip = (name: string, list: "categories" | "types", label: string, count?: number) => (
     <button
@@ -41,7 +58,7 @@ export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }
 
   return (
     <>
-      <header>
+      <header className="page-head">
         <h1>LLM watch</h1>
         <p className="muted" aria-live="polite">
           {catalogue
@@ -56,6 +73,7 @@ export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }
         <main>
           <div className="controls">
             <input
+              ref={search}
               type="search"
               placeholder="Search titles, hooks and summaries"
               aria-label="Search"

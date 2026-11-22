@@ -63,3 +63,55 @@ def test_make_reader_reloads_on_change_and_never_bills_per_token():
         "CLAUDE_CODE_USE_VERTEX",
     ):
         assert f"-u {name}" in makefile, name
+
+
+def test_both_pages_declare_the_favicon_and_it_exists():
+    web = Path(__file__).resolve().parents[2] / "web"
+    assert (web / "public" / "favicon.svg").is_file()
+    for page in ("index.html", "reader.html"):
+        html = (web / page).read_text()
+        assert 'rel="icon"' in html and "favicon.svg" in html, page
+
+
+def test_make_catalogue_downloads_the_published_catalogue_safely():
+    makefile = (Path(__file__).resolve().parents[2] / "Makefile").read_text()
+    assert "\ncatalogue:" in makefile
+    recipe = makefile.split("\ncatalogue:")[1].split("\n\n")[0]
+    assert "benjamin-callonnec.github.io/veille-llm/catalogue.json" in makefile
+    assert "build/catalogue.json" in recipe and "curl" in recipe
+    # download to a temporary file, validate it, then move it into place (never a half file)
+    assert ".tmp" in recipe and "mv " in recipe and "items" in recipe
+
+
+def test_make_reader_fetches_the_catalogue_when_it_is_missing():
+    makefile = (Path(__file__).resolve().parents[2] / "Makefile").read_text()
+    for target in ("reader", "reader-build"):
+        recipe = makefile.split(f"\n{target}:")[1].split("\n\n")[0]
+        assert "$(MAKE) catalogue" in recipe, target
+
+
+def test_make_reader_rebuilds_the_static_front_so_port_8765_is_never_stale():
+    makefile = (Path(__file__).resolve().parents[2] / "Makefile").read_text()
+    recipe = makefile.split("\nreader:")[1].split("\n\n")[0]
+    build = recipe.index("vite build --mode reader")
+    servers = recipe.index("kill 0")
+    assert build < servers  # built first, then both servers start
+    assert "$(READER_FRONT_URL)" in recipe  # and it says where to go
+    assert "READER_FRONT_URL ?= http://127.0.0.1:5173" in makefile
+
+
+def test_make_reader_sends_the_pages_to_the_hot_reload_server():
+    makefile = (Path(__file__).resolve().parents[2] / "Makefile").read_text()
+    recipe = makefile.split("\nreader:")[1].split("\n\n")[0]
+    assert "--dev-front $(READER_FRONT_URL)" in recipe
+
+
+def test_the_token_setup_is_documented_ignored_and_never_committed():
+    root = Path(__file__).resolve().parents[2]
+    makefile = (root / "Makefile").read_text()
+    assert "\nreader-token:" in makefile and "scripts/reader_token.py" in makefile
+    example = (root / ".env.example").read_text()
+    assert "CLAUDE_CODE_OAUTH_TOKEN=" in example
+    assert "sk-ant" not in example  # the example holds no secret
+    ignore = (root / ".gitignore").read_text().splitlines()
+    assert ".env" in ignore and "!.env.example" in ignore

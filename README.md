@@ -49,20 +49,44 @@ STARTTLS or 465), `SMTP_USER`, `SMTP_PASSWORD` (an app password), `NEWSLETTER_FR
 `LLM watch <you@example.org>`) and `NEWSLETTER_CONTACT` (the address people write to to
 unsubscribe). Nothing private is stored in the repository.
 
+## App shell and settings
+
+Every page is rendered inside `AppShell` (`web/src/components/AppShell.tsx`), which provides the logo (home
+button to the catalogue, top-left of the page) and the floating settings gear (bottom-left) at the same place
+on every page.
+The gear opens the settings: theme (Auto follows the system, Papier light, Nuit dark, remembered in the
+browser) and the keyboard shortcuts of the page; `?` opens it too. A new page only has to be put inside
+the shell with its list of shortcuts.
+
 ## Reader (local only)
+
+**Claude login for the chat.** The tutor answers on your Claude subscription. The interactive login
+session of the `claude` CLI can expire ("OAuth session expired and could not be refreshed"); a long-lived
+token does not. GitHub secrets cannot be read back, so create a new one: run `claude setup-token` in a
+terminal (it prints a token starting with `sk-ant-` valid for about a year), then `make reader-token` and
+paste it (hidden). It is written to `.env` (ignored by git, refused by a pre-commit hook, mode 600) and
+never printed or logged; the reader loads only `CLAUDE_CODE_OAUTH_TOKEN` from that file (never anything
+that bills per token) and a token already set in your shell wins. `make reader` says which login it uses
+at startup. You can also keep the token in any secret manager and export `CLAUDE_CODE_OAUTH_TOKEN` before
+`make reader`. If it fails again the chat tells you what to do.
 
 `make reader` starts the local reader with **auto-reload**: the API (`veille-reader serve --reload`,
 `127.0.0.1:8765`) restarts when a Python file changes and the front (Vite, `127.0.0.1:5173`)
-hot-reloads. Open `http://127.0.0.1:5173`; it needs `build/catalogue.json`. The reader answers on your
+hot-reloads. Open `http://127.0.0.1:5173`: any change to the front shows up at once, without restarting or even
+reloading the page. Opening `http://127.0.0.1:8765` (the API port) in this mode sends you to 5173, so you
+never end up on a static build by mistake. The catalogue it shows is `build/catalogue.json`, a copy of the
+published one: `make catalogue` refreshes it (no LLM involved, and `make reader` runs it by itself when the
+file is missing). The reader answers on your
 Claude subscription, so `make reader` removes `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
 `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_USE_BEDROCK` and `CLAUDE_CODE_USE_VERTEX` for its own processes only
 (your shell keeps them). `make reader-build` builds the front once and serves everything from the API
-server, without reload. A paper opens in `reader.html#item=<id>` with a "Read" link on paper cards; its
+server, without reload. Click a paper card to open it in `reader.html#item=<id>` (the title still opens the
+original article); its
 arXiv PDF is fetched from arxiv.org on first use and cached in `.local/reader/pdfs/` (gitignored, never
 redistributed). Highlights, chats and scores live in `.local/reader/reader.db`. The public Pages build never
 contains the reader or the "Read" link. If port 8765 is taken (an older reader still running), stop it first.
 Panes: drag the divider (or use the arrow keys when it is focused), collapse a pane with its small cross
-or toggle with **Alt+1** (PDF) and **Alt+2** (chat); a thin rail with a "+" brings it back.
+or toggle with **Cmd+B** (PDF) and **Cmd+J** (chat), **Ctrl+B** / **Ctrl+J** on Windows and Linux; a thin rail with a "+" brings it back.
 
 The page shows the PDF (zoom, search with `/`, outline, PageUp/PageDown) next to a pane for the
 chat; the divider can be dragged (or moved with the arrow keys) and each pane collapsed. Select a

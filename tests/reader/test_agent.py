@@ -216,3 +216,22 @@ def test_system_prompt_states_the_rules():
     assert "<data>" in text and "never" in text and "instructions" in text
     assert "full text" in text and "[p." in text
     assert hasattr(agent, "DEFAULT_MODEL") or hasattr(agent, "MODEL")
+
+
+def test_an_expired_session_becomes_an_auth_event_with_a_clear_message(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    for text in (
+        "Failed to authenticate: OAuth session expired and could not be refreshed",
+        "401 invalid bearer token",
+        "Please run /login",
+    ):
+        out = collect(request(), fake_query(ResultMessage(is_error=True, result=text)))
+        assert out[-1]["kind"] == "auth", text
+        assert "reader-token" in out[-1]["message"]
+        assert "sk-ant" not in out[-1]["message"]
+
+
+def test_a_limit_is_still_a_limit_not_an_auth_error(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    out = collect(request(), fake_query(ResultMessage(is_error=True, result="429 rate limit")))
+    assert out[-1]["kind"] == "limit"

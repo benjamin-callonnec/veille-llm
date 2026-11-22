@@ -113,8 +113,22 @@ export function ReaderPage({
     window.getSelection()?.removeAllRanges();
   };
 
-  if (error) return <p role="alert">{error}</p>;
-  if (!item) return <p className="muted">Loading…</p>;
+  if (error) {
+    return (
+      <div className="reader-shell">
+        <header className="page-head reader-head"></header>
+        <p role="alert">{error}</p>
+      </div>
+    );
+  }
+  if (!item) {
+    return (
+      <div className="reader-shell">
+        <header className="page-head reader-head"></header>
+        <p className="muted">Loading…</p>
+      </div>
+    );
+  }
 
   const pdfPane = source ? (
     <>
@@ -133,7 +147,7 @@ export function ReaderPage({
 
   return (
     <div className="reader-shell">
-      <header className="reader-head">
+      <header className="page-head reader-head">
         <h1>{item.title}</h1>
         <p className="hook">
           <strong>{item.hook}</strong>

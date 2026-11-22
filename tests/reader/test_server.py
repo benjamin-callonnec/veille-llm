@@ -242,3 +242,43 @@ def test_dev_front_origin_is_accepted_only_when_configured(tmp_path, catalogue):
     assert dev.post("/api/items/a1/conversations", json=body, headers=headers).status_code == 201
     other = {"Origin": "https://evil.example"}
     assert dev.post("/api/items/a1/conversations", json=body, headers=other).status_code == 403
+
+
+def test_dev_front_redirects_the_pages_to_the_hot_reload_server(tmp_path, catalogue):
+    static = tmp_path / "dist"
+    static.mkdir()
+    (static / "index.html").write_text("<p>old build</p>", encoding="utf-8")
+    (static / "reader.html").write_text("<p>old reader</p>", encoding="utf-8")
+    app = create_app(
+        tmp_path / "d", catalogue, static_dir=static, dev_front="http://127.0.0.1:5173"
+    )
+    client = TestClient(app, base_url="http://127.0.0.1:8765", follow_redirects=False)
+    for path, target in (
+        ("/", "http://127.0.0.1:5173/"),
+        ("/index.html", "http://127.0.0.1:5173/"),
+        ("/reader.html", "http://127.0.0.1:5173/reader.html"),
+    ):
+        response = client.get(path)
+        assert response.status_code == 307, path
+        assert response.headers["location"] == target, path
+    assert client.get("/api/health").status_code == 200  # the API itself is never redirected
+    assert client.get("/catalogue.json").status_code == 200
+
+
+def test_without_dev_front_the_static_pages_are_served_as_before(tmp_path, catalogue):
+    static = tmp_path / "dist"
+    static.mkdir()
+    (static / "index.html").write_text("<p>the build</p>", encoding="utf-8")
+    app = create_app(tmp_path / "d", catalogue, static_dir=static)
+    client = TestClient(app, base_url="http://127.0.0.1:8765", follow_redirects=False)
+    response = client.get("/")
+    assert response.status_code == 200 and "the build" in response.text
+
+
+def test_the_redirect_target_cannot_be_influenced_by_the_request(tmp_path, catalogue):
+    app = create_app(tmp_path / "d", catalogue, dev_front="http://127.0.0.1:5173")
+    client = TestClient(app, base_url="http://127.0.0.1:8765", follow_redirects=False)
+    response = client.get(
+        "/?next=https://evil.example", headers={"Referer": "https://evil.example"}
+    )
+    assert response.headers["location"] == "http://127.0.0.1:5173/"

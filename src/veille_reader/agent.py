@@ -2,10 +2,12 @@
 
 import html
 import os
+import re
 import time
 from collections.abc import AsyncIterator, Callable
 
 from veille_llm.llm import (
+    LlmAuthError,
     LlmError,
     LlmLimitError,
     assert_subscription_auth,
@@ -65,10 +67,25 @@ def _text_of(content: object) -> str:
     return ""
 
 
+# The pipeline's auth patterns do not know every wording of an expired OAuth session.
+_AUTH = re.compile(
+    r"failed to authenticate|oauth|session expired|could not be refreshed|\b401\b|invalid bearer"
+    r"|/login|unauthori[sz]ed|authentication",
+    re.I,
+)
+AUTH_HELP = (
+    "Claude could not authenticate this session. Create a long-lived token with "
+    "`claude setup-token`, run `make reader-token` to save it, then restart `make reader`."
+)
+
+
 def _failure(message: str) -> dict:
     message = redact(message)
-    kind = "limit" if classify_error(message) is LlmLimitError else "failed"
-    return events.error(kind, message)
+    if classify_error(message) is LlmLimitError:
+        return events.error("limit", message)
+    if classify_error(message) is LlmAuthError or _AUTH.search(message):
+        return events.error("auth", AUTH_HELP)
+    return events.error("failed", message)
 
 
 async def sdk_runner(request: RunRequest, query: Callable | None = None) -> AsyncIterator[dict]:

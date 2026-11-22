@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { combo, isMac, modifierPressed } from "../lib/platform";
 import {
   clampRatio,
   loadPanes,
@@ -20,6 +21,8 @@ interface Props {
   pdf: ReactNode;
   chat: ReactNode;
   storage?: Storage | null;
+  /** Which keyboard the shortcuts are for; detected from the browser by default. */
+  platform?: "mac" | "other";
 }
 
 function defaultStorage(): Storage | null {
@@ -31,7 +34,8 @@ function defaultStorage(): Storage | null {
 }
 
 /** Two resizable, collapsible panes: PDF on the left, chat on the right. */
-export function PaneLayout({ pdf, chat, storage }: Props) {
+export function PaneLayout({ pdf, chat, storage, platform }: Props) {
+  const mac = platform ? platform === "mac" : isMac();
   const store = storage === undefined ? defaultStorage() : storage;
   const [panes, setPanes] = useState<PaneState>(() => loadPanes(store));
   const [dragging, setDragging] = useState(false);
@@ -45,13 +49,14 @@ export function PaneLayout({ pdf, chat, storage }: Props) {
     savePanes(store, next);
   };
 
-  // Alt+1 toggles the PDF pane, Alt+2 the chat pane (never both collapsed).
+  // Cmd/Ctrl+B toggles the PDF pane, Cmd/Ctrl+J the chat pane (never both collapsed). B and J are
+  // not taken by Chrome; the variants with Shift or Alt are, so they are left alone.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the handler reads the latest state through a ref
   useEffect(() => {
     const onShortcut = (e: globalThis.KeyboardEvent) => {
-      if (!e.altKey || e.ctrlKey || e.metaKey) return;
-      if (e.code === "Digit1") update(togglePdf(latest.current));
-      else if (e.code === "Digit2") update(toggleChat(latest.current));
+      if (!modifierPressed(e, mac)) return;
+      if (e.code === "KeyB") update(togglePdf(latest.current));
+      else if (e.code === "KeyJ") update(toggleChat(latest.current));
       else return;
       e.preventDefault();
     };
@@ -84,13 +89,21 @@ export function PaneLayout({ pdf, chat, storage }: Props) {
     <div className="panes">
       <div className="panes-body" ref={container}>
         {panes.pdfCollapsed ? (
-          <Rail label="Expand PDF" shortcut="Alt+1" onClick={() => update(togglePdf(panes))} />
+          <Rail
+            label="Expand PDF"
+            shortcut={combo(["Mod", "B"], mac)}
+            onClick={() => update(togglePdf(panes))}
+          />
         ) : (
           <div
             className="pane pane-pdf"
             style={{ flexBasis: both ? `${panes.ratio * 100}%` : "100%" }}
           >
-            <Cross label="Collapse PDF" shortcut="Alt+1" onClick={() => update(togglePdf(panes))} />
+            <Cross
+              label="Collapse PDF"
+              shortcut={combo(["Mod", "B"], mac)}
+              onClick={() => update(togglePdf(panes))}
+            />
             {pdf}
           </div>
         )}
@@ -116,7 +129,11 @@ export function PaneLayout({ pdf, chat, storage }: Props) {
           />
         )}
         {panes.chatCollapsed ? (
-          <Rail label="Expand chat" shortcut="Alt+2" onClick={() => update(toggleChat(panes))} />
+          <Rail
+            label="Expand chat"
+            shortcut={combo(["Mod", "J"], mac)}
+            onClick={() => update(toggleChat(panes))}
+          />
         ) : (
           <div
             className="pane pane-chat"
@@ -124,7 +141,7 @@ export function PaneLayout({ pdf, chat, storage }: Props) {
           >
             <Cross
               label="Collapse chat"
-              shortcut="Alt+2"
+              shortcut={combo(["Mod", "J"], mac)}
               onClick={() => update(toggleChat(panes))}
             />
             {chat}

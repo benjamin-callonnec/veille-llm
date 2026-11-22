@@ -5,28 +5,24 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
-## [0.12.0] - 2026-11-22
-
-### Added
-- Reader chat core (#22, part of #17): a streaming chat with the tutor in the right pane. Answers stream token by token (stop and regenerate), your questions about a passage appear as a quote with its page and a "p.N" link back to the PDF, `[p.N]` citations in answers scroll the PDF, Markdown and math are rendered safely (raw HTML as text, only http(s) links, no remote images). Conversations are kept per paper (dropdown in the chat header: new, rename, delete, export to Markdown).
-- A discreet "Thinking" line above each answer (no box, transparent): open while the agent works, folded automatically when the answer starts, reopenable at any time, also from history. It shows the reasoning and, later, the tools with their inputs.
-- Server: conversations and messages (migration 3), a streaming endpoint (SSE) with a pluggable agent runner, and a Claude Agent SDK runner on the subscription (no API key, no tools, summarized thinking, Sonnet by default, `VEILLE_READER_MODEL` to change). The tutor only sees the title, summary and selected passage until #23 adds tools.
-- Panes: no more Hide/Show buttons; a small cross collapses a pane (a thin "+" rail brings it back) and **Alt+1** / **Alt+2** toggle the PDF and the chat.
-- `make reader` now runs with auto-reload (API restarts on Python changes, front hot-reloads with Vite on `127.0.0.1:5173`) and removes `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_USE_BEDROCK` and `CLAUDE_CODE_USE_VERTEX` for its own processes (the reader refuses them otherwise). `make reader-build` keeps the single-process, no-reload mode.
-
-### Fixed
-- Stop keeps the partial answer (the request cancellation used to lose it), a streaming conversation cannot be deleted, and switching conversation during a stream no longer mixes the views. Asking while an answer streams keeps your question box with a notice, long selections are clipped to what the server accepts, and the error banner clears on the next action.
-
 ## [0.11.0] - 2026-11-22
 
 ### Added
-- Reader PDF viewer and panes (#21, part of #17): pdf.js viewer (pinned `pdfjs-dist`, scripting and eval off, PDF links never rendered) with zoom, search (`/`), outline, keyboard navigation and a bounded number of rendered pages, so a 300-page PDF stays responsive. The page is kept in the URL.
-- Selection box next to a selected passage: a question field (Enter), three highlight colours (yellow, green, red) and Copy. Highlights are stored per paper in the local database (new routes `GET/POST/DELETE /api/items/{id}/highlights`, migration 2) and listed under the PDF with jump-to and filter.
-- Two panes PDF | chat, resizable by dragging or with the arrow keys and collapsible, layout remembered. The right pane lists the questions asked until the chat arrives (#22).
+- Reader PDF viewer (#21, part of #17): a pdf.js viewer (pinned `pdfjs-dist`, scripting and eval off, PDF links never rendered) with zoom, search (`/`), outline, keyboard navigation and a bounded number of rendered pages, so a 300-page PDF stays responsive. The page is kept in the URL.
+- Selection box next to a selected passage: a question field (Enter), three highlight colours (yellow, green, red) and Copy. Highlights are stored per paper in the local database (routes `GET/POST/DELETE /api/items/{id}/highlights`, migration 2) and listed under the PDF with jump-to and filter.
+- Two panes, PDF | chat, resizable by dragging or with the arrow keys and collapsible: a small cross collapses a pane (a thin "+" rail brings it back) and **Cmd/Ctrl+B** and **Cmd/Ctrl+J** toggle the PDF and the chat (B and J are not taken by Chrome; the variants with Shift or Alt are left alone). The layout is remembered.
+- Reader chat core (#22): a streaming chat with the tutor. Answers stream token by token (stop and regenerate), your questions about a passage appear as a quote with its page and a "p.N" link back to the PDF, `[p.N]` citations in answers scroll the PDF, Markdown and math are rendered safely (raw HTML as text, only http(s) links, no remote images). Conversations are kept per paper (new, rename, delete, export to Markdown).
+- A discreet "Thinking" line above each answer (no box, transparent): open while the agent works, folded automatically when the answer starts, reopenable at any time, also from history. It shows the reasoning and, later, the tools with their inputs.
+- Server side of the chat: conversations and messages (migration 3), a streaming endpoint (SSE) with a pluggable agent runner, and a Claude Agent SDK runner on your subscription (no API key, no tools, summarized thinking, Sonnet by default, `VEILLE_READER_MODEL` to change). Stopping keeps the partial answer. The tutor only sees the title, summary and selected passage until #23 adds tools.
+- A long-lived Claude token for the chat: `make reader-token` saves the token from `claude setup-token` to `.env` (git-ignored, mode 600, hidden input, never printed); the reader loads `CLAUDE_CODE_OAUTH_TOKEN` from the environment or from that file (only that key, never a variable that bills per token). `make reader` states which login it uses, a permissive `.env` triggers a warning, and an expired session shows a clear message in the chat.
+- A shared app shell (`AppShell`) so every page has the same chrome without rendering it: the logo (home button to the catalogue) in the top-left corner of the page and a floating settings gear in the bottom-left corner. The gear opens the settings: theme (Auto follows the system, Papier light, Nuit dark; remembered) and the keyboard shortcuts of the page; `?` opens it too. On the catalogue, `/` jumps to the search box.
+- The keyboard shortcuts follow your keyboard: on a Mac they show ⌘ (Command), Return, ⇧ and fn with an arrow for PageUp/PageDown; on Windows and Linux they show Ctrl, Enter, Shift, PageUp and PageDown.
+- A logo for the web app: the "Lw" monogram in a rounded square, coloured by the Papier / Nuit theme, used as the favicon, the home button and, with the title on the same line, the head of every page.
+- Paper cards open the reader when you click anywhere on the card, for every item with an arXiv PDF (papers and benchmarks); the title still opens the original article in a new tab.
+- Local workflow: `make reader` runs the API and the front with auto-reload (API restarts on Python changes, the front hot-reloads with Vite on `127.0.0.1:5173`, the API port redirects there), rebuilds the static front at each start, and removes `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_USE_BEDROCK` and `CLAUDE_CODE_USE_VERTEX` for its own processes (the reader refuses them otherwise). `make reader-build` keeps the single-process, no-reload mode. `make catalogue` downloads the published catalogue (with hooks and briefs) into `build/catalogue.json` safely, and `make reader` runs it when the file is missing.
 
 ### Fixed
-- Review follow-ups of the reader: a catalogue whose items are not a list is rejected, the server picks up a regenerated catalogue, default paths are anchored at the repo root, a test checks that the default web build leaves the reader out, the IPv6 literal is no longer a local host.
-- Viewer review fixes: no scroll snap-back when new pages load, renders cancelled when zooming, page memory released, canvas size capped, long selections trimmed and merged per line, failed highlight saves reported, text layer capped and batched.
+- Local reader (follow-ups of 0.10.0): a catalogue whose items are not a list is rejected, the server picks up a regenerated catalogue, default paths are anchored at the repo root instead of the current directory, and the IPv6 literal is no longer accepted as a local host.
 
 ## [0.10.0] - 2026-11-22
 

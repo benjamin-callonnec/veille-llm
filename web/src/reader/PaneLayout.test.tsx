@@ -8,8 +8,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const setup = (storage?: Storage | null) =>
-  render(<PaneLayout pdf={<p>PDF pane</p>} chat={<p>Chat pane</p>} storage={storage} />);
+const setup = (storage?: Storage | null, platform: "mac" | "other" = "other") =>
+  render(
+    <PaneLayout
+      pdf={<p>PDF pane</p>}
+      chat={<p>Chat pane</p>}
+      storage={storage}
+      platform={platform}
+    />,
+  );
 
 const sep = () => screen.getByRole("separator");
 
@@ -120,40 +127,81 @@ test("a collapsed pane leaves a thin rail with a control to expand it", async ()
   expect(screen.getByText("Chat pane")).toBeTruthy();
 });
 
-test("Alt+1 toggles the PDF and Alt+2 toggles the chat", async () => {
-  setup(null);
-  await userEvent.keyboard("{Alt>}2{/Alt}");
+test("Ctrl+B toggles the PDF and Ctrl+J toggles the chat on Windows and Linux", async () => {
+  setup(null, "other");
+  await userEvent.keyboard("{Control>}j{/Control}");
   expect(screen.queryByText("Chat pane")).toBeNull();
-  await userEvent.keyboard("{Alt>}2{/Alt}");
+  await userEvent.keyboard("{Control>}j{/Control}");
   expect(screen.getByText("Chat pane")).toBeTruthy();
-  await userEvent.keyboard("{Alt>}1{/Alt}");
+  await userEvent.keyboard("{Control>}b{/Control}");
   expect(screen.queryByText("PDF pane")).toBeNull();
-  await userEvent.keyboard("{Alt>}1{/Alt}");
+  await userEvent.keyboard("{Control>}b{/Control}");
   expect(screen.getByText("PDF pane")).toBeTruthy();
+});
+
+test("Cmd+B toggles the PDF and Cmd+J toggles the chat on a Mac", async () => {
+  setup(null, "mac");
+  await userEvent.keyboard("{Meta>}j{/Meta}");
+  expect(screen.queryByText("Chat pane")).toBeNull();
+  await userEvent.keyboard("{Meta>}j{/Meta}");
+  expect(screen.getByText("Chat pane")).toBeTruthy();
+  await userEvent.keyboard("{Meta>}b{/Meta}");
+  expect(screen.queryByText("PDF pane")).toBeNull();
 });
 
 test("the shortcuts never collapse both panes", async () => {
-  setup(null);
-  await userEvent.keyboard("{Alt>}2{/Alt}");
-  await userEvent.keyboard("{Alt>}1{/Alt}");
+  setup(null, "mac");
+  await userEvent.keyboard("{Meta>}j{/Meta}");
+  await userEvent.keyboard("{Meta>}b{/Meta}");
   expect(screen.getByText("Chat pane")).toBeTruthy();
   expect(screen.queryByText("PDF pane")).toBeNull();
 });
 
-test("plain digits and other modifiers do not toggle anything", async () => {
-  setup(null);
-  await userEvent.keyboard("1");
-  await userEvent.keyboard("{Control>}1{/Control}");
+test("browser shortcuts and the other platform's modifier are left alone", async () => {
+  setup(null, "mac");
+  await userEvent.keyboard("{Meta>}{Shift>}b{/Shift}{/Meta}"); // Chrome: bookmarks bar
+  await userEvent.keyboard("{Meta>}{Alt>}j{/Alt}{/Meta}");
+  await userEvent.keyboard("{Control>}b{/Control}"); // not the Mac modifier
+  await userEvent.keyboard("b");
   expect(screen.getByText("PDF pane")).toBeTruthy();
   expect(screen.getByText("Chat pane")).toBeTruthy();
+  cleanup();
+  setup(null, "other");
+  await userEvent.keyboard("{Meta>}b{/Meta}"); // not the Windows modifier
+  await userEvent.keyboard("{Alt>}1{/Alt}");
+  expect(screen.getByText("PDF pane")).toBeTruthy();
 });
 
-test("controls say which shortcut they have", () => {
-  setup(null);
+test("the shortcut is taken from the browser (preventDefault) only when it acts", () => {
+  setup(null, "other");
+  const hit = new KeyboardEvent("keydown", {
+    code: "KeyB",
+    key: "b",
+    ctrlKey: true,
+    cancelable: true,
+  });
+  window.dispatchEvent(hit);
+  expect(hit.defaultPrevented).toBe(true);
+  const miss = new KeyboardEvent("keydown", {
+    code: "KeyK",
+    key: "k",
+    ctrlKey: true,
+    cancelable: true,
+  });
+  window.dispatchEvent(miss);
+  expect(miss.defaultPrevented).toBe(false);
+});
+
+test("controls say which shortcut they have, for the platform", () => {
+  setup(null, "other");
   expect(screen.getByRole("button", { name: "Collapse PDF" }).getAttribute("title")).toMatch(
-    /Alt\+1/,
+    /Ctrl\+B/,
   );
   expect(screen.getByRole("button", { name: "Collapse chat" }).getAttribute("title")).toMatch(
-    /Alt\+2/,
+    /Ctrl\+J/,
   );
+  cleanup();
+  setup(null, "mac");
+  expect(screen.getByRole("button", { name: "Collapse PDF" }).getAttribute("title")).toMatch(/⌘B/);
+  expect(screen.getByRole("button", { name: "Collapse chat" }).getAttribute("title")).toMatch(/⌘J/);
 });
