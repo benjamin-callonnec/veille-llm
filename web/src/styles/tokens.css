@@ -38,9 +38,6 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --hl-yellow: #6b6023;
-    --hl-green: #2f5a33;
-    --hl-red: #6a3030;
     --dot-yellow: #e9c53b;
     --dot-green: #53b97c;
     --dot-red: #e5606a;
@@ -77,9 +74,6 @@
   --accent-fg: #101010;
   --bubble: #272725;
   --composer: #232321;
-  --hl-yellow: #6b6023;
-  --hl-green: #2f5a33;
-  --hl-red: #6a3030;
   --dot-yellow: #e9c53b;
   --dot-green: #53b97c;
   --dot-red: #e5606a;

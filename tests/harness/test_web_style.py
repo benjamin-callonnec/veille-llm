@@ -50,7 +50,7 @@ def test_a_theme_can_be_forced_over_the_system_appearance():
     assert "color-scheme: dark" in rule(TOKENS, ':root[data-theme="dark"]')
     for theme in ("light", "dark"):
         block = rule(TOKENS, f':root[data-theme="{theme}"]')
-        for token in ("--bg", "--fg", "--card", "--accent", "--hl-yellow"):
+        for token in ("--bg", "--fg", "--card", "--accent", "--dot-yellow"):
             assert token in block, (theme, token)
 
 
@@ -136,3 +136,23 @@ def test_the_selection_box_is_a_quiet_rounded_pill():
     box = rule(reader, ".selection-box")
     assert re.search(r"border-radius:\s*(2\d|3\d)px", box)
     assert "var(--composer)" in box
+
+
+def test_highlights_over_the_white_page_use_the_same_light_colours_in_every_theme():
+    """The PDF page stays white in Nuit, and highlights are multiplied over it: a dark colour there
+    turns the text black. Only the interface (the dots) changes with the theme."""
+    blocks = _token_blocks()
+    for color in ("yellow", "green", "red"):
+        values = {name: _color(block, f"--hl-{color}") for name, block in blocks.items()}
+        value = values["light"]
+        assert value is not None
+        # a dark block either inherits the light colour (no override) or repeats it
+        assert all(v in (None, value) for v in values.values()), (color, values)
+        channels = [int(value[i : i + 2], 16) for i in (1, 3, 5)]
+        assert min(channels) >= 0xC0 - 0x20, (color, value)  # a light colour, not a dark one
+
+
+def test_a_highlight_row_in_the_list_keeps_dark_text_on_its_light_colour():
+    reader = (STYLES / "reader.css").read_text()
+    row = rule(reader, ".highlights-strip li button:first-child")
+    assert "color: #1b1b19" in row

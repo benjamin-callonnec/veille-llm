@@ -224,7 +224,8 @@
 .highlights-strip li button:first-child {
   flex: 1;
   text-align: left;
-  color: var(--fg);
+  /* the row is painted with the light highlight colour in every theme: dark text on it */
+  color: #1b1b19;
 }
 /* The colour dots belong to the interface: their colours are real in both themes (the page
    highlights, drawn over a white page, are the .hl-* ones above). */
