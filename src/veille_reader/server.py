@@ -79,12 +79,14 @@ def _hostname(header: str) -> str:
     return header.rsplit(":", 1)[0] if ":" in header else header
 
 
-def _cross_site(request: Request) -> bool:
+def _cross_site(request: Request, dev_origins: frozenset[str] = frozenset()) -> bool:
     """A page on another origin must not drive the server (it has side effects: downloads)."""
     if request.headers.get("sec-fetch-site", "same-origin") not in {"same-origin", "none"}:
         return True
     origin = request.headers.get("origin")
     if origin is None:
+        return False
+    if origin in dev_origins:
         return False
     host = urlsplit(origin).netloc
     return host != request.headers.get("host", "")
@@ -96,6 +98,7 @@ def create_app(
     static_dir: Path | None = None,
     fetch: Fetcher = default_fetcher,
     runner: AgentRunner | None = None,
+    dev_origins: set[str] | frozenset[str] = frozenset(),
 ) -> FastAPI:
     loaded = {"items": _load_items(catalogue_path), "mtime": catalogue_path.stat().st_mtime_ns}
 
@@ -118,7 +121,7 @@ def create_app(
     async def local_only(request: Request, call_next):  # noqa: ANN001, ANN202
         if _hostname(request.headers.get("host", "")) not in LOCAL_HOSTS:
             return JSONResponse({"reason": "forbidden_host"}, status_code=403)
-        if _cross_site(request):
+        if _cross_site(request, frozenset(dev_origins)):
             return JSONResponse({"reason": "cross_site"}, status_code=403)
         response = await call_next(request)
         response.headers["X-Frame-Options"] = "SAMEORIGIN"

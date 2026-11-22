@@ -51,11 +51,19 @@ unsubscribe). Nothing private is stored in the repository.
 
 ## Reader (local only)
 
-`make reader` builds the front with a "Read" link on paper cards and starts the local reader server
-(`veille-reader serve`, `127.0.0.1:8765`, needs `build/catalogue.json`). A paper opens in
-`reader.html#item=<id>`; its arXiv PDF is fetched from arxiv.org on first use and cached in
-`.local/reader/pdfs/` (gitignored, never redistributed). Highlights, chats and scores will live in
-`.local/reader/reader.db`. The public Pages build never contains the reader or the "Read" link.
+`make reader` starts the local reader with **auto-reload**: the API (`veille-reader serve --reload`,
+`127.0.0.1:8765`) restarts when a Python file changes and the front (Vite, `127.0.0.1:5173`)
+hot-reloads. Open `http://127.0.0.1:5173`; it needs `build/catalogue.json`. The reader answers on your
+Claude subscription, so `make reader` removes `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+`ANTHROPIC_BASE_URL`, `CLAUDE_CODE_USE_BEDROCK` and `CLAUDE_CODE_USE_VERTEX` for its own processes only
+(your shell keeps them). `make reader-build` builds the front once and serves everything from the API
+server, without reload. A paper opens in `reader.html#item=<id>` with a "Read" link on paper cards; its
+arXiv PDF is fetched from arxiv.org on first use and cached in `.local/reader/pdfs/` (gitignored, never
+redistributed). Highlights, chats and scores live in `.local/reader/reader.db`. The public Pages build never
+contains the reader or the "Read" link. If port 8765 is taken (an older reader still running), stop it first.
+Panes: drag the divider (or use the arrow keys when it is focused), collapse a pane with its small cross
+or toggle with **Alt+1** (PDF) and **Alt+2** (chat); a thin rail with a "+" brings it back.
+
 The page shows the PDF (zoom, search with `/`, outline, PageUp/PageDown) next to a pane for the
 chat; the divider can be dragged (or moved with the arrow keys) and each pane collapsed. Select a
 passage to get a small box: type a question about it (Enter), or pick a colour to highlight it, or
