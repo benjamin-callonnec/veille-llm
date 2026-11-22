@@ -54,3 +54,14 @@ def test_pages_has_a_single_deployer():
 
 def test_data_branch_writers_share_a_non_cancelling_concurrency_group():
     assert DOC["concurrency"] == {"group": "data-branch", "cancel-in-progress": False}
+
+
+def test_deploy_builds_the_web_app_and_publishes_dist_with_the_catalogue():
+    steps = DOC["jobs"]["deploy"]["steps"]
+    runs = [s.get("run") for s in steps]
+    assert "npm ci" in runs and "npm run build" in runs
+    download = next(s for s in steps if "download-artifact" in s.get("uses", ""))
+    assert download["with"]["path"] == "web/dist"
+    upload = next(s for s in steps if "upload-pages-artifact" in s.get("uses", ""))
+    assert upload["with"]["path"] == "web/dist"
+    assert not any("veille-llm --days" in str(r) for r in runs)  # v0 builder is gone

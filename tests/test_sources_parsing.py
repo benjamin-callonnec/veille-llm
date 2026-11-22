@@ -1,0 +1,28 @@
+from veille_llm.arxiv import parse_feed
+from veille_llm.hf import parse_upvotes
+
+FEED = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>http://arxiv.org/abs/2611.01234v2</id>
+    <published>2026-11-20T10:00:00Z</published>
+    <title>Mamba   meets
+      GraphRAG</title>
+    <summary>A state space model for knowledge graphs.</summary>
+    <author><name>Ada Lovelace</name></author>
+    <author><name>Alan Turing</name></author>
+  </entry>
+</feed>"""
+
+
+def test_parse_feed_normalises_id_and_whitespace():
+    (paper,) = parse_feed(FEED)
+    assert paper.arxiv_id == "2611.01234"
+    assert paper.title == "Mamba meets GraphRAG"
+    assert paper.authors == ["Ada Lovelace", "Alan Turing"]
+    assert paper.url == "https://arxiv.org/abs/2611.01234"
+
+
+def test_parse_upvotes_skips_entries_without_id():
+    payload = [{"paper": {"id": "2611.01234", "upvotes": 12}}, {"paper": {}}, {}]
+    assert parse_upvotes(payload) == {"2611.01234": 12}

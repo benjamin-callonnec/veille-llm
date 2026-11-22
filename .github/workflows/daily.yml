@@ -2,7 +2,7 @@ name: daily
 
 # Collect, classify with the LLM, persist veille.db on the `data` branch, deploy Pages.
 # Triggers: schedule and manual only (this workflow holds secrets: never PR/issue triggers).
-# It is the only Pages deployer; to redeploy after a push, run it manually.
+# It is the only Pages deployer (builds web/); to redeploy after a push, run it manually.
 on:
   schedule:
     - cron: "0 6 * * *"
@@ -89,17 +89,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v6
-      - run: uv sync --locked --no-default-groups
-      - run: uv run veille-llm --days 7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
       # No catalogue (pipeline crashed before exporting): fail and keep the live site as it is.
       - uses: actions/download-artifact@v4
         with:
           name: catalogue
-          path: site
+          path: web/dist
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: web/dist
       - id: deployment
         uses: actions/deploy-pages@v4

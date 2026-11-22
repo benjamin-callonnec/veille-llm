@@ -1,4 +1,4 @@
-.PHONY: install unittest build serve lint check web-install web-check web-build
+.PHONY: install unittest serve lint check web-install web-check web-build
 
 install:
 	uv sync
@@ -26,8 +26,5 @@ web-check:
 web-build:
 	cd web && npm run build
 
-build:
-	uv run veille-llm --days 7
-
-serve:
-	uv run python -m http.server 8000 --directory site
+serve: web-build
+	cd web/dist && python3 -m http.server 8000
