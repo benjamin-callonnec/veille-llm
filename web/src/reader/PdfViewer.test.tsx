@@ -169,3 +169,16 @@ test("never renders links from the PDF", async () => {
   await waitFor(() => expect(canvases().length).toBeGreaterThan(0));
   expect(document.querySelector("a[href]")).toBeNull();
 });
+
+test("the slash key opens the search and matches are marked in the text", async () => {
+  const source = new FakeSource({ text: () => "The needle is here" });
+  setup({}, source);
+  scroller().focus();
+  await userEvent.keyboard("/");
+  const box = await screen.findByRole("searchbox", { name: "Search" });
+  await userEvent.type(box, "needle");
+  await waitFor(() => expect(document.querySelector(".pdf-match")).not.toBeNull());
+  await userEvent.keyboard("{Escape}");
+  expect(screen.queryByRole("searchbox", { name: "Search" })).toBeNull();
+  expect(document.querySelector(".pdf-match")).toBeNull();
+});

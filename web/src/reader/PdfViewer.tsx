@@ -9,7 +9,9 @@ import {
 } from "react";
 import { pageOffsets, visibleWindow } from "./lib/pages";
 import { type Quote, type Rect, toQuote } from "./lib/quote";
+import { OutlineMenu } from "./OutlineMenu";
 import type { PageInfo, PdfSource, TextBox } from "./pdf/source";
+import { SearchBar } from "./SearchBar";
 
 export interface ViewerHighlight {
   id: number;
@@ -56,15 +58,18 @@ function PageView({
   scale,
   size,
   highlights,
+  query,
 }: {
   source: PdfSource;
   page: number;
   scale: number;
   size: PageInfo;
   highlights: ViewerHighlight[];
+  query: string;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [boxes, setBoxes] = useState<TextBox[]>([]);
+  const needle = query.trim().toLowerCase();
 
   useEffect(() => {
     const el = canvas.current;
@@ -95,6 +100,7 @@ function PageView({
           <span
             // biome-ignore lint/suspicious/noArrayIndexKey: boxes are static for a page
             key={i}
+            className={needle && b.text.toLowerCase().includes(needle) ? "pdf-match" : undefined}
             style={{
               left: b.x * scale,
               top: b.y * scale,
@@ -133,6 +139,8 @@ export function PdfViewer({ source, page, onPageChange, onSelection, highlights 
   const [sizes, setSizes] = useState<Record<number, PageInfo>>({});
   const [win, setWin] = useState({ first: 0, last: 0 });
   const [draft, setDraft] = useState(String(page));
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState("");
   const current = useRef(page);
   const total = source.numPages;
 
@@ -215,6 +223,7 @@ export function PdfViewer({ source, page, onPageChange, onSelection, highlights 
     else if (e.key === "PageUp") goto(page - 1);
     else if (e.key === "+" || e.key === "=") zoom(ZOOM_STEP);
     else if (e.key === "-") zoom(-ZOOM_STEP);
+    else if (e.key === "/") setSearching(true);
     else return;
     e.preventDefault();
   };
@@ -259,6 +268,7 @@ export function PdfViewer({ source, page, onPageChange, onSelection, highlights 
           scale={scale}
           size={size}
           highlights={highlights.filter((h) => h.page === p)}
+          query={query}
         />
       </div>,
     );
@@ -290,7 +300,22 @@ export function PdfViewer({ source, page, onPageChange, onSelection, highlights 
         <button type="button" aria-label="Zoom in" onClick={() => zoom(ZOOM_STEP)}>
           +
         </button>
+        <button type="button" onClick={() => setSearching(true)}>
+          Search
+        </button>
+        <OutlineMenu source={source} onGo={goto} />
       </div>
+      {searching && (
+        <SearchBar
+          source={source}
+          onGo={goto}
+          onQuery={setQuery}
+          onClose={() => {
+            setSearching(false);
+            setQuery("");
+          }}
+        />
+      )}
       <section
         className="pdf-scroll"
         data-testid="pdf-scroll"
