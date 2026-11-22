@@ -1,0 +1,79 @@
+name: daily
+
+# Collect, classify with the LLM, persist veille.db on the `data` branch, deploy Pages.
+# Triggers: schedule and manual only (this workflow holds secrets: never PR/issue triggers).
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One writer of the `data` branch at a time (the weekly newsletter will share this group).
+concurrency:
+  group: data-branch
+  cancel-in-progress: false
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write # only to push the orphan `data` branch
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - name: Restore veille.db from the data branch
+        env:
+          REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+        run: uv run python -m veille_llm.persist restore veille.db "$REMOTE"
+      - name: Run the pipeline (fails visibly if the LLM stops)
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: uv run veille-core run --db veille.db --out build/catalogue.json
+      - name: Persist veille.db even when the run failed
+        if: ${{ always() && hashFiles('veille.db') != '' }}
+        env:
+          REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+        run: uv run python -m veille_llm.persist publish veille.db "$REMOTE"
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: catalogue
+          path: build/catalogue.json
+          if-no-files-found: warn
+
+  deploy:
+    needs: core
+    if: ${{ !cancelled() }} # the previous catalogue stays valid when the LLM stopped
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run veille-llm --days 7
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: catalogue
+          path: site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

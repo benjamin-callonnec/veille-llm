@@ -7,6 +7,10 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ### Added
 - `--max-batches` (default 20) caps LLM batches per run, shared by classification and hooks; the rest resumes on the next run.
+- `daily.yml`: scheduled run that restores `veille.db` from the orphan `data` branch, runs the pipeline, republishes the database (even on failure) and deploys Pages; the job fails visibly if the LLM stops. `veille_llm.persist` implements the branch round trip.
+
+### Changed
+- `pages.yml` no longer has a schedule (done by `daily.yml`).
 
 ## [0.2.0] - 2026-11-22
 

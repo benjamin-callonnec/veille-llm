@@ -1,8 +1,8 @@
 name: Build and deploy the watch
 
+# Redeploys the v0 page when main is pushed. The daily workflow does the scheduled deploy.
+
 on:
-  schedule:
-    - cron: "0 6 * * *"
   push:
     branches: [main]
   workflow_dispatch:
