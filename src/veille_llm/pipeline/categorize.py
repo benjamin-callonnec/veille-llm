@@ -46,7 +46,8 @@ INSTRUCTIONS = (
     "data, choose a category: reuse one of existing_categories whenever it fits, and only create "
     "a new short category (at most 3 words) when none fits. Then write a hook: one or two plain "
     "sentences (at most 200 characters) saying why the item matters, with no link, no markup and "
-    'no hype. Return one entry per item, using the same id: {"items": [...]}.'
+    'no hype. Return one entry per item as {"items": [{"id": ..., "category": ..., '
+    '"hook": ...}]}, using the same id.'
 )
 
 

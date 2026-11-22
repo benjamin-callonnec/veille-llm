@@ -158,3 +158,15 @@ def test_skipped_batches_keep_their_reason():
     outcome = asyncio.run(classify_pending(store, runner=run))
     assert outcome.skipped_batches == 1
     assert "not valid JSON" in outcome.skip_reasons[0]
+
+
+def test_prompts_name_every_field_the_schema_requires():
+    # Haiku dropped the unnamed "interesting" key: smaller models need the exact keys spelled out.
+    from veille_llm.pipeline import categorize, classify
+
+    for instructions, schema in (
+        (classify.INSTRUCTIONS, classify.CLASSIFY_SCHEMA),
+        (categorize.INSTRUCTIONS, categorize.ENRICH_SCHEMA),
+    ):
+        for key in schema["properties"]["items"]["items"]["required"]:
+            assert f'"{key}"' in instructions

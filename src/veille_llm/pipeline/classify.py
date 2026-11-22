@@ -47,8 +47,9 @@ INSTRUCTIONS = (
     "retrieval and knowledge graphs, benchmarks, and public announcements from AI labs. "
     "For each item in the data, decide if it is interesting for that watch, give it a score "
     "from 0 (irrelevant) to 10 (essential), a type (paper, news or benchmark) and a short "
-    "category_hint (at most 40 characters, a few words). Return one entry per item, "
-    'using the same id: {"items": [...]}.'
+    "category_hint (at most 40 characters, a few words). Return one entry per item as "
+    '{"items": [{"id": ..., "interesting": true or false, "score": 0-10, '
+    '"type": "paper"|"news"|"benchmark", "category_hint": ...}]}, using the same id.'
 )
 
 
