@@ -70,6 +70,19 @@ function PageView({
   const canvas = useRef<HTMLCanvasElement>(null);
   const [boxes, setBoxes] = useState<TextBox[]>([]);
   const needle = query.trim().toLowerCase();
+  const layer = useRef<HTMLDivElement>(null);
+
+  // The invisible text uses another font than the PDF: stretch each piece to pdf.js' width.
+  useLayoutEffect(() => {
+    const spans = layer.current?.children ?? [];
+    boxes.forEach((b, i) => {
+      const el = spans[i] as HTMLElement | undefined;
+      if (!el) return;
+      el.style.transform = "";
+      const natural = el.offsetWidth;
+      if (natural > 0 && b.width > 0) el.style.transform = `scaleX(${(b.width * scale) / natural})`;
+    });
+  }, [boxes, scale]);
 
   useEffect(() => {
     const el = canvas.current;
@@ -95,7 +108,7 @@ function PageView({
   return (
     <div className="pdf-text" style={{ width: size.width * scale, height: size.height * scale }}>
       <canvas ref={canvas} />
-      <div className="pdf-text-layer">
+      <div className="pdf-text-layer" ref={layer}>
         {boxes.map((b, i) => (
           <span
             // biome-ignore lint/suspicious/noArrayIndexKey: boxes are static for a page
@@ -106,7 +119,6 @@ function PageView({
               top: b.y * scale,
               fontSize: b.height * scale,
               height: b.height * scale,
-              width: b.width * scale,
             }}
           >
             {b.text}

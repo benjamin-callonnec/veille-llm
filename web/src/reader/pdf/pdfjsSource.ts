@@ -89,7 +89,7 @@ class PdfJsSource implements PdfSource {
       boxes.push({
         text: item.str,
         x: t[4] ?? 0,
-        y: (t[5] ?? 0) - height,
+        y: (t[5] ?? 0) - height * 0.85,
         width: item.width,
         height,
       });

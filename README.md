@@ -56,7 +56,11 @@ unsubscribe). Nothing private is stored in the repository.
 `reader.html#item=<id>`; its arXiv PDF is fetched from arxiv.org on first use and cached in
 `.local/reader/pdfs/` (gitignored, never redistributed). Highlights, chats and scores will live in
 `.local/reader/reader.db`. The public Pages build never contains the reader or the "Read" link.
-The PDF viewer and the tutor chat come with issues #21 to #26 (parent: #17).
+The page shows the PDF (zoom, search with `/`, outline, PageUp/PageDown) next to a pane for the
+chat; the divider can be dragged (or moved with the arrow keys) and each pane collapsed. Select a
+passage to get a small box: type a question about it (Enter), or pick a colour to highlight it, or
+copy it. Highlights are kept in `reader.db` and the page number stays in the URL. The tutor chat
+itself comes with issues #22 to #26 (parent: #17).
 
 ## Deploy on GitHub Pages
 

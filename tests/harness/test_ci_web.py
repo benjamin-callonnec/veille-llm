@@ -45,3 +45,5 @@ def test_default_web_build_leaves_the_reader_out(tmp_path):
     )
     assert (tmp_path / "dist" / "index.html").is_file()
     assert not (tmp_path / "dist" / "reader.html").exists()
+    names = [p.name for p in (tmp_path / "dist").rglob("*") if p.is_file()]
+    assert not [n for n in names if "pdf" in n.lower() or "reader" in n.lower()], names

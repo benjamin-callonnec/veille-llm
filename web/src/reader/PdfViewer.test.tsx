@@ -182,3 +182,18 @@ test("the slash key opens the search and matches are marked in the text", async 
   expect(screen.queryByRole("searchbox", { name: "Search" })).toBeNull();
   expect(document.querySelector(".pdf-match")).toBeNull();
 });
+
+test("each text piece is stretched to the width pdf.js measured", async () => {
+  Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+    configurable: true,
+    get: () => 100,
+  });
+  try {
+    setup();
+    const span = await screen.findByText("Text of page 1");
+    // the fake box is 200 wide at scale 1 and the natural width is 100
+    await waitFor(() => expect((span as HTMLElement).style.transform).toBe("scaleX(2)"));
+  } finally {
+    Reflect.deleteProperty(HTMLElement.prototype, "offsetWidth");
+  }
+});
