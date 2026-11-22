@@ -22,6 +22,8 @@ export interface AssistantState {
   error?: { kind: string; message: string };
   /** The server's verdicts on the answer's citations, sent just before the end. */
   citations?: Citation[];
+  /** Follow-up questions the tutor proposes (sent just before the end). */
+  suggestions?: string[];
 }
 
 export const initialAssistant = (now: number): AssistantState => ({
@@ -77,6 +79,8 @@ export function applyEvent(s: AssistantState, event: ChatEvent, now: number): As
       };
     case "citations":
       return { ...s, citations: event.items };
+    case "suggestions":
+      return { ...s, suggestions: event.items };
     case "done":
       return { ...s, status: "done", durationMs: event.duration_ms };
     case "error":
