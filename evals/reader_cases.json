@@ -1,0 +1,130 @@
+[
+  {
+    "id": "transformer-bleu-base",
+    "arxiv": "1706.03762",
+    "title": "Attention Is All You Need",
+    "question": "What BLEU scores did the base Transformer model get on English-to-German and English-to-French in the results table?",
+    "expected_pages": [
+      8
+    ],
+    "expected_facts": [
+      "27.3",
+      "38.1"
+    ]
+  },
+  {
+    "id": "transformer-heads",
+    "arxiv": "1706.03762",
+    "title": "Attention Is All You Need",
+    "question": "How many attention heads does the Transformer use, and what is the dimension of each head?",
+    "expected_pages": [
+      5
+    ],
+    "expected_facts": [
+      "8",
+      "64"
+    ]
+  },
+  {
+    "id": "transformer-scaling",
+    "arxiv": "1706.03762",
+    "title": "Attention Is All You Need",
+    "question": "Why are the dot products divided by the square root of d_k in scaled dot-product attention?",
+    "expected_pages": [
+      4
+    ],
+    "expected_facts": [
+      "softmax",
+      "gradients"
+    ]
+  },
+  {
+    "id": "transformer-regularization-and-lr",
+    "arxiv": "1706.03762",
+    "title": "Attention Is All You Need",
+    "question": "How is the learning rate scheduled during training, and what dropout rate is used for the base model?",
+    "expected_pages": [
+      7,
+      8
+    ],
+    "expected_facts": [
+      "4000",
+      "0.1"
+    ]
+  },
+  {
+    "id": "transformer-reference",
+    "arxiv": "1706.03762",
+    "title": "Attention Is All You Need",
+    "question": "In the reference list, who wrote the Xception paper and in which year?",
+    "expected_pages": [
+      11
+    ],
+    "expected_facts": [
+      "Chollet",
+      "2016"
+    ]
+  },
+  {
+    "id": "transformer-glue-unanswerable",
+    "arxiv": "1706.03762",
+    "title": "Attention Is All You Need",
+    "question": "What score does the Transformer reach on the GLUE benchmark?",
+    "expected_pages": [],
+    "expected_facts": [],
+    "answerable": false
+  },
+  {
+    "id": "bert-model-sizes",
+    "arxiv": "1810.04805",
+    "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+    "question": "What are the layers, hidden size, attention heads and total parameters of BERT-base and BERT-large?",
+    "expected_pages": [
+      3
+    ],
+    "expected_facts": [
+      "110M",
+      "340M"
+    ]
+  },
+  {
+    "id": "bert-masked-lm",
+    "arxiv": "1810.04805",
+    "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+    "question": "Why can't BERT be trained like a standard bidirectional language model, and how does the masked LM objective get around it?",
+    "expected_pages": [
+      3,
+      4
+    ],
+    "expected_facts": [
+      "mask",
+      "15%"
+    ]
+  },
+  {
+    "id": "bert-glue-score",
+    "arxiv": "1810.04805",
+    "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+    "question": "What average GLUE test score did BERT-large get, and how does it compare with OpenAI GPT?",
+    "expected_pages": [
+      6
+    ],
+    "expected_facts": [
+      "82.1",
+      "75.1"
+    ]
+  },
+  {
+    "id": "bert-next-sentence",
+    "arxiv": "1810.04805",
+    "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+    "question": "What is the next sentence prediction task and how are its training examples built?",
+    "expected_pages": [
+      4
+    ],
+    "expected_facts": [
+      "50%",
+      "random"
+    ]
+  }
+]
