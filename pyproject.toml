@@ -10,6 +10,7 @@ dependencies = [
 
 [project.scripts]
 veille-core = "veille_llm.pipeline.run:main"
+veille-newsletter = "veille_llm.newsletter.cli:main"
 
 [dependency-groups]
 dev = [
