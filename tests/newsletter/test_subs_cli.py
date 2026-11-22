@@ -49,3 +49,16 @@ def test_push_calls_gh_with_the_personal_account_and_never_echoes_addresses(tmp_
     assert "-R" in cmd and "benjamin-callonnec/veille-llm" in cmd
     assert text == "a@x.org" and token == "tok"
     assert "a@x.org" not in capsys.readouterr().out
+
+
+def test_push_refuses_an_empty_list_instead_of_wiping_the_secret(tmp_path):
+    calls = []
+    code = subs.main(
+        ["push"], path=tmp_path / "missing.txt", gh=lambda *a: calls.append(a) or 0, token="t"
+    )
+    assert code == 1 and calls == []
+
+
+def test_gh_gets_a_home_directory_so_it_never_writes_state_into_the_repo():
+    env = subs._gh_env("tok")
+    assert env["GH_TOKEN"] == "tok" and env["HOME"]

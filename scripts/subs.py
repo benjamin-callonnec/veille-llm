@@ -6,8 +6,10 @@ The file is gitignored; addresses are never printed by `push`. `push` uses the p
 account (see .claude/CLAUDE.md), not the active work account.
 """
 
+import os
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -18,9 +20,17 @@ PERSONAL_ACCOUNT = "benjamin-callonnec"
 DEFAULT_PATH = Path("subscribers.txt")
 
 
+def _gh_env(token: str) -> dict[str, str]:
+    # HOME is required: without it gh writes its state under ./.local in the current directory.
+    return {
+        "GH_TOKEN": token,
+        "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
+        "HOME": os.environ.get("HOME") or tempfile.gettempdir(),
+    }
+
+
 def _gh(cmd: list[str], text: str, token: str) -> int:
-    env = {"GH_TOKEN": token, "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"}
-    return subprocess.run(cmd, input=text, text=True, env=env).returncode
+    return subprocess.run(cmd, input=text, text=True, env=_gh_env(token)).returncode
 
 
 def _personal_token() -> str:
@@ -63,6 +73,11 @@ def main(
         print("\n".join(current))
         return 0
     if command == "push":
+        if not current:
+            print(
+                "refusing to push an empty list (wrong directory or missing file?)", file=sys.stderr
+            )
+            return 1
         cmd = ["gh", "secret", "set", "SUBSCRIBERS", "-R", REPO]
         code = gh(cmd, ",".join(current), token or _personal_token())
         print(f"pushed {len(current)} subscribers" if code == 0 else "gh secret set failed")

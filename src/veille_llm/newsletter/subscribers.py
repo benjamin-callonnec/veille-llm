@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
-_ADDRESS = re.compile(r"^[a-z0-9._%+\-]+@[a-z0-9\-]+(\.[a-z0-9\-]+)+$")
+_ADDRESS = re.compile(r"^[a-z0-9._+\-]+@[a-z0-9\-]+(\.[a-z0-9\-]+)+$")
 
 
 class SubscriberStore(Protocol):

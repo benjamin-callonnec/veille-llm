@@ -31,3 +31,7 @@ def test_file_store_reads_one_address_per_line_and_ignores_comments(tmp_path):
 
 def test_file_store_that_does_not_exist_is_empty(tmp_path):
     assert FileSubscribers(tmp_path / "missing.txt").list() == []
+
+
+def test_percent_signs_are_rejected_so_log_masking_matches_the_real_address():
+    assert parse_addresses("a%25b@x.org") == ([], 1)

@@ -78,3 +78,9 @@ def test_text_version_is_not_html_escaped():
 
 def test_html_version_escapes_ampersands():
     assert "Q&amp;A" in build([item(hook="Q&A")]).html
+
+
+def test_urls_with_control_characters_are_never_linked_or_printed():
+    for url in ("https://a.com/\nFAKE: line", "\x01https://a.com", "https://a.com/x\ty z"):
+        mail = build([item(url=url, title="T")])
+        assert "FAKE" not in mail.text and "a.com" not in mail.html and "a.com" not in mail.text

@@ -22,6 +22,8 @@ class Mail:
 
 def _safe_url(url: str) -> str | None:
     """Only http(s) links are ever rendered as links."""
+    if any(ord(c) <= 32 or ord(c) == 127 for c in url):  # no whitespace or control characters
+        return None
     try:
         parsed = urlparse(url)
     except ValueError:

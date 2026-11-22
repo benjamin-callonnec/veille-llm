@@ -74,3 +74,75 @@ def test_a_week_without_items_exits_0_and_says_nothing_was_sent(tmp_path, capsys
     code = main(["send", "--db", str(path)], env=ENV, mailer=mailer, now=NOW)
     assert code == 0 and mailer.sent == []
     assert "nothing interesting" in capsys.readouterr().out
+
+
+def test_smtp_login_failure_exits_1_and_prints_only_the_error_type(tmp_path, capsys, monkeypatch):
+    import smtplib
+
+    from veille_llm.newsletter import smtp as smtp_module
+
+    class BadLogin:
+        def __init__(self, *a, **k):
+            pass
+
+        def starttls(self, **k):
+            pass
+
+        def login(self, *a):
+            raise smtplib.SMTPAuthenticationError(535, b"secret server reply a@x.org")
+
+        def quit(self):
+            pass
+
+    monkeypatch.setattr(smtp_module.smtplib, "SMTP", BadLogin)
+    env = {**ENV, "SMTP_HOST": "h", "SMTP_PORT": "587", "SMTP_USER": "u", "SMTP_PASSWORD": "pw"}
+    code = main(["send", "--db", str(db_with_items(tmp_path))], env=env, now=NOW)
+    out = capsys.readouterr().out
+    assert code == 1 and "SMTPAuthenticationError" in out
+    assert "secret server reply" not in out and "pw" not in out.replace("password", "")
+
+
+def test_an_already_sent_week_never_opens_an_smtp_connection(tmp_path, capsys, monkeypatch):
+    from veille_llm.newsletter import smtp as smtp_module
+
+    opened = []
+    monkeypatch.setattr(smtp_module.smtplib, "SMTP", lambda *a, **k: opened.append(1))
+    db = db_with_items(tmp_path)
+    from veille_llm.store import Store
+
+    store = Store(db)
+    store.record_delivery("2026-W48", delivered=2, total=2)
+    store.close()
+    env = {**ENV, "SMTP_HOST": "h", "SMTP_PORT": "587", "SMTP_USER": "u", "SMTP_PASSWORD": "p"}
+    assert main(["send", "--db", str(db)], env=env, now=NOW) == 0
+    assert opened == [] and "already sent" in capsys.readouterr().out
+
+
+def test_week_must_look_like_an_iso_week_and_be_the_current_one_to_send(tmp_path, capsys):
+    db = str(db_with_items(tmp_path))
+    for bad in ("W40", "2026-40", "2026-W4", "evil\nsubject"):
+        assert main(["send", "--db", db, "--week", bad], env=ENV, mailer=Mailer(), now=NOW) == 1
+    mailer = Mailer()
+    code = main(["send", "--db", db, "--week", "2026-W40"], env=ENV, mailer=mailer, now=NOW)
+    assert code == 1 and mailer.sent == [] and "current week" in capsys.readouterr().out
+
+
+def test_a_past_week_can_still_be_previewed_with_dry_run(tmp_path):
+    code = main(
+        ["send", "--db", str(db_with_items(tmp_path)), "--week", "2026-W40", "--dry-run",
+         "--out", str(tmp_path / "o")],
+        env={"SUBSCRIBERS": "a@x.org"}, mailer=None, now=NOW,
+    )  # fmt: skip
+    assert code == 0
+
+
+def test_sender_is_required_and_must_be_a_single_plain_address_outside_dry_run(tmp_path, capsys):
+    db = str(db_with_items(tmp_path))
+    for sender in (None, "a@x.org, b@x.org", "Name <a@x.org>\r\nBcc: z@x.org", "no-address"):
+        env = {k: v for k, v in ENV.items() if k != "NEWSLETTER_FROM"}
+        if sender:
+            env["NEWSLETTER_FROM"] = sender
+        mailer = Mailer()
+        assert main(["send", "--db", db], env=env, mailer=mailer, now=NOW) == 1
+        assert mailer.sent == []
+    assert "NEWSLETTER_FROM" in capsys.readouterr().out

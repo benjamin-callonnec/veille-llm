@@ -19,6 +19,7 @@ def select_items(
 ) -> list[dict]:
     """Published items of the last `days` days, best score first (then upvotes, then newest)."""
     since = (now - timedelta(days=days)).strftime(_FORMAT)
-    items = store.published_items(since)
+    until = now.strftime(_FORMAT)
+    items = [i for i in store.published_items(since) if i["published"] <= until]  # no future dates
     items.sort(key=lambda i: (i["score"], i["upvotes"], i["published"]), reverse=True)
     return items[:limit]

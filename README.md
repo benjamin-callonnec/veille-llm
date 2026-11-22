@@ -34,7 +34,7 @@ Every Monday 08:00 UTC `weekly.yml` sends the same mail (Jinja2, HTML and text) 
 items of the last 7 days to each subscriber, one message per address, once per ISO week. With no
 interesting item it sends nothing (and does not fail). The delivery counters (counts
 only, never addresses) live in `veille.db` on the `data` branch; a rerun after a partial failure
-resumes where it stopped.
+resumes where it stopped. If a `weekly` run goes red, use "Re-run failed jobs", not "Re-run all jobs": the counters are saved by the `persist` job, and a full rerun after a successful send would mail everyone again.
 
 ```bash
 make subs-add EMAIL=friend@example.org   # edits the local, gitignored subscribers.txt

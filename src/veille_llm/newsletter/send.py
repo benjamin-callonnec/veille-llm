@@ -11,7 +11,7 @@ from pathlib import Path
 
 from veille_llm.newsletter.render import Mail, render
 from veille_llm.newsletter.select import MIN_ITEMS, select_items, week_id
-from veille_llm.newsletter.smtp import Mailer
+from veille_llm.newsletter.smtp import Mailer, RecipientRefused
 from veille_llm.store import Store
 
 
@@ -23,6 +23,7 @@ class NewsletterError(Exception):
 class SendResult:
     week: str
     sent: int = 0
+    skipped: int = 0
     already_sent: bool = False
     nothing_to_send: bool = False
     dry_run: bool = False
@@ -77,15 +78,25 @@ def send_newsletter(
     if mailer is None:
         raise NewsletterError("no mailer configured")
 
-    start = min(progress[0], len(recipients)) if progress else 0
+    start = 0
+    if progress:
+        if progress[1] != len(recipients):
+            raise NewsletterError(
+                "the subscriber list changed since the failed run "
+                f"({progress[1]} then, {len(recipients)} now): resuming would skip or double "
+                "someone; fix the list or wait for next week"
+            )
+        start = progress[0]
     for index in range(start, len(recipients)):
         try:
             mailer.send(build_message(mail, sender=sender, recipient=recipients[index]))
+            result.sent += 1
+        except RecipientRefused:
+            result.skipped += 1  # one bad address must not block the others, now or next week
         except Exception as exc:  # noqa: BLE001 - the original text may contain the address
             raise NewsletterError(
                 f"delivery failed at recipient #{index + 1} of {len(recipients)} "
                 f"({type(exc).__name__}); {index} of them already got it"
             ) from None
         store.record_delivery(week, delivered=index + 1, total=len(recipients))
-        result.sent += 1
     return result

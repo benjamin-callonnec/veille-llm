@@ -1,6 +1,7 @@
 """SMTP delivery: one connection reused for every recipient, TLS always on."""
 
 import smtplib
+import ssl
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from email.message import EmailMessage
@@ -30,28 +31,42 @@ def config_from_env(env: Mapping[str, str]) -> SmtpConfig:
     )
 
 
+class RecipientRefused(Exception):
+    """The server refused this one recipient; the message never contains the address."""
+
+
 class SmtpMailer:
+    """Connects lazily on the first message, so a week with nothing to send never logs in."""
+
     def __init__(self, config: SmtpConfig) -> None:
         self._config = config
         self._conn: smtplib.SMTP | None = None
 
-    def __enter__(self) -> "SmtpMailer":
+    def _connect(self) -> smtplib.SMTP:
         c = self._config
+        context = ssl.create_default_context()  # verifies the certificate and the hostname
         if c.port == 465:
-            self._conn = smtplib.SMTP_SSL(c.host, c.port, timeout=30)
+            conn: smtplib.SMTP = smtplib.SMTP_SSL(c.host, c.port, timeout=30, context=context)
         else:
-            self._conn = smtplib.SMTP(c.host, c.port, timeout=30)
-            self._conn.starttls()
-        self._conn.login(c.user, c.password)
+            conn = smtplib.SMTP(c.host, c.port, timeout=30)
+            conn.starttls(context=context)
+        conn.login(c.user, c.password)
+        return conn
+
+    def __enter__(self) -> "SmtpMailer":
         return self
 
     def __exit__(self, *exc: object) -> None:
         if self._conn is not None:
             try:
                 self._conn.quit()
-            except smtplib.SMTPException:
+            except Exception:  # noqa: BLE001 - mail already sent, closing is best effort
                 pass
 
     def send(self, message: EmailMessage) -> None:
-        assert self._conn is not None, "use SmtpMailer as a context manager"
-        self._conn.send_message(message)
+        if self._conn is None:
+            self._conn = self._connect()
+        try:
+            self._conn.send_message(message)
+        except smtplib.SMTPRecipientsRefused:
+            raise RecipientRefused("recipient refused by the server") from None

@@ -1,18 +1,35 @@
 """`veille-newsletter send`: the weekly mail. Never prints an address."""
 
 import argparse
+import email.utils
 import os
+import re
 import sys
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
+from veille_llm.newsletter.select import week_id
 from veille_llm.newsletter.send import NewsletterError, send_newsletter
 from veille_llm.newsletter.smtp import Mailer, SmtpMailer, config_from_env
-from veille_llm.newsletter.subscribers import EnvSubscribers, FileSubscribers
+from veille_llm.newsletter.subscribers import (
+    EnvSubscribers,
+    FileSubscribers,
+    parse_addresses,
+)
 from veille_llm.store import Store
 
 _PREVIEW_CONTACT = "unsubscribe@example.org"
+_PREVIEW_SENDER = "LLM watch <noreply@example.org>"
+_WEEK = re.compile(r"^\d{4}-W\d{2}$")
+
+
+def _valid_sender(raw: str) -> bool:
+    """One plain address, with an optional display name, and no control characters."""
+    if not raw or any(ord(c) < 32 or ord(c) == 127 for c in raw):
+        return False
+    found = email.utils.getaddresses([raw])
+    return len(found) == 1 and len(parse_addresses(found[0][1])[0]) == 1
 
 
 def main(
@@ -31,6 +48,19 @@ def main(
     send.add_argument("--dry-run", action="store_true", help="render only, send nothing")
     send.add_argument("--out", type=Path, default=Path("build"), help="dry-run output folder")
     args = parser.parse_args(argv)
+    current_week = week_id(now or datetime.now(UTC))
+    if args.week and not _WEEK.fullmatch(args.week):
+        print("configuration error: --week must look like 2026-W48")
+        return 1
+    if args.week and args.week != current_week and not args.dry_run:
+        print("configuration error: refusing to send a week other than the current week")
+        return 1
+    sender = env.get("NEWSLETTER_FROM", "")
+    if args.dry_run and not sender:
+        sender = _PREVIEW_SENDER
+    if not _valid_sender(sender):
+        print("configuration error: NEWSLETTER_FROM must be one plain address (Name <a@b.org>)")
+        return 1
 
     store = (
         EnvSubscribers(env) if "SUBSCRIBERS" in env else FileSubscribers(Path("subscribers.txt"))
@@ -44,14 +74,10 @@ def main(
 
     db = Store(args.db)
     try:
-        smtp_mailer = None
-        if not args.dry_run and mailer is None:
-            smtp_mailer = SmtpMailer(config_from_env(env))
-        active = mailer or smtp_mailer
+        active = mailer
+        if not args.dry_run and active is None:
+            active = SmtpMailer(config_from_env(env))
         contact = env.get("NEWSLETTER_CONTACT") or (_PREVIEW_CONTACT if args.dry_run else "")
-        sender = env.get("NEWSLETTER_FROM") or "LLM watch <noreply@example.org>"
-        if smtp_mailer is not None:
-            smtp_mailer.__enter__()
         try:
             result = send_newsletter(
                 db,
@@ -65,8 +91,8 @@ def main(
                 out_dir=args.out,
             )
         finally:
-            if smtp_mailer is not None:
-                smtp_mailer.__exit__(None, None, None)
+            if isinstance(active, SmtpMailer):
+                active.__exit__(None, None, None)
     except NewsletterError as exc:
         print(f"newsletter not sent: {exc}")
         return 1
@@ -83,7 +109,8 @@ def main(
     elif result.already_sent:
         print(f"{result.week} was already sent, nothing to do")
     else:
-        print(f"{result.week}: sent {result.sent} mails")
+        skipped = f", {result.skipped} refused by the server" if result.skipped else ""
+        print(f"{result.week}: sent {result.sent} mails{skipped}")
     return 0
 
 

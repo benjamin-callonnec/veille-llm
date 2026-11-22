@@ -4,6 +4,7 @@ import pytest
 
 from veille_llm.models import Enrichment, Item, Verdict
 from veille_llm.newsletter.send import NewsletterError, send_newsletter
+from veille_llm.newsletter.smtp import RecipientRefused
 from veille_llm.store import Store
 
 NOW = datetime(2026, 11, 23, 8, 0, tzinfo=UTC)
@@ -27,10 +28,12 @@ def seeded(n=5):
 
 
 class Mailer:
-    def __init__(self, fail_at=None):
-        self.sent, self.fail_at = [], fail_at
+    def __init__(self, fail_at=None, refuse=()):
+        self.sent, self.fail_at, self.refuse = [], fail_at, set(refuse)
 
     def send(self, message):
+        if message["To"] in self.refuse:
+            raise RecipientRefused("refused")
         if self.fail_at is not None and len(self.sent) == self.fail_at:
             raise RuntimeError(f"550 mailbox {message['To']} unavailable")
         self.sent.append(message)
@@ -100,3 +103,32 @@ def test_dry_run_writes_the_files_and_sends_nothing(tmp_path):
     assert mailer.sent == [] and store.newsletter_progress(WEEK) is None
     assert (tmp_path / "newsletter.html").exists() and (tmp_path / "newsletter.txt").exists()
     assert result.dry_run
+
+
+def test_a_changed_subscriber_list_blocks_a_resume_instead_of_skipping_or_doubling_someone():
+    store = seeded()
+    with pytest.raises(NewsletterError):
+        go(store, Mailer(fail_at=2))
+    again = Mailer()
+    with pytest.raises(NewsletterError, match="changed"):
+        go(store, again, people=["aa@x.org", *PEOPLE])
+    assert again.sent == [] and store.newsletter_progress(WEEK) == (2, 4)
+
+
+def test_a_refused_recipient_is_skipped_and_the_others_still_get_the_mail():
+    store, mailer = seeded(), Mailer(refuse={"b@x.org"})
+    result = go(store, mailer)
+    assert [m["To"] for m in mailer.sent] == ["a@x.org", "c@x.org", "d@x.org"]
+    assert result.sent == 3 and result.skipped == 1
+    assert store.newsletter_progress(WEEK) == (4, 4)
+
+
+def test_items_dated_in_the_future_are_never_selected():
+    store = seeded(0)
+    store.upsert_items(
+        [Item("future", "src", "paper", "T", "S", "https://e.com/f", [], "2027-01-01T00:00:00Z")],
+        STAMP,
+    )
+    store.save_verdicts([Verdict("future", True, 9, "paper", "h")])
+    store.save_enrichments([Enrichment("future", "Cat", "Hook.", "Brief.")])
+    assert go(store, Mailer()).nothing_to_send
