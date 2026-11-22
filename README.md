@@ -49,6 +49,15 @@ STARTTLS or 465), `SMTP_USER`, `SMTP_PASSWORD` (an app password), `NEWSLETTER_FR
 `LLM watch <you@example.org>`) and `NEWSLETTER_CONTACT` (the address people write to to
 unsubscribe). Nothing private is stored in the repository.
 
+## Reader (local only)
+
+`make reader` builds the front with a "Read" link on paper cards and starts the local reader server
+(`veille-reader serve`, `127.0.0.1:8765`, needs `build/catalogue.json`). A paper opens in
+`reader.html#item=<id>`; its arXiv PDF is fetched from arxiv.org on first use and cached in
+`.local/reader/pdfs/` (gitignored, never redistributed). Highlights, chats and scores will live in
+`.local/reader/reader.db`. The public Pages build never contains the reader or the "Read" link.
+The PDF viewer and the tutor chat come with issues #21 to #26 (parent: #17).
+
 ## Deploy on GitHub Pages
 
 1. Push the repo to GitHub.

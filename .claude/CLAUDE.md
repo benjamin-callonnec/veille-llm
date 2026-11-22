@@ -20,6 +20,8 @@ Si `graphify-out/` existe (graphe local, ignoré par git, à régénérer avec `
 - `src/veille_llm` : pipeline d'étapes (sources → filtre → LLM) → SQLite → `catalogue.json` (`pipeline/`,
   `sources/`, `llm.py`, `persist.py` pour la branche `data`). CLI : `veille-core`.
 - `web/` : catalogue React (Vite, TypeScript) en lecture seule, `components/`, `hooks/`, `lib/`, `styles/`.
+- `src/veille_reader` : module local du lecteur de papiers (#17, serveur FastAPI sur 127.0.0.1, données dans
+  `.local/reader/`) ; front `web/reader.html`, construit seulement par `make reader`, jamais par la CI.
 - `.github/workflows/daily.yml` : pipeline, persistance, build web et déploiement Pages. Newsletter à venir.
 
 ## Git et GitHub
