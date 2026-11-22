@@ -29,7 +29,7 @@ test("papers get a Read link when the reader is configured", () => {
   vi.stubEnv("VITE_READER_URL", "http://127.0.0.1:8765");
   render(<Card item={item({})} />);
   const link = screen.getByRole("link", { name: "Read" });
-  expect(link.getAttribute("href")).toBe("http://127.0.0.1:8765/reader.html#item=a1");
+  expect(link.getAttribute("href")).toBe("reader.html#item=a1");
 });
 
 test("no Read link without the reader configured", () => {
@@ -42,4 +42,12 @@ test("no Read link for news", () => {
   vi.stubEnv("VITE_READER_URL", "http://127.0.0.1:8765");
   render(<Card item={item({ type: "news" })} />);
   expect(screen.queryByRole("link", { name: "Read" })).toBeNull();
+});
+
+test("the Read link does not depend on the port set at build time", () => {
+  vi.stubEnv("VITE_READER_URL", "http://127.0.0.1:8798");
+  render(<Card item={item({})} />);
+  expect(screen.getByRole("link", { name: "Read" }).getAttribute("href")).toBe(
+    "reader.html#item=a1",
+  );
 });

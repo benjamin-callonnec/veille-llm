@@ -95,10 +95,14 @@ export function safeUrl(url: string): string | null {
   }
 }
 
-/** Link to the local reader for an item; null when the reader is not configured. */
-export function readerUrl(itemId: string, base: string | undefined): string | null {
-  if (!base || !safeUrl(base)) return null;
-  return `${base.replace(/\/+$/, "")}/reader.html#item=${encodeURIComponent(itemId)}`;
+/**
+ * Link to the local reader for an item; null when the reader is not enabled for this build.
+ * The reader page lives next to the catalogue page, so the link is relative: it follows whatever
+ * address the catalogue is served from (dev server, built front) and never carries a port.
+ */
+export function readerUrl(itemId: string, enabled: string | undefined): string | null {
+  if (!enabled) return null;
+  return `reader.html#item=${encodeURIComponent(itemId)}`;
 }
 
 function matches(item: Item, f: Filters, ignoreCategory = false): boolean {

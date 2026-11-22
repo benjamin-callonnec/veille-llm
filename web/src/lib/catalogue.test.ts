@@ -216,9 +216,16 @@ describe("readerUrl", () => {
     expect(readerUrl("a", undefined)).toBeNull();
     expect(readerUrl("a", "")).toBeNull();
   });
-  test("trims a trailing slash and encodes the id", () => {
-    expect(readerUrl("a b/c", "http://127.0.0.1:8765/")).toBe(
-      "http://127.0.0.1:8765/reader.html#item=a%20b%2Fc",
-    );
+  test("is relative to the catalogue page, so no port is ever baked in", () => {
+    for (const flag of [
+      "http://127.0.0.1:8765/",
+      "http://127.0.0.1:5173",
+      "http://127.0.0.1:8798",
+    ]) {
+      expect(readerUrl("a b/c", flag)).toBe("reader.html#item=a%20b%2Fc");
+    }
+  });
+  test("encodes the id", () => {
+    expect(readerUrl("arxiv:2611.26107", "1")).toBe("reader.html#item=arxiv%3A2611.26107");
   });
 });
