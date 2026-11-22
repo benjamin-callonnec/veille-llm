@@ -44,3 +44,12 @@ test("Copy and Escape", async () => {
   await userEvent.keyboard("{Escape}");
   expect(h.onClose).toHaveBeenCalled();
 });
+
+test("copy is an icon with a name and a tooltip, not a text button", () => {
+  setup();
+  const copy = screen.getByRole("button", { name: "Copy" });
+  expect(copy.textContent).toBe("");
+  expect(copy.getAttribute("title")).toBe("Copy");
+  expect(copy.querySelector("svg")).not.toBeNull();
+  expect(copy.className).toContain("icon-btn");
+});

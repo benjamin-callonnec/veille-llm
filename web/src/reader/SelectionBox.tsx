@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { IconButton } from "../components/Icon";
 import type { Quote } from "./lib/quote";
 
 export const COLORS = ["yellow", "green", "red"] as const;
@@ -45,9 +46,7 @@ export function SelectionBox({ anchor, onAsk, onHighlight, onCopy, onClose }: Pr
             onClick={() => onHighlight(c)}
           />
         ))}
-        <button type="button" onClick={onCopy}>
-          Copy
-        </button>
+        <IconButton icon="copy" label="Copy" onClick={onCopy} />
       </div>
     </div>
   );

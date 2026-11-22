@@ -98,7 +98,7 @@
 .pdf-search button,
 .pdf-outline button,
 .highlights-strip button,
-.selection-box button,
+.selection-box button:not(.icon-btn):not(.dot),
 .questions button {
   border: 1px solid var(--border);
   background: var(--card);
