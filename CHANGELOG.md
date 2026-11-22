@@ -5,6 +5,18 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-22
+
+### Added
+- Reader chat core (#22, part of #17): a streaming chat with the tutor in the right pane. Answers stream token by token (stop and regenerate), your questions about a passage appear as a quote with its page and a "p.N" link back to the PDF, `[p.N]` citations in answers scroll the PDF, Markdown and math are rendered safely (raw HTML as text, only http(s) links, no remote images). Conversations are kept per paper (dropdown in the chat header: new, rename, delete, export to Markdown).
+- A discreet "Thinking" line above each answer (no box, transparent): open while the agent works, folded automatically when the answer starts, reopenable at any time, also from history. It shows the reasoning and, later, the tools with their inputs.
+- Server: conversations and messages (migration 3), a streaming endpoint (SSE) with a pluggable agent runner, and a Claude Agent SDK runner on the subscription (no API key, no tools, summarized thinking, Sonnet by default, `VEILLE_READER_MODEL` to change). The tutor only sees the title, summary and selected passage until #23 adds tools.
+- Panes: no more Hide/Show buttons; a small cross collapses a pane (a thin "+" rail brings it back) and **Alt+1** / **Alt+2** toggle the PDF and the chat.
+- `make reader` now runs with auto-reload (API restarts on Python changes, front hot-reloads with Vite on `127.0.0.1:5173`) and removes `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_USE_BEDROCK` and `CLAUDE_CODE_USE_VERTEX` for its own processes (the reader refuses them otherwise). `make reader-build` keeps the single-process, no-reload mode.
+
+### Fixed
+- Stop keeps the partial answer (the request cancellation used to lose it), a streaming conversation cannot be deleted, and switching conversation during a stream no longer mixes the views. Asking while an answer streams keeps your question box with a notice, long selections are clipped to what the server accepts, and the error banner clears on the next action.
+
 ## [0.11.0] - 2026-11-22
 
 ### Added

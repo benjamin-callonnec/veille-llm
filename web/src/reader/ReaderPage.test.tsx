@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import type { ChatApi, StoredMessage } from "./chat/api";
 import { FakeSource } from "./pdf/fakeSource";
 import { PdfOpenError, type PdfSource } from "./pdf/source";
 import { type ReaderItem, ReaderPage } from "./ReaderPage";
@@ -35,6 +36,52 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const fakeChatApi = (reply = "Streamed answer [p.3]", hold?: Promise<void>) => {
+  const messages: StoredMessage[] = [];
+  const sent: unknown[] = [];
+  const api: ChatApi = {
+    listConversations: async () => [],
+    createConversation: async (_i, title) => ({
+      id: 1,
+      item_id: "a1",
+      title,
+      created_at: "",
+      updated_at: "",
+    }),
+    renameConversation: async () => {},
+    deleteConversation: async () => {},
+    messages: async () => [...messages],
+    exportMarkdown: async () => "",
+    async *send(_i, _id, body) {
+      sent.push(body);
+      messages.push({
+        id: 1,
+        seq: 1,
+        role: "user",
+        kind: body.kind,
+        content:
+          body.kind === "ask_agent"
+            ? { quote: body.quote, question: body.question }
+            : { text: body.text },
+        created_at: "",
+      });
+      yield { type: "text_delta", text: reply };
+      if (hold) await hold;
+      yield { type: "done", duration_ms: 10 };
+      messages.push({
+        id: 2,
+        seq: 2,
+        role: "assistant",
+        kind: "assistant",
+        content: { answer: reply, blocks: [], duration_ms: 10, stopped: false },
+        created_at: "",
+      });
+    },
+    async *regenerate() {},
+  };
+  return { api, sent };
+};
+
 const fakeApi = () => {
   const rows: Highlight[] = [];
   const api: HighlightsApi = {
@@ -50,14 +97,26 @@ const fakeApi = () => {
 };
 
 const setup = (
-  opts: { open?: () => Promise<PdfSource>; load?: () => Promise<ReaderItem> } = {},
+  opts: {
+    open?: () => Promise<PdfSource>;
+    load?: () => Promise<ReaderItem>;
+    chat?: ChatApi;
+    hold?: Promise<void>;
+  } = {},
 ) => {
   const { api, rows } = fakeApi();
+  const chat = fakeChatApi("Streamed answer [p.3]", opts.hold);
   const open = opts.open ?? (async () => new FakeSource({ numPages: 5 }));
   const utils = render(
-    <ReaderPage itemId="a1" load={opts.load ?? (async () => item())} open={open} api={api} />,
+    <ReaderPage
+      itemId="a1"
+      load={opts.load ?? (async () => item())}
+      open={open}
+      api={api}
+      chatApi={opts.chat ?? chat.api}
+    />,
   );
-  return { api, rows, open, ...utils };
+  return { api, rows, open, chatSent: chat.sent, ...utils };
 };
 
 const select = async () => {
@@ -130,8 +189,8 @@ test("a title with markup is rendered as text", async () => {
   expect(document.querySelector("script")).toBeNull();
 });
 
-test("selecting text then asking highlights it in yellow and lists the question", async () => {
-  const { api } = setup();
+test("asking from the selection box highlights in yellow, asks the agent and shows the streamed answer", async () => {
+  const { api, chatSent } = setup();
   await select();
   const field = await screen.findByPlaceholderText("Ask about this passage…");
   await userEvent.type(field, "What does this mean?{Enter}");
@@ -141,8 +200,42 @@ test("selecting text then asking highlights it in yellow and lists the question"
     color: "yellow",
     text: "Text of page 1",
   });
-  expect(await screen.findByText("What does this mean?")).toBeTruthy();
+  await waitFor(() => expect(chatSent).toHaveLength(1));
+  expect(chatSent[0]).toMatchObject({
+    kind: "ask_agent",
+    question: "What does this mean?",
+    quote: { page: 1, text: "Text of page 1" },
+  });
+  expect(await screen.findByText(/Streamed answer/)).toBeTruthy();
   expect(screen.queryByPlaceholderText("Ask about this passage…")).toBeNull();
+});
+
+test("a page citation in the answer and the quote arrow move the PDF", async () => {
+  setup();
+  await select();
+  await userEvent.type(
+    await screen.findByPlaceholderText("Ask about this passage…"),
+    "Where?{Enter}",
+  );
+  await userEvent.click(await screen.findByRole("button", { name: "p.3" }));
+  const field = (await screen.findByRole("spinbutton", { name: "Page" })) as HTMLInputElement;
+  await waitFor(() => expect(field.value).toBe("3"));
+  await userEvent.click(screen.getByRole("button", { name: "Go to page 1" }));
+  await waitFor(() => expect(field.value).toBe("1"));
+});
+
+test("a failing chat API shows an error line and the PDF stays usable", async () => {
+  const broken: ChatApi = {
+    ...fakeChatApi().api,
+    listConversations: async () => {
+      throw new Error("down");
+    },
+  };
+  setup({ chat: broken });
+  expect((await screen.findAllByRole("alert")).some((a) => /chat/i.test(a.textContent ?? ""))).toBe(
+    true,
+  );
+  expect(await screen.findByText("Text of page 1")).toBeTruthy();
 });
 
 test("a colour dot highlights without asking and the highlight survives a remount", async () => {
@@ -159,6 +252,7 @@ test("a colour dot highlights without asking and the highlight survives a remoun
       load={async () => item()}
       open={async () => new FakeSource({ numPages: 5 })}
       api={api}
+      chatApi={fakeChatApi().api}
     />,
   );
   expect(await screen.findByRole("button", { name: "Highlights (1)" })).toBeTruthy();
@@ -226,4 +320,67 @@ test("a very long selection is trimmed so the highlight can be saved", async () 
   await waitFor(() => expect(api.add).toHaveBeenCalled());
   const body = (api.add as ReturnType<typeof vi.fn>).mock.calls[0]?.[1];
   expect(body.text.length).toBeLessThanOrEqual(5000);
+});
+
+const selectPage = async (text: string) => {
+  Range.prototype.getClientRects = () =>
+    [{ x: 160, y: 130, width: 100, height: 20 }] as unknown as DOMRectList;
+  const span = (await screen.findAllByText(text))[0] as HTMLElement;
+  vi.spyOn(span.closest("[data-page]") as Element, "getBoundingClientRect").mockReturnValue({
+    x: 100,
+    y: 100,
+    width: 600,
+    height: 800,
+    left: 100,
+    top: 100,
+    right: 700,
+    bottom: 900,
+    toJSON: () => ({}),
+  });
+  const range = document.createRange();
+  range.selectNodeContents(span);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+  fireEvent.mouseUp(screen.getByTestId("pdf-scroll"));
+};
+
+test("asking about a very long selection sends a quote the server accepts", async () => {
+  const { chatSent } = setup({
+    open: async () => new FakeSource({ numPages: 5, text: () => "y".repeat(6000) }),
+  });
+  await selectPage("y".repeat(6000));
+  await userEvent.type(
+    await screen.findByPlaceholderText("Ask about this passage…"),
+    "Why?{Enter}",
+  );
+  await waitFor(() => expect(chatSent).toHaveLength(1));
+  const quote = (chatSent[0] as { quote: { text: string; rects: unknown[] } }).quote;
+  expect(quote.text.length).toBeLessThanOrEqual(5000);
+  expect(quote.rects.length).toBeLessThanOrEqual(200);
+});
+
+test("asking while an answer is streaming keeps the box and says to wait", async () => {
+  let release: () => void = () => {};
+  const hold = new Promise<void>((r) => {
+    release = r;
+  });
+  const { chatSent, api } = setup({ hold });
+  await select();
+  await userEvent.type(
+    await screen.findByPlaceholderText("Ask about this passage…"),
+    "First{Enter}",
+  );
+  await waitFor(() => expect(chatSent).toHaveLength(1));
+  await selectPage("Text of page 1");
+  await userEvent.type(
+    await screen.findByPlaceholderText("Ask about this passage…"),
+    "Second{Enter}",
+  );
+  expect(screen.getByPlaceholderText("Ask about this passage…")).toBeTruthy();
+  expect(
+    (await screen.findAllByRole("status")).some((s) => /wait/i.test(s.textContent ?? "")),
+  ).toBe(true);
+  expect(chatSent).toHaveLength(1);
+  expect(api.add).toHaveBeenCalledTimes(1); // no highlight for a question that was not sent
+  release();
 });

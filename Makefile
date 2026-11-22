@@ -1,4 +1,4 @@
-.PHONY: reader subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
+.PHONY: reader reader-build subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
 
 install:
 	uv sync --locked
@@ -32,11 +32,26 @@ serve: web-build
 	cd web/dist && python3 -m http.server 8000
 
 # Local paper reader (#17): never built by CI or published on Pages.
-READER_URL ?= http://127.0.0.1:8765
+# `make reader` runs both servers with auto-reload: the API restarts when a Python file changes and
+# the front hot-reloads (Vite). Open the "Read" links from http://127.0.0.1:5173.
+# The reader answers on the Claude subscription: variables that would bill per token (or send the
+# calls to another provider) are removed for these processes only.
+READER_NO_BILLING = -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL \
+	-u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_VERTEX
+READER_FRONT_URL ?= http://127.0.0.1:5173
 reader:
 	@test -f build/catalogue.json || { echo "build/catalogue.json missing: run veille-core first"; exit 1; }
-	cd web && VITE_READER_URL=$(READER_URL) npx vite build --mode reader
-	uv run veille-reader serve
+	@echo "Reader: open $(READER_FRONT_URL)  (API on http://127.0.0.1:8765, Ctrl+C stops both)"
+	@trap 'kill 0' INT TERM EXIT; \
+	(cd web && VITE_READER_URL=$(READER_FRONT_URL) npx vite --mode reader --host 127.0.0.1 --port 5173 --strictPort) & \
+	env $(READER_NO_BILLING) uv run veille-reader serve --reload & \
+	wait
+
+# One process, no auto-reload: builds the front once and serves it from the API server.
+reader-build:
+	@test -f build/catalogue.json || { echo "build/catalogue.json missing: run veille-core first"; exit 1; }
+	cd web && VITE_READER_URL=http://127.0.0.1:8765 npx vite build --mode reader
+	env $(READER_NO_BILLING) uv run veille-reader serve
 
 # Subscribers: local subscribers.txt (gitignored), pushed to the SUBSCRIBERS secret.
 subs-add:

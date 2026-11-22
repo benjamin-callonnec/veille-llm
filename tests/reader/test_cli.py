@@ -38,3 +38,49 @@ def test_missing_catalogue_exits_with_message(tmp_path, capsys):
     )
     assert code == 1
     assert "catalogue" in capsys.readouterr().err
+
+
+def test_reload_flag_defaults_off_and_is_a_flag():
+    assert cli.parse_args(["serve"]).reload is False
+    assert cli.parse_args(["serve", "--reload"]).reload is True
+
+
+def test_reload_runs_an_app_factory_that_uvicorn_can_restart(tmp_path):
+    cat = tmp_path / "c.json"
+    cat.write_text('{"items": []}', encoding="utf-8")
+    with patch.object(cli.uvicorn, "run") as run:
+        code = cli.main(
+            ["serve", "--reload", "--data-dir", str(tmp_path / "d"), "--catalogue", str(cat)]
+        )
+    assert code == 0
+    assert run.call_args.args[0] == "veille_reader.cli:reload_app"
+    kwargs = run.call_args.kwargs
+    assert kwargs["factory"] is True and kwargs["reload"] is True
+    assert kwargs["host"] == "127.0.0.1"
+    assert str(cli.ROOT / "src") in kwargs["reload_dirs"]
+
+
+def test_reload_app_builds_the_app_from_the_environment(tmp_path, monkeypatch):
+    cat = tmp_path / "c.json"
+    cat.write_text('{"items": []}', encoding="utf-8")
+    monkeypatch.setenv("VEILLE_READER_DATA_DIR", str(tmp_path / "d"))
+    monkeypatch.setenv("VEILLE_READER_CATALOGUE", str(cat))
+    monkeypatch.setenv("VEILLE_READER_STATIC", "")
+    app = cli.reload_app()
+    assert any(r.path == "/api/health" for r in app.routes)
+
+
+def test_reload_mode_allows_the_vite_dev_origin(tmp_path, monkeypatch):
+    cat = tmp_path / "c.json"
+    cat.write_text('{"items": [{"id": "a", "title": "t", "url": "u"}]}', encoding="utf-8")
+    monkeypatch.setenv("VEILLE_READER_DATA_DIR", str(tmp_path / "d"))
+    monkeypatch.setenv("VEILLE_READER_CATALOGUE", str(cat))
+    monkeypatch.setenv("VEILLE_READER_STATIC", "")
+    monkeypatch.setenv("VEILLE_READER_DEV_ORIGINS", "http://127.0.0.1:5173")
+    from fastapi.testclient import TestClient
+
+    client = TestClient(cli.reload_app(), base_url="http://127.0.0.1:8765")
+    response = client.post(
+        "/api/items/a/conversations", json={}, headers={"Origin": "http://127.0.0.1:5173"}
+    )
+    assert response.status_code == 201

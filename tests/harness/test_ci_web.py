@@ -46,4 +46,20 @@ def test_default_web_build_leaves_the_reader_out(tmp_path):
     assert (tmp_path / "dist" / "index.html").is_file()
     assert not (tmp_path / "dist" / "reader.html").exists()
     names = [p.name for p in (tmp_path / "dist").rglob("*") if p.is_file()]
-    assert not [n for n in names if "pdf" in n.lower() or "reader" in n.lower()], names
+    assert not [
+        n for n in names if any(w in n.lower() for w in ("pdf", "reader", "katex", "markdown"))
+    ], names
+
+
+def test_make_reader_reloads_on_change_and_never_bills_per_token():
+    makefile = (Path(__file__).resolve().parents[2] / "Makefile").read_text()
+    recipe = makefile.split("\nreader:")[1].split("\n\n")[0]
+    assert "--reload" in recipe and "vite" in recipe
+    for name in (
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_BASE_URL",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_VERTEX",
+    ):
+        assert f"-u {name}" in makefile, name

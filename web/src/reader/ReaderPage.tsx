@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
+import { type ChatApi, httpChatApi } from "./chat/api";
+import { ChatPane } from "./chat/ChatPane";
+import { useChat } from "./chat/useChat";
 import { HighlightsStrip } from "./HighlightsStrip";
 import { parseHash, writeHash } from "./lib/anchor";
 import { PaneLayout } from "./PaneLayout";
 import { PdfViewer, type Selection } from "./PdfViewer";
 import { openPdf } from "./pdf/pdfjsSource";
 import { PdfOpenError, type PdfSource } from "./pdf/source";
-import { type AskedQuestion, QuestionList } from "./QuestionList";
 import { SelectionBox } from "./SelectionBox";
 import { type HighlightsApi, httpApi, useHighlights } from "./useHighlights";
 
@@ -24,6 +26,8 @@ export async function loadItem(id: string): Promise<ReaderItem> {
   return (await response.json()) as ReaderItem;
 }
 
+const MAX_QUOTE_TEXT = 5000;
+const MAX_QUOTE_RECTS = 200;
 const MAX_HIGHLIGHT_TEXT = 5000;
 const clip = (text: string) => text.slice(0, MAX_HIGHLIGHT_TEXT);
 
@@ -40,9 +44,16 @@ interface Props {
   load?: (id: string) => Promise<ReaderItem>;
   open?: (url: string) => Promise<PdfSource>;
   api?: HighlightsApi;
+  chatApi?: ChatApi;
 }
 
-export function ReaderPage({ itemId, load = loadItem, open = openPdf, api = httpApi }: Props) {
+export function ReaderPage({
+  itemId,
+  load = loadItem,
+  open = openPdf,
+  api = httpApi,
+  chatApi = httpChatApi,
+}: Props) {
   const [item, setItem] = useState<ReaderItem | null>(null);
   const [error, setError] = useState<string | null>(
     itemId ? null : "This item cannot be opened in the reader.",
@@ -50,8 +61,9 @@ export function ReaderPage({ itemId, load = loadItem, open = openPdf, api = http
   const [source, setSource] = useState<PdfSource | null>(null);
   const [page, setPage] = useState(() => parseHash(window.location.hash).page ?? 1);
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [questions, setQuestions] = useState<AskedQuestion[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
   const { highlights, add, remove, error: saveError } = useHighlights(itemId, api);
+  const chat = useChat(itemId, chatApi);
 
   useEffect(() => {
     if (!itemId) return;
@@ -127,24 +139,42 @@ export function ReaderPage({ itemId, load = loadItem, open = openPdf, api = http
           <strong>{item.hook}</strong>
         </p>
       </header>
+      {notice && (
+        <p role="status" className="muted">
+          {notice}
+        </p>
+      )}
       {saveError && (
         <p role="status" className="muted">
           The highlight could not be saved.
         </p>
       )}
-      <PaneLayout pdf={pdfPane} chat={<QuestionList questions={questions} onGo={changePage} />} />
+      <PaneLayout pdf={pdfPane} chat={<ChatPane chat={chat} onGo={changePage} />} />
       {selection && (
         <SelectionBox
           quote={selection.quote}
           anchor={selection.anchor}
           onAsk={(question) => {
+            if (chat.streaming) {
+              setNotice("Wait for the current answer to finish before asking again.");
+              return;
+            }
+            setNotice(null);
             void add(
               selection.quote.page,
               "yellow",
               clip(selection.quote.text),
               selection.quote.rects,
             );
-            setQuestions((q) => [...q, { quote: selection.quote, question }]);
+            void chat.send({
+              kind: "ask_agent",
+              quote: {
+                text: selection.quote.text.slice(0, MAX_QUOTE_TEXT),
+                page: selection.quote.page,
+                rects: selection.quote.rects.slice(0, MAX_QUOTE_RECTS),
+              },
+              question,
+            });
             closeBox();
           }}
           onHighlight={(color) => {

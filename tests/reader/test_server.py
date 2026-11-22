@@ -228,3 +228,17 @@ def test_delete_cannot_reach_another_items_highlight(client):
     hid = client.post("/api/items/a1/highlights", json=HL).json()["id"]
     assert client.delete(f"/api/items/b1/highlights/{hid}").status_code == 404
     assert len(client.get("/api/items/a1/highlights").json()) == 1
+
+
+def test_dev_front_origin_is_accepted_only_when_configured(tmp_path, catalogue):
+    plain = TestClient(create_app(tmp_path / "d1", catalogue), base_url="http://127.0.0.1:8765")
+    dev = TestClient(
+        create_app(tmp_path / "d2", catalogue, dev_origins={"http://127.0.0.1:5173"}),
+        base_url="http://127.0.0.1:8765",
+    )
+    body = {"title": "t"}
+    headers = {"Origin": "http://127.0.0.1:5173"}
+    assert plain.post("/api/items/a1/conversations", json=body, headers=headers).status_code == 403
+    assert dev.post("/api/items/a1/conversations", json=body, headers=headers).status_code == 201
+    other = {"Origin": "https://evil.example"}
+    assert dev.post("/api/items/a1/conversations", json=body, headers=other).status_code == 403

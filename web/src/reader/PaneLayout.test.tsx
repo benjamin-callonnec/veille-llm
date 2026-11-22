@@ -20,18 +20,18 @@ test("shows both panes at 60 percent", () => {
   expect(sep().getAttribute("aria-valuenow")).toBe("60");
 });
 
-test("hiding the chat leaves the PDF and the button flips", async () => {
+test("collapsing the chat leaves the PDF and a discreet control to expand it", async () => {
   setup(null);
-  await userEvent.click(screen.getByRole("button", { name: "Hide chat" }));
+  await userEvent.click(screen.getByRole("button", { name: "Collapse chat" }));
   expect(screen.queryByText("Chat pane")).toBeNull();
   expect(screen.getByText("PDF pane")).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Show chat" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Expand chat" })).toBeTruthy();
 });
 
-test("hiding the PDF while the chat is hidden shows the chat again", async () => {
+test("collapsing the PDF while the chat is collapsed shows the chat again", async () => {
   setup(null);
-  await userEvent.click(screen.getByRole("button", { name: "Hide chat" }));
-  await userEvent.click(screen.getByRole("button", { name: "Hide PDF" }));
+  await userEvent.click(screen.getByRole("button", { name: "Collapse chat" }));
+  await userEvent.click(screen.getByRole("button", { name: "Collapse PDF" }));
   expect(screen.getByText("Chat pane")).toBeTruthy();
   expect(screen.queryByText("PDF pane")).toBeNull();
 });
@@ -86,7 +86,7 @@ test("restores and saves the layout through storage", async () => {
   } as unknown as Storage;
   setup(storage);
   expect(sep().getAttribute("aria-valuenow")).toBe("40");
-  await userEvent.click(screen.getByRole("button", { name: "Hide chat" }));
+  await userEvent.click(screen.getByRole("button", { name: "Collapse chat" }));
   expect(JSON.parse(data["veille-reader-panes"] ?? "{}").chatCollapsed).toBe(true);
 });
 
@@ -100,6 +100,60 @@ test("works when storage throws", async () => {
     },
   } as unknown as Storage;
   setup(storage);
-  await userEvent.click(screen.getByRole("button", { name: "Hide chat" }));
+  await userEvent.click(screen.getByRole("button", { name: "Collapse chat" }));
   expect(screen.getByText("PDF pane")).toBeTruthy();
+});
+
+test("there are no Hide/Show text buttons any more, only discreet cross controls", () => {
+  setup(null);
+  expect(screen.queryByRole("button", { name: /^(Hide|Show) / })).toBeNull();
+  const cross = screen.getByRole("button", { name: "Collapse chat" });
+  expect(cross.textContent).toBe("×");
+});
+
+test("a collapsed pane leaves a thin rail with a control to expand it", async () => {
+  setup(null);
+  await userEvent.click(screen.getByRole("button", { name: "Collapse PDF" }));
+  expect(screen.queryByText("PDF pane")).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "Expand PDF" }));
+  expect(screen.getByText("PDF pane")).toBeTruthy();
+  expect(screen.getByText("Chat pane")).toBeTruthy();
+});
+
+test("Alt+1 toggles the PDF and Alt+2 toggles the chat", async () => {
+  setup(null);
+  await userEvent.keyboard("{Alt>}2{/Alt}");
+  expect(screen.queryByText("Chat pane")).toBeNull();
+  await userEvent.keyboard("{Alt>}2{/Alt}");
+  expect(screen.getByText("Chat pane")).toBeTruthy();
+  await userEvent.keyboard("{Alt>}1{/Alt}");
+  expect(screen.queryByText("PDF pane")).toBeNull();
+  await userEvent.keyboard("{Alt>}1{/Alt}");
+  expect(screen.getByText("PDF pane")).toBeTruthy();
+});
+
+test("the shortcuts never collapse both panes", async () => {
+  setup(null);
+  await userEvent.keyboard("{Alt>}2{/Alt}");
+  await userEvent.keyboard("{Alt>}1{/Alt}");
+  expect(screen.getByText("Chat pane")).toBeTruthy();
+  expect(screen.queryByText("PDF pane")).toBeNull();
+});
+
+test("plain digits and other modifiers do not toggle anything", async () => {
+  setup(null);
+  await userEvent.keyboard("1");
+  await userEvent.keyboard("{Control>}1{/Control}");
+  expect(screen.getByText("PDF pane")).toBeTruthy();
+  expect(screen.getByText("Chat pane")).toBeTruthy();
+});
+
+test("controls say which shortcut they have", () => {
+  setup(null);
+  expect(screen.getByRole("button", { name: "Collapse PDF" }).getAttribute("title")).toMatch(
+    /Alt\+1/,
+  );
+  expect(screen.getByRole("button", { name: "Collapse chat" }).getAttribute("title")).toMatch(
+    /Alt\+2/,
+  );
 });
