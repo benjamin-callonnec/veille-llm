@@ -13,7 +13,7 @@ def test_parse_handles_comments_quotes_export_and_blank_lines():
 CLAUDE_CODE_OAUTH_TOKEN={TOKEN}
 export OTHER="quoted value"
 SINGLE='single'
-  SPACED = spaced value
+  SPACED = spaced value{TRAILING}
 EMPTY=
 not a pair
 =novalue
