@@ -16,6 +16,7 @@ from veille_reader import events
 from veille_reader.chat import stream_turn
 from veille_reader.compaction import Summarizer
 from veille_reader.events import AgentRunner
+from veille_reader.images import IMAGE_ID, ImageError, decode_images
 from veille_reader.limits import AgentLimits
 from veille_reader.memory import MAX_NOTES, StoreMemory
 from veille_reader.paper import PaperError, load_paper
@@ -44,17 +45,25 @@ class QuoteIn(BaseModel):
     rects: list[list[float]] = Field(default_factory=list, max_length=200)
 
 
+class ImageIn(BaseModel):
+    name: str | None = Field(default=None, max_length=200)
+    data: str = Field(max_length=8_000_000)  # base64, checked again once decoded
+
+
 class MessageIn(BaseModel):
     kind: Literal["text", "ask_agent"]
     text: str | None = Field(default=None, max_length=8000)
     raise_limit: bool = False
     quote: QuoteIn | None = None
     question: str | None = Field(default=None, max_length=8000)
+    images: list[ImageIn] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def complete(self) -> Self:
-        if self.kind == "text" and not (self.text or "").strip():
+        if self.kind == "text" and not ((self.text or "").strip() or self.images):
             raise ValueError("text is required")
+        if self.kind == "ask_agent" and self.images:
+            raise ValueError("images go with a plain message")
         if self.kind == "ask_agent" and not (self.quote and (self.question or "").strip()):
             raise ValueError("quote and question are required")
         return self
@@ -172,6 +181,9 @@ def create_app(
             "has_pdf": arxiv_id(str(found.get("url", ""))) is not None,
         }
 
+    def unknown_item() -> JSONResponse:
+        return JSONResponse({"reason": "unknown_item"}, status_code=404)
+
     @app.get("/api/items/{item_id}/pdf")
     def item_pdf(item_id: str):  # noqa: ANN202
         found = current_items().get(item_id)
@@ -183,6 +195,24 @@ def create_app(
             status = 404 if exc.reason == "no_pdf" else 502
             return JSONResponse({"reason": exc.reason}, status_code=status)
         return FileResponse(path, media_type="application/pdf")
+
+    @app.get("/api/items/{item_id}/images/{image_id}")
+    def item_image(item_id: str, image_id: str):  # noqa: ANN202
+        if item_id not in current_items() or not IMAGE_ID.fullmatch(image_id):
+            return unknown_item()
+        stored = store.image(item_id, image_id)
+        if stored is None:
+            return unknown_item()
+        data, mime = stored
+        return Response(
+            data,
+            media_type=mime,
+            headers={
+                "X-Content-Type-Options": "nosniff",
+                "Content-Disposition": "inline",
+                "Cache-Control": "private, max-age=31536000, immutable",
+            },
+        )
 
     @app.get("/api/items/{item_id}/highlights")
     def list_highlights(item_id: str):  # noqa: ANN202
@@ -309,7 +339,19 @@ def create_app(
         if body.kind == "ask_agent":
             content = {"quote": body.quote.model_dump(), "question": body.question}
         else:
-            content = {"text": body.text}
+            content = {"text": body.text or ""}
+            try:
+                images = decode_images([i.model_dump() for i in body.images])
+            except ImageError as exc:
+                status = 413 if exc.reason == "image_too_large" else 400
+                return JSONResponse({"reason": exc.reason, "message": str(exc)}, status_code=status)
+            if images:
+                for image in images:
+                    store.save_image(item_id, image)
+                content["images"] = [
+                    {"id": i.id, "mime": i.mime, **({"name": i.name} if i.name else {})}
+                    for i in images
+                ]
         return await run_turn(item_id, cid, body.kind, content, body.raise_limit)
 
     @app.post("/api/items/{item_id}/conversations/{cid}/regenerate")

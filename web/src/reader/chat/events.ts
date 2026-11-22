@@ -44,8 +44,32 @@ export function toCitations(raw: unknown): Citation[] {
   return out;
 }
 
+export const MAX_SUGGESTIONS = 3;
+export const MAX_SUGGESTION_LENGTH = 120;
+
+/** Keep the plain, short follow-up questions (the server checks too; this is a second guard). */
+export function toSuggestions(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const text = item.trim();
+    if (
+      !text ||
+      text.length > MAX_SUGGESTION_LENGTH ||
+      /[<>`]/.test(text) ||
+      [...text].some((c) => c.charCodeAt(0) < 32)
+    )
+      continue;
+    if (!out.includes(text)) out.push(text);
+    if (out.length === MAX_SUGGESTIONS) break;
+  }
+  return out;
+}
+
 export type ChatEvent =
   | { type: "citations"; items: Citation[] }
+  | { type: "suggestions"; items: string[] }
   | { type: "thinking_delta"; text: string }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; id: string; summary: string; is_error: boolean }
@@ -73,6 +97,8 @@ export function toEvent(raw: unknown): ChatEvent | null {
         : null;
     case "citations":
       return Array.isArray(r.items) ? { type: "citations", items: toCitations(r.items) } : null;
+    case "suggestions":
+      return Array.isArray(r.items) ? { type: "suggestions", items: toSuggestions(r.items) } : null;
     case "done":
       return typeof r.duration_ms === "number"
         ? { type: "done", duration_ms: r.duration_ms }

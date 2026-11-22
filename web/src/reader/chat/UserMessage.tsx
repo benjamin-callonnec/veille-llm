@@ -1,22 +1,40 @@
 import { IconButton } from "../../components/Icon";
 import { formatDay } from "../../lib/time";
-import type { StoredMessage } from "./api";
+import type { ImageRef, StoredMessage } from "./api";
 import { CopyButton } from "./CopyButton";
 
 interface Props {
   message: StoredMessage;
+  /** The paper, to find the images of the message. */
+  itemId?: string;
   onGo(page: number): void;
   /** Ask for another answer to this question (only offered on the last one). */
   onRetry?(): void;
 }
 
+const MIMES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
+const imageUrl = (itemId: string, id: string) =>
+  `/api/items/${encodeURIComponent(itemId)}/images/${id}`;
+
+/** Only what the server writes (a hex id, an image type) or what this page just made (data:). */
+function isImage(r: unknown): r is ImageRef {
+  if (typeof r !== "object" || r === null) return false;
+  const i = r as Record<string, unknown>;
+  if (typeof i.mime !== "string" || !MIMES.includes(i.mime)) return false;
+  if (typeof i.url === "string") return i.url.startsWith(`data:${i.mime};base64,`);
+  return typeof i.id === "string" && /^[0-9a-f]{64}$/.test(i.id);
+}
+
 /** Your question in a quiet bubble; its day, retry and copy appear as icons when you hover it. */
-export function UserMessage({ message, onGo, onRetry }: Props) {
+export function UserMessage({ message, itemId = "", onGo, onRetry }: Props) {
   const content = message.content as {
     text?: string;
     question?: string;
     quote?: { text: string; page: number };
+    images?: ImageRef[];
   };
+  const images = (content.images ?? []).filter(isImage);
   const text = (message.kind === "ask_agent" ? content.question : content.text) ?? "";
   const day = formatDay(message.created_at);
   return (
@@ -34,7 +52,27 @@ export function UserMessage({ message, onGo, onRetry }: Props) {
             </button>
           </blockquote>
         )}
-        <p>{text}</p>
+        {images.length > 0 && (
+          <ul className="message-images">
+            {images.map((image, i) => {
+              const href = image.url ?? imageUrl(itemId, image.id);
+              const picture = <img src={href} alt={image.name ?? `Attached image ${i + 1}`} />;
+              return (
+                // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list, the same image can repeat
+                <li key={`${image.id}-${i}`}>
+                  {image.url ? (
+                    picture
+                  ) : (
+                    <a href={href} target="_blank" rel="noopener noreferrer">
+                      {picture}
+                    </a>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {text && <p>{text}</p>}
       </div>
       <div className="msg-actions">
         {day && <span className="msg-time">{day}</span>}

@@ -12,7 +12,8 @@ export type IconName =
   | "download"
   | "trash"
   | "chevron"
-  | "compose";
+  | "compose"
+  | "close";
 
 /** One line style for every icon of the app: 24px grid, round caps, drawn in the current colour. */
 const SHAPES: Record<IconName, ReactNode> = {
@@ -36,6 +37,7 @@ const SHAPES: Record<IconName, ReactNode> = {
       <path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15" />
     </>
   ),
+  close: <path d="M6 6l12 12M18 6L6 18" />,
   check: <path d="M5 12.5l4.5 4.5L19 7" />,
   retry: (
     <>

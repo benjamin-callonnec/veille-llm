@@ -161,7 +161,7 @@ def test_no_tools_are_allowed_and_nothing_loads_from_settings(monkeypatch):
     assert options.include_partial_messages is True
     assert options.thinking == {"type": "adaptive", "display": "summarized"}
     assert options.setting_sources == []
-    assert options.system_prompt == SYSTEM_PROMPT
+    assert options.system_prompt.startswith(SYSTEM_PROMPT)
 
 
 def test_a_billing_variable_is_refused_without_calling_the_sdk(monkeypatch):
@@ -298,7 +298,7 @@ def test_the_tutor_gets_exactly_the_paper_tools_and_no_builtin_ones(monkeypatch)
         "mcp__paper__session_memory",
     ]
     assert options.tools == [] and options.strict_mcp_config is True
-    assert options.system_prompt == SYSTEM_PROMPT_TOOLS
+    assert options.system_prompt.startswith(SYSTEM_PROMPT_TOOLS)
     limits = AgentLimits()
     assert options.max_turns == limits.max_turns == 8
     assert options.max_budget_usd == limits.max_message_usd == 0.5
@@ -310,7 +310,7 @@ def test_without_paper_tools_nothing_changes(monkeypatch):
     collect(request(), query)
     options = query.calls[0].options
     assert not options.mcp_servers and options.allowed_tools == []
-    assert options.system_prompt == SYSTEM_PROMPT and options.max_turns == 1
+    assert options.system_prompt.startswith(SYSTEM_PROMPT) and options.max_turns == 1
 
 
 def test_custom_agent_limits_reach_the_sdk(monkeypatch):

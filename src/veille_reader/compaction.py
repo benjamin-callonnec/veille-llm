@@ -19,6 +19,7 @@ MIN_OLD_CHARS = 1_000  # not worth a summary below this much old text
 SUMMARY_TIMEOUT = 60.0  # seconds
 
 Summarizer = Callable[[list[dict], "str | None"], Awaitable[str]]
+IMAGE_NOTE = "[image attached]"
 _ROLES = ("user", "assistant")
 
 
@@ -32,7 +33,10 @@ def turn_of(message: dict) -> dict:
             "text": content.get("question", ""),
             "quote": content.get("quote"),
         }
-    return {"role": "user", "text": content.get("text", "")}
+    text = content.get("text", "")
+    # the bytes are sent for the question being asked only; later turns and summaries get a note
+    notes = " ".join([IMAGE_NOTE] * len(content.get("images") or []))
+    return {"role": "user", "text": f"{text} {notes}".strip()}
 
 
 def _latest(messages: list[dict]) -> dict | None:

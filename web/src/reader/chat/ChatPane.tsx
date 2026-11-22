@@ -1,8 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IconButton } from "../../components/Icon";
+import { placeholders } from "../lib/placeholders";
 import { AssistantMessage, StoredAssistantMessage } from "./AssistantMessage";
+import { toPayload } from "./attachments";
 import { Composer } from "./Composer";
 import { ConversationMenu } from "./ConversationMenu";
+import { toSuggestions } from "./events";
 import { UserMessage } from "./UserMessage";
 import type { useChat } from "./useChat";
 
@@ -35,6 +38,23 @@ export function ChatPane({
     const el = feed.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [chat.messages.length, chat.assistant?.answer, chat.assistant?.blocks.length]);
+
+  const [dirty, setDirty] = useState(false);
+  const [fill, setFill] = useState<{ text: string; n: number } | null>(null);
+  const send = async (text: string, files: File[] = []) => {
+    const images = await Promise.all(files.map(toPayload));
+    await chat.send({ kind: "text", text, ...(images.length ? { images } : {}) });
+  };
+  // the follow-up questions of the last answer, until you type or send something
+  const last = chat.messages.at(-1);
+  const suggestions =
+    last?.role === "assistant" && !chat.streaming && !dirty
+      ? toSuggestions(last.content.suggestions)
+      : [];
+  const pick = (prompt: string) => {
+    if (placeholders(prompt).length > 0) setFill({ text: prompt, n: (fill?.n ?? 0) + 1 });
+    else void send(prompt);
+  };
 
   const lastUser = chat.messages.map((m) => m.role).lastIndexOf("user");
   return (
@@ -78,6 +98,7 @@ export function ChatPane({
             <UserMessage
               key={`${m.id}-${m.seq}`}
               message={m}
+              itemId={chat.itemId}
               onGo={onGo}
               onRetry={i === lastUser && !chat.streaming ? chat.regenerate : undefined}
             />
@@ -97,6 +118,17 @@ export function ChatPane({
             onCite={onCite}
           />
         )}
+        {suggestions.length > 0 && (
+          <ul className="suggestions" aria-label="Suggested questions">
+            {suggestions.map((q) => (
+              <li key={q}>
+                <button type="button" className="suggestion" onClick={() => pick(q)}>
+                  {q}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         {chat.error && (
           <p role="alert" className="chat-error">
             Something went wrong with the chat.
@@ -107,7 +139,10 @@ export function ChatPane({
         streaming={chat.streaming}
         model={model}
         onStop={chat.stop}
-        onSend={(text) => chat.send({ kind: "text", text })}
+        draftKey={chat.current ? `c${chat.current.id}` : "new"}
+        fill={fill}
+        onDirty={setDirty}
+        onSend={(text, files) => void send(text, files)}
       />
     </div>
   );

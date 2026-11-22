@@ -90,3 +90,29 @@ test("a citations event keeps well-formed items and drops malformed ones", async
 test("a citations event without a list is dropped", async () => {
   expect(await collect(chunks(line({ type: "citations", items: "x" })))).toEqual([]);
 });
+
+test("a suggestions event keeps three plain, short questions at most", async () => {
+  const out = await collect(
+    chunks(
+      line({
+        type: "suggestions",
+        items: [
+          "Why does it work?",
+          "<script>alert(1)</script>",
+          "x".repeat(121),
+          "`code`",
+          7,
+          "Why does it work?",
+          "Second?",
+          "Third?",
+          "Fourth?",
+        ],
+      }),
+    ),
+  );
+  expect(out).toEqual([{ type: "suggestions", items: ["Why does it work?", "Second?", "Third?"] }]);
+});
+
+test("a suggestions event without a list is dropped", async () => {
+  expect(await collect(chunks(line({ type: "suggestions", items: "x" })))).toEqual([]);
+});

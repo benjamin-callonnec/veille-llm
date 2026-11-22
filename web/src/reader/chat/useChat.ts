@@ -141,7 +141,19 @@ export function useChat(
           kind: body.kind,
           content:
             body.kind === "text"
-              ? { text: body.text }
+              ? {
+                  text: body.text,
+                  ...(body.images?.length
+                    ? {
+                        images: body.images.map((i) => ({
+                          id: "",
+                          mime: i.mime,
+                          name: i.name,
+                          url: `data:${i.mime};base64,${i.data}`,
+                        })),
+                      }
+                    : {}),
+                }
               : { quote: body.quote, question: body.question },
           created_at: "",
         },
@@ -240,6 +252,7 @@ export function useChat(
     streaming,
     error,
     ready,
+    itemId,
     send,
     stop,
     regenerate,
