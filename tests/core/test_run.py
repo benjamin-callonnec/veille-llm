@@ -207,8 +207,8 @@ def test_a_capped_backlog_still_leaves_budget_for_hooks(tmp_path):
     store, out = Store(":memory:"), tmp_path / "c.json"
     items = [news(f"{n:03d}") for n in range(15 * 6)]  # 6 classification batches
     first = run(store, out, items, Llm(), max_batches=3)
-    assert first.classified == 15 * 3 and first.enriched == 0  # nothing to enrich yet: all spent
-    # Interesting items now wait for hooks: next run must spend part of its budget on them.
+    assert first.classified == 15 * 2
+    # Items still wait for classification: the next run must keep spending on both.
     second_llm = Llm()
     second = run(store, out, items, second_llm, max_batches=3)
     assert second.enriched > 0 and second.classified > 0
@@ -229,3 +229,13 @@ def test_run_fails_visibly_when_every_batch_is_rejected(tmp_path):
 
     report = run(Store(":memory:"), tmp_path / "c.json", [news("a")], Garbage())
     assert report.classified == 0 and report.skipped_batches == 1 and report.stopped
+
+
+def test_first_capped_run_already_publishes_something(tmp_path):
+    # Real first run: 300 items classified, 0 hooks, empty catalogue. A share of the budget is
+    # always kept for hooks, even when no hook is waiting yet.
+    store, out = Store(":memory:"), tmp_path / "c.json"
+    items = [news(f"{n:03d}") for n in range(15 * 6)]
+    report = run(store, out, items, Llm(), max_batches=3)
+    assert report.classified == 15 * 2 and report.enriched > 0
+    assert json.loads(out.read_text())["items"]
