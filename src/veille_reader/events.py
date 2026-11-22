@@ -2,6 +2,9 @@
 
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
+from typing import Any
+
+from veille_reader.limits import AgentLimits
 
 
 def thinking_delta(text: str) -> dict:
@@ -20,8 +23,11 @@ def text_delta(text: str) -> dict:
     return {"type": "text_delta", "text": text}
 
 
-def done(duration_ms: int) -> dict:
-    return {"type": "done", "duration_ms": duration_ms}
+def done(duration_ms: int, usage: dict | None = None) -> dict:
+    event = {"type": "done", "duration_ms": duration_ms}
+    if usage:
+        event["usage"] = usage
+    return event
 
 
 def error(kind: str, message: str) -> dict:
@@ -34,6 +40,12 @@ class RunRequest:
     question: str
     history: list[dict] = field(default_factory=list)
     quote: dict | None = None
+    # the tutor's tools for this paper (a PaperTools) and the limits of this answer; with no tools
+    # the agent answers from the summary alone
+    paper_tools: Any = None
+    notes: list[str] = field(default_factory=list)
+    tool_limits: Any = None
+    agent_limits: AgentLimits | None = None
 
 
 AgentRunner = Callable[[RunRequest], AsyncIterator[dict]]
