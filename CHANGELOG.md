@@ -5,6 +5,9 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+### Added
+- `--max-batches` (default 20) caps LLM batches per run, shared by classification and hooks; the rest resumes on the next run.
+
 ## [0.2.0] - 2026-11-22
 
 ### Added

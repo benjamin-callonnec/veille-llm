@@ -57,6 +57,7 @@ class EnrichOutcome:
     skipped_batches: int = 0
     skip_reasons: list[str] = field(default_factory=list)
     stopped: str | None = None
+    capped: bool = False
 
 
 CATEGORY_MAX = 40
@@ -96,11 +97,18 @@ def hook_is_safe(hook: str) -> bool:
 
 
 async def enrich_pending(
-    store: Store, *, runner: Runner | None = None, model: str = DEFAULT_MODEL
+    store: Store,
+    *,
+    runner: Runner | None = None,
+    model: str = DEFAULT_MODEL,
+    max_batches: int | None = None,
 ) -> EnrichOutcome:
     outcome = EnrichOutcome()
     pending = store.pending_enrichment()
     for start in range(0, len(pending), BATCH_SIZE):
+        if max_batches is not None and start // BATCH_SIZE >= max_batches:
+            outcome.capped = True
+            break
         batch = pending[start : start + BATCH_SIZE]
         known = store.category_names()
         data = {
