@@ -6,6 +6,7 @@ import {
   DEFAULT_FILTERS,
   type Item,
   parseCatalogue,
+  readerUrl,
   readHash,
   safeUrl,
   writeHash,
@@ -207,5 +208,17 @@ describe("hash state", () => {
   test("ignores garbage: unknown sort or type, empty values", () => {
     const f = readHash("#sort=evil&type=paper,hack&cat=,A,&q=");
     expect(f).toEqual({ categories: ["A"], types: ["paper"], query: "", sort: "trending" });
+  });
+});
+
+describe("readerUrl", () => {
+  test("is null without a base", () => {
+    expect(readerUrl("a", undefined)).toBeNull();
+    expect(readerUrl("a", "")).toBeNull();
+  });
+  test("trims a trailing slash and encodes the id", () => {
+    expect(readerUrl("a b/c", "http://127.0.0.1:8765/")).toBe(
+      "http://127.0.0.1:8765/reader.html#item=a%20b%2Fc",
+    );
   });
 });

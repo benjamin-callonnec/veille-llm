@@ -1,10 +1,11 @@
-import { type Item, safeUrl } from "../lib/catalogue";
+import { type Item, readerUrl, safeUrl } from "../lib/catalogue";
 
 const date = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
 
 export function Card({ item }: { item: Item }) {
   const href = safeUrl(item.url);
+  const read = item.type === "paper" ? readerUrl(item.id, import.meta.env.VITE_READER_URL) : null;
   return (
     <article className="card">
       <h2>
@@ -26,6 +27,7 @@ export function Card({ item }: { item: Item }) {
         <span>{date(item.published)}</span>
         <span>score {item.score}/10</span>
         {item.upvotes > 0 && <span>{item.upvotes} upvotes</span>}
+        {read && <a href={read}>Read</a>}
       </p>
     </article>
   );
