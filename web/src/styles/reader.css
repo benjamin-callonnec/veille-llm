@@ -1,0 +1,55 @@
+.reader-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  margin: 0 -16px;
+}
+.reader-head {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.reader-head h1 {
+  font-size: 1.05rem;
+}
+.panes {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.panes-bar {
+  display: flex;
+  gap: 8px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.panes-bar button {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+.panes-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.pane {
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.pane-handle {
+  flex: 0 0 6px;
+  background: var(--border);
+  cursor: col-resize;
+  touch-action: none;
+}
+.pane-handle:hover,
+.pane-handle:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
