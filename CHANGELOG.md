@@ -5,6 +5,9 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+### Added
+- Each published item now carries a `brief` (2-3 plain sentences) next to a much shorter `hook` (at most 120 characters, written to make you want to read without overselling). Existing databases get the new column automatically. Closes the pipeline side of #11; the bold hook display belongs to the web front.
+
 ## [0.3.0] - 2026-11-22
 
 ### Added

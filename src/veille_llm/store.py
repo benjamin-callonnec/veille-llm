@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS verdicts (
 CREATE TABLE IF NOT EXISTS enrichments (
     item_id TEXT PRIMARY KEY REFERENCES items(id),
     category TEXT NOT NULL,
-    hook TEXT NOT NULL
+    hook TEXT NOT NULL,
+    brief TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS categories (name TEXT PRIMARY KEY);
 """
@@ -64,6 +65,9 @@ class Store:
         self._conn = sqlite3.connect(str(path))
         self._conn.execute("PRAGMA foreign_keys = ON")
         self._conn.executescript(_SCHEMA)
+        columns = [r[1] for r in self._conn.execute("PRAGMA table_info(enrichments)")]
+        if "brief" not in columns:  # database created before briefs existed
+            self._conn.execute("ALTER TABLE enrichments ADD COLUMN brief TEXT NOT NULL DEFAULT ''")
 
     def close(self) -> None:
         self._conn.close()
@@ -144,8 +148,9 @@ class Store:
             for e in enrichments:
                 self._conn.execute("INSERT OR IGNORE INTO categories VALUES (?)", (e.category,))
                 self._conn.execute(
-                    "INSERT OR REPLACE INTO enrichments VALUES (?,?,?)",
-                    (e.item_id, e.category, e.hook),
+                    "INSERT OR REPLACE INTO enrichments (item_id, category, hook, brief) "
+                    "VALUES (?,?,?,?)",
+                    (e.item_id, e.category, e.hook, e.brief),
                 )
                 self._conn.execute(
                     "UPDATE items SET status = 'published' WHERE id = ?", (e.item_id,)
@@ -167,7 +172,7 @@ class Store:
     def published_items(self, since: str) -> list[dict]:
         rows = self._conn.execute(
             f"SELECT {', '.join('i.' + c.strip() for c in _ITEM_COLUMNS.split(','))}, "
-            "v.score, v.type, e.category, e.hook FROM items i "
+            "v.score, v.type, e.category, e.hook, e.brief FROM items i "
             "JOIN verdicts v ON v.item_id = i.id JOIN enrichments e ON e.item_id = i.id "
             "WHERE i.status = 'published' AND i.published >= ? ORDER BY i.published DESC",
             (since,),
@@ -189,6 +194,7 @@ class Store:
                     "type": row[10],
                     "category": row[11],
                     "hook": row[12],
+                    "brief": row[13],
                 }
             )
         return out

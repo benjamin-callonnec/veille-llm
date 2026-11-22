@@ -130,3 +130,27 @@ def test_refresh_upvotes_raises_but_never_lowers_and_keeps_status(store):
     store.refresh_upvotes({"a": 4})
     (pending, _) = store.pending_enrichment()[0]
     assert pending.upvotes == 9
+
+
+def test_published_item_carries_its_brief(store):
+    store.upsert_items([item("a")], NOW)
+    store.save_verdicts([verdict("a")])
+    store.save_enrichments([Enrichment("a", "Cat", "Hook.", "A brief.")])
+    (published,) = store.published_items("2026-01-01T00:00:00Z")
+    assert published["brief"] == "A brief."
+
+
+def test_store_adds_the_brief_column_to_an_existing_database(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(
+        "CREATE TABLE enrichments (item_id TEXT PRIMARY KEY, category TEXT NOT NULL, "
+        "hook TEXT NOT NULL); INSERT INTO enrichments VALUES ('x', 'Cat', 'Old hook.');"
+    )
+    old.commit()
+    old.close()
+    Store(path).close()
+    cols = [r[1] for r in sqlite3.connect(path).execute("PRAGMA table_info(enrichments)")]
+    assert "brief" in cols

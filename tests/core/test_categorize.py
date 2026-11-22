@@ -62,14 +62,23 @@ def test_hook_is_safe_rejects_urls_angle_brackets_empty_and_long_hooks():
     assert not hook_is_safe("")
     assert not hook_is_safe("See http://evil.example now")
     assert not hook_is_safe("Click <b>here</b>")
-    assert not hook_is_safe("x" * 201)
+    assert not hook_is_safe("x" * 161)
 
 
 def test_enrich_pending_saves_category_and_hook():
     store = seeded(1)
 
     async def run(prompt, options):
-        return reply([{"id": "i00", "category": "state space", "hook": "Why it matters."}])
+        return reply(
+            [
+                {
+                    "id": "i00",
+                    "category": "state space",
+                    "hook": "Why it matters.",
+                    "brief": "A brief.",
+                }
+            ]
+        )
 
     outcome = asyncio.run(enrich_pending(store, runner=run))
     assert outcome.enriched == 1
@@ -83,8 +92,13 @@ def test_enrich_pending_leaves_item_with_unsafe_hook_unpublished():
     async def run(prompt, options):
         return reply(
             [
-                {"id": "i00", "category": "Agents", "hook": "Visit http://evil.example"},
-                {"id": "i01", "category": "Agents", "hook": "A fine hook."},
+                {
+                    "id": "i00",
+                    "category": "Agents",
+                    "hook": "Visit http://evil.example",
+                    "brief": "B.",
+                },
+                {"id": "i01", "category": "Agents", "hook": "A fine hook.", "brief": "B."},
             ]
         )
 
@@ -102,7 +116,7 @@ def test_enrich_pending_sends_existing_categories_to_the_llm():
 
     async def run(prompt, options):
         seen.append(prompt_data(prompt))
-        return reply([{"id": "i00", "category": "agents", "hook": "Hook."}])
+        return reply([{"id": "i00", "category": "agents", "hook": "Hook.", "brief": "B."}])
 
     asyncio.run(enrich_pending(store, runner=run))
     assert seen[0]["existing_categories"] == ["Agents"]
@@ -119,7 +133,7 @@ def test_enrich_pending_stops_on_limit_after_saving_previous_batches():
         if len(calls) == 3:
             raise LlmLimitError("usage limit reached")
         ids = [d["id"] for d in prompt_data(prompt)["items"]]
-        return reply([{"id": i, "category": "Agents", "hook": "Hook."} for i in ids])
+        return reply([{"id": i, "category": "Agents", "hook": "Hook.", "brief": "B."} for i in ids])
 
     outcome = asyncio.run(enrich_pending(store, runner=run))
     assert outcome.enriched == 30
@@ -140,8 +154,38 @@ def test_overlong_category_is_truncated_not_rejected_by_the_schema():
     store = seeded(1)
 
     async def run(prompt, options):
-        return reply([{"id": "i00", "category": "word " * 14, "hook": "Hook."}])
+        return reply([{"id": "i00", "category": "word " * 14, "hook": "Hook.", "brief": "B."}])
 
     outcome = asyncio.run(enrich_pending(store, runner=run))
     assert outcome.enriched == 1
     assert len(store.category_names()[0]) <= 40
+
+
+def test_enrich_pending_saves_the_brief_next_to_the_hook():
+    store = seeded(1)
+
+    async def run(prompt, options):
+        return reply(
+            [{"id": "i00", "category": "Agents", "hook": "Hook.", "brief": "What it does."}]
+        )
+
+    asyncio.run(enrich_pending(store, runner=run))
+    (published,) = store.published_items("2026-01-01T00:00:00Z")
+    assert published["brief"] == "What it does."
+
+
+def test_enrich_pending_rejects_an_unsafe_or_empty_brief():
+    store = seeded(3)
+
+    async def run(prompt, options):
+        return reply(
+            [
+                {"id": "i00", "category": "A", "hook": "Hook.", "brief": "See http://x.example"},
+                {"id": "i01", "category": "A", "hook": "Hook.", "brief": "  "},
+                {"id": "i02", "category": "A", "hook": "Hook.", "brief": "Fine."},
+            ]
+        )
+
+    outcome = asyncio.run(enrich_pending(store, runner=run))
+    assert outcome.enriched == 1
+    assert [p["id"] for p in store.published_items("2026-01-01T00:00:00Z")] == ["i02"]

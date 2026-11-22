@@ -48,7 +48,7 @@ class Llm:
         data = data_of(prompt)
         if "existing_categories" in prompt:
             entries = [
-                {"id": d["id"], "category": "Agents", "hook": "Why it matters."}
+                {"id": d["id"], "category": "Agents", "hook": "Why it matters.", "brief": "Brief."}
                 for d in data["items"]
             ]
         else:
