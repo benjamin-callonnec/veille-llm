@@ -12,6 +12,7 @@ from veille_reader.paper import PaperText
 MAX_PAGES_PER_CALL = 6
 MAX_CHARS = 12_000
 MAX_HITS = 8
+MAX_SECTIONS_LISTED = 40
 MAX_NOTE_CHARS = 500
 KINDS = ("pages", "section", "references", "figure", "table", "highlights")
 
@@ -114,8 +115,11 @@ class PaperTools:
             if wanted and wanted in name.lower():
                 after = outline[i + 1][1] if i + 1 < len(outline) else self.paper.page_count + 1
                 return self._pages(page, max(page, after - 1))
-        names = "; ".join(_clean(n) for n, _ in outline)
-        raise ToolError(f"No section matches '{_clean(title)}'. Sections: {names}")
+        names = "\n".join(n[:120] for n, _ in outline[:MAX_SECTIONS_LISTED])
+        raise ToolError(
+            f"No section matches '{_clean(title)[:80]}'. The sections of the paper:\n"
+            + _data("sections", names)
+        )
 
     def _references(self) -> str:
         heading = re.compile(r"^\s*(references|bibliography)\s*$", re.I | re.M)

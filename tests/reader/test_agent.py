@@ -445,3 +445,24 @@ def test_the_summariser_raises_on_an_error_so_the_turn_can_go_on_without_it(monk
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-secret")
     with pytest.raises(Exception, match="subscription|unset"):
         asyncio.run(agent.sdk_summarizer([{"role": "user", "text": "x"}], None, query=fake_query()))
+
+
+def test_a_limit_result_carries_the_cost_the_sdk_reported(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    result = ResultMessage(
+        subtype="error_max_budget_usd",
+        usage={"input_tokens": 3, "output_tokens": 4},
+        total_cost_usd=0.5,
+    )
+    event = collect(request(), fake_query(result))[-1]
+    assert event["kind"] == "limit"
+    assert event["usage"] == {"input_tokens": 3, "output_tokens": 4, "cost_usd": 0.5}
+
+
+def test_a_failed_result_carries_its_cost_too(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    result = ResultMessage(
+        is_error=True, result="boom", total_cost_usd=0.2, usage={"input_tokens": 1}
+    )
+    event = collect(request(), fake_query(result))[-1]
+    assert event["kind"] == "failed" and event["usage"]["cost_usd"] == 0.2

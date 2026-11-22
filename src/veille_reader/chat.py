@@ -71,6 +71,8 @@ class _Answer:
             self.usage = event.get("usage")
         elif kind == "error":
             self.error = {"kind": event["kind"], "message": event["message"]}
+            if event.get("usage"):
+                self.usage = event["usage"]
 
     def content(self, stopped: bool) -> dict:
         duration = self.duration_ms
@@ -89,20 +91,11 @@ class _Answer:
         return content
 
 
-def session_cost(messages: list[dict]) -> float:
-    """What the answers of a conversation cost so far, as reported by the SDK."""
-    total = 0.0
-    for m in messages:
-        if m["role"] == "assistant":
-            total += float((m["content"].get("usage") or {}).get("cost_usd") or 0.0)
-    return total
-
-
 def session_refusal(
-    store: ReaderStore, cid: int, messages: list[dict], limits: AgentLimits, raise_limit: bool
+    store: ReaderStore, cid: int, limits: AgentLimits, raise_limit: bool
 ) -> str | None:
     """A message when the conversation is over its budget, else None (raisable once)."""
-    spent = session_cost(messages)
+    spent = store.session_cost(cid)
     raised = store.limit_raised(cid)
     cap = limits.max_session_usd * (2 if raised else 1)
     if spent < cap:
@@ -149,35 +142,41 @@ async def stream_turn(
     """Stream one turn. With `kind` None the last user message is run again (regenerate)."""
     if kind is not None and content is not None:
         store.add_message(cid, "user", kind, content)
-    messages = store.messages(cid)
-    limits = agent_limits or AgentLimits()
-    refusal = session_refusal(store, cid, messages, limits, raise_limit)
-    if refusal is not None:
-        runner = _refusal_runner(refusal)
-    summary, turns = current_history(messages)
-    if (
-        summarizer is not None
-        and needs_compaction(turns)
-        and await compact(store, cid, messages, summarizer)
-    ):
-        messages = store.messages(cid)
-        summary, turns = current_history(messages)
-    last = turns[-1]
-    request = RunRequest(
-        item=item,
-        question=last["text"],
-        history=turns[:-1],
-        summary=summary,
-        quote=last.get("quote"),
-        paper_tools=tools,
-        notes=list(notes or []),
-        tool_limits=tool_limits,
-        agent_limits=limits,
-    )
     answer = _Answer()
     stopped = True
-    events_stream = runner(request)
+    events_stream = None
+    # Everything from here is inside the try: Stop pressed while the old turns are being summarised
+    # must still leave a stopped answer, not an orphan question.
     try:
+        limits = agent_limits or AgentLimits()
+        refusal = session_refusal(store, cid, limits, raise_limit)
+        if refusal is not None:
+            runner = _refusal_runner(refusal)
+        messages = store.messages(cid)
+        summary, turns = current_history(messages)
+        # a refused turn does not pay for a summary
+        if (
+            refusal is None
+            and summarizer is not None
+            and needs_compaction(turns)
+            and (done := await compact(store, cid, messages, summarizer))
+        ):
+            messages = store.messages(cid)
+            summary, turns = current_history(messages)
+            yield sse(events.compaction(int(done["content"].get("replaced", 0))))
+        last = turns[-1]
+        request = RunRequest(
+            item=item,
+            question=last["text"],
+            history=turns[:-1],
+            summary=summary,
+            quote=last.get("quote"),
+            paper_tools=tools,
+            notes=list(notes or []),
+            tool_limits=tool_limits,
+            agent_limits=limits,
+        )
+        events_stream = runner(request)
         try:
             async for event in events_stream:
                 answer.apply(event)
@@ -211,7 +210,7 @@ async def stream_turn(
             )
         except sqlite3.IntegrityError:
             pass  # the conversation was deleted while the answer was being produced
-        aclose = getattr(events_stream, "aclose", None)
+        aclose = getattr(events_stream, "aclose", None) if events_stream is not None else None
         if aclose is not None:
             with anyio.move_on_after(5, shield=True):
                 try:

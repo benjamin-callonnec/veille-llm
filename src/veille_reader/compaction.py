@@ -5,12 +5,18 @@ replaces. The prompt then holds that summary plus the turns that came after it. 
 (session memory) are always in the prompt, so they survive any compaction.
 """
 
+import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 
 from veille_reader.storage import ReaderStore
 
+log = logging.getLogger(__name__)
+
 COMPACT_AT = 20_000  # characters of history before the old turns are summarised
-KEEP_RECENT = 4  # the latest turns are always kept as they were
+KEEP_RECENT = 4  # exchanges (a question and its answer) kept as they were, the newest included
+MIN_OLD_CHARS = 1_000  # not worth a summary below this much old text
+SUMMARY_TIMEOUT = 60.0  # seconds
 
 Summarizer = Callable[[list[dict], "str | None"], Awaitable[str]]
 _ROLES = ("user", "assistant")
@@ -48,7 +54,8 @@ def _size(turn: dict) -> int:
 
 
 def needs_compaction(turns: list[dict]) -> bool:
-    return len(turns) > KEEP_RECENT + 1 and sum(_size(t) for t in turns) > COMPACT_AT
+    exchanges = sum(1 for t in turns if t["role"] == "user")
+    return exchanges > KEEP_RECENT and sum(_size(t) for t in turns) > COMPACT_AT
 
 
 async def compact(
@@ -59,12 +66,19 @@ async def compact(
     latest = _latest(messages)
     upto = int(latest["content"].get("upto_seq", 0)) if latest else 0
     live = [(m["seq"], turn_of(m)) for m in messages if m["role"] in _ROLES and m["seq"] > upto]
-    old = live[:-KEEP_RECENT]
-    if not old:
+    questions = [i for i, (_, turn) in enumerate(live) if turn["role"] == "user"]
+    if len(questions) <= KEEP_RECENT:
+        return None
+    # cut just before the oldest question that is kept: an exchange is never split in two
+    old = live[: questions[-KEEP_RECENT]]
+    if not old or sum(_size(turn) for _, turn in old) < MIN_OLD_CHARS:
         return None
     try:
-        text = (await summarize([t for _, t in old], summary)).strip()
-    except Exception:  # noqa: BLE001 - the turn simply goes on with the full history
+        text = (
+            await asyncio.wait_for(summarize([t for _, t in old], summary), SUMMARY_TIMEOUT)
+        ).strip()
+    except Exception as exc:  # noqa: BLE001 - the turn simply goes on with the full history
+        log.warning("compaction skipped: the summary failed (%s)", type(exc).__name__)
         return None
     if not text:
         return None

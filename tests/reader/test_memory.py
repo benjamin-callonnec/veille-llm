@@ -103,3 +103,17 @@ def test_notes_cannot_be_changed_from_another_site(client):
     cross = {"Sec-Fetch-Site": "cross-site"}
     assert client.post("/api/items/a1/memory", json={"text": "x"}, headers=cross).status_code == 403
     assert client.get("/api/items/a1/memory").json() == []
+
+
+def test_a_note_says_who_wrote_it(tmp_path):
+    store = ReaderStore(tmp_path / "data")
+    StoreMemory(store, "a1").write("written by the tutor")
+    store.add_memory_note("a1", "written by the user")
+    sources = {n["text"]: n["source"] for n in store.memory_notes("a1")}
+    assert sources == {"written by the tutor": "tutor", "written by the user": "user"}
+
+
+def test_the_api_shows_the_source_and_a_user_note_is_marked_as_the_users(client):
+    made = client.post("/api/items/a1/memory", json={"text": "mine"}).json()
+    assert made["source"] == "user"
+    assert client.get("/api/items/a1/memory").json()[0]["source"] == "user"

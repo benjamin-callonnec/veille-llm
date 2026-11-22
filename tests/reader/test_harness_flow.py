@@ -198,20 +198,25 @@ def test_the_trace_belongs_to_its_paper(tmp_path):
 
 
 def over_limit(client, cid, spent=1.2):
-    """Make the conversation look like it already cost `spent` USD."""
+    """Make the conversation look like it already cost `spent` USD (the trace is what counts)."""
     store: ReaderStore = client.app.state.store
     store.add_message(cid, "user", "text", {"text": "earlier"})
     store.add_message(
         cid,
         "assistant",
         "assistant",
-        {
-            "answer": "x",
-            "blocks": [],
-            "duration_ms": 1,
-            "stopped": False,
-            "usage": {"cost_usd": spent},
-        },
+        {"answer": "x", "blocks": [], "duration_ms": 1, "stopped": False},
+    )
+    store.add_trace(
+        cid,
+        duration_ms=1,
+        tools=[],
+        input_tokens=0,
+        output_tokens=0,
+        cost_usd=spent,
+        model="m",
+        stopped=False,
+        error_kind="",
     )
 
 
@@ -262,3 +267,54 @@ def test_a_conversation_under_its_budget_is_not_touched(tmp_path):
     cid = conv(client)
     over_limit(client, cid, spent=0.4)
     assert types(send(client, cid)) == ["text_delta", "done"]
+
+
+COSTLY = (
+    events.text_delta("ok"),
+    events.done(5, {"input_tokens": 1, "output_tokens": 1, "cost_usd": 0.6}),
+)
+
+
+def test_an_answer_that_hits_a_limit_still_costs_what_the_sdk_reported(tmp_path):
+    hit = recording(
+        events.error(
+            "limit", "too many steps", {"input_tokens": 1, "output_tokens": 1, "cost_usd": 0.5}
+        )
+    )
+    client, _ = client_for(tmp_path, hit, agent_limits=AgentLimits(max_session_usd=1.0))
+    cid = conv(client)
+    send(client, cid)
+    assert client.get(f"/api/items/a1/conversations/{cid}/trace").json()[0]["cost_usd"] == 0.5
+    send(client, cid)  # a second capped answer: 1.0 in total
+    refused = send(client, cid)
+    assert types(refused) == ["error"] and len(hit.seen) == 2
+
+
+def test_regenerating_does_not_erase_what_the_conversation_already_cost(tmp_path):
+    runner = recording(*COSTLY)
+    client, _ = client_for(tmp_path, runner, agent_limits=AgentLimits(max_session_usd=1.0))
+    cid = conv(client)
+    send(client, cid)  # 0.6
+    send(client, cid)  # 1.2: allowed because 0.6 < 1.0
+    again = client.post(f"/api/items/a1/conversations/{cid}/regenerate")
+    assert types(again) == ["error"]  # the cost of the deleted answer still counts
+    assert len(runner.seen) == 2
+
+
+def test_the_session_cost_is_the_sum_of_the_traces(tmp_path):
+    store = ReaderStore(tmp_path / "data")
+    cid = store.create_conversation("a1", "t")["id"]
+    for cost in (0.25, 0.5, 0.0):
+        store.add_trace(
+            cid,
+            duration_ms=1,
+            tools=[],
+            input_tokens=0,
+            output_tokens=0,
+            cost_usd=cost,
+            model="m",
+            stopped=False,
+            error_kind="",
+        )
+    assert store.session_cost(cid) == 0.75
+    assert store.session_cost(999) == 0.0

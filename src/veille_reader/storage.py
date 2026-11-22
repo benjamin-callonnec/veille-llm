@@ -1,7 +1,10 @@
 """Local storage of the reader: one SQLite file and a PDF cache, all under one data dir."""
 
+import functools
+import inspect
 import json
 import sqlite3
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -79,6 +82,9 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX traces_conversation ON traces (conversation_id);
     """,
+    """
+    ALTER TABLE memory_notes ADD COLUMN source TEXT NOT NULL DEFAULT 'user';
+    """,
 ]
 
 
@@ -86,8 +92,27 @@ class StorageError(Exception):
     pass
 
 
+def _locked(method):  # noqa: ANN001, ANN202
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
+
+
+def _synchronised(cls):  # noqa: ANN001, ANN202
+    """One SQLite connection is shared by the event loop and worker threads: serialise every use."""
+    for name, member in list(vars(cls).items()):
+        if not name.startswith("__") and inspect.isfunction(member):
+            setattr(cls, name, _locked(member))
+    return cls
+
+
+@_synchronised
 class ReaderStore:
     def __init__(self, data_dir: Path) -> None:
+        self._lock = threading.RLock()
         self.data_dir = data_dir
         self.pdfs_dir = data_dir / "pdfs"
         self.pdfs_dir.mkdir(parents=True, exist_ok=True)
@@ -289,19 +314,19 @@ class ReaderStore:
 
     def memory_notes(self, item_id: str) -> list[dict]:
         rows = self._con.execute(
-            "SELECT id, text, created_at FROM memory_notes WHERE item_id = ? ORDER BY id",
+            "SELECT id, text, created_at, source FROM memory_notes WHERE item_id = ? ORDER BY id",
             (item_id,),
         ).fetchall()
-        return [{"id": r[0], "text": r[1], "created_at": r[2]} for r in rows]
+        return [{"id": r[0], "text": r[1], "created_at": r[2], "source": r[3]} for r in rows]
 
-    def add_memory_note(self, item_id: str, text: str) -> dict:
+    def add_memory_note(self, item_id: str, text: str, source: str = "user") -> dict:
         now = self._now()
         with self._con:
             cursor = self._con.execute(
-                "INSERT INTO memory_notes (item_id, text, created_at) VALUES (?, ?, ?)",
-                (item_id, text, now),
+                "INSERT INTO memory_notes (item_id, text, created_at, source) VALUES (?, ?, ?, ?)",
+                (item_id, text, now, source),
             )
-        return {"id": int(cursor.lastrowid), "text": text, "created_at": now}
+        return {"id": int(cursor.lastrowid), "text": text, "created_at": now, "source": source}
 
     def update_memory_note(self, item_id: str, note_id: int, text: str) -> bool:
         with self._con:
@@ -362,6 +387,14 @@ class ReaderStore:
                     error_kind,
                 ),
             )
+
+    def session_cost(self, conversation_id: int) -> float:
+        """What the conversation cost so far: the traces, which regenerating never deletes."""
+        row = self._con.execute(
+            "SELECT COALESCE(SUM(cost_usd), 0) FROM traces WHERE conversation_id = ?",
+            (conversation_id,),
+        ).fetchone()
+        return float(row[0])
 
     def traces(self, conversation_id: int) -> list[dict]:
         rows = self._con.execute(

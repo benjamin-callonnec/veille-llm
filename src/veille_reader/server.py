@@ -23,6 +23,7 @@ from veille_reader.pdf import Fetcher, PdfError, arxiv_id, default_fetcher, ensu
 from veille_reader.storage import ReaderStore
 from veille_reader.tools import PaperTools
 
+TOOLS_TIMEOUT = 45.0  # seconds to get the paper ready (PDF download and text extraction)
 LOCAL_HOSTS = {"127.0.0.1", "localhost"}
 
 
@@ -271,8 +272,9 @@ def create_app(
         async def body():  # noqa: ANN202
             try:
                 try:
-                    tools, notes = await asyncio.to_thread(
-                        tools_factory or default_tools, item_id, item
+                    tools, notes = await asyncio.wait_for(
+                        asyncio.to_thread(tools_factory or default_tools, item_id, item),
+                        TOOLS_TIMEOUT,
                     )
                 except Exception:  # noqa: BLE001 - the chat still works from the summary
                     tools, notes = None, []

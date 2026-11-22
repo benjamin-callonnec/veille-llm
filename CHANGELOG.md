@@ -9,7 +9,8 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 - The tutor can read the paper (#23, part of #17): three local read-only tools, `load_artifact` (pages, a section, the references, a figure or a table, your highlights), `search_paper` and `session_memory`, served through the Agent SDK with the built-in tools off. The PDF text is extracted with `pypdf` and cached; everything a tool returns is an escaped data block.
 - Session memory per paper: short notes (30 at most, 500 characters each) the tutor writes and always sees, which you can list, add, edit and delete through the API.
 - Limiters: per answer 12 tool calls (6 per tool, 15 s each), 8 model turns and 0.50 USD; per conversation 3.00 USD, raisable once. A limit shows as a clear message, a tool that fails or times out is reported to the model and never stops the answer.
-- Compaction: a long conversation has its old turns summarised (small model, no tool) while the last 4 turns and the notes are kept; a quiet note in the chat says so.
+- Compaction: a long conversation has its old turns summarised (small model, no tool) while the last 4 exchanges and the notes are kept, never cutting an exchange in half; a quiet note in the chat says so.
+- The session budget counts what every answer cost, taken from the trace: an answer that hits a limit still counts and regenerating cannot erase it. Notes record who wrote them (you or the tutor).
 - A local trace of every turn (tools with their duration and errors, tokens, cost, model; never the text), readable through the API.
 
 ## [0.11.0] - 2026-11-22

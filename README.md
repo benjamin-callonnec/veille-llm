@@ -105,7 +105,8 @@ section by title, the references, a figure or a table, your highlights), `search
 database); everything a tool returns is an escaped data block, never instructions. Limits per answer:
 12 tool calls (6 per tool, 15 s each), 8 model turns and 0.50 USD; per conversation 3.00 USD, which you
 can raise once by sending `raise_limit: true` with a message. Long conversations are summarised (the
-last 4 turns and your notes are always kept). Every turn leaves a trace (tools, tokens, time, cost, never
+last 4 exchanges and your notes are always kept; the cost of a conversation counts every answer, even
+those that hit a limit or were regenerated). Notes say whether you or the tutor wrote them. Every turn leaves a trace (tools, tokens, time, cost, never
 the text) at `/api/items/<id>/conversations/<cid>/trace`. Not there yet: the `ask_user` tool and the
 screens for the notes, the limit and the trace.
 Remaining pieces: #23 to #26 (parent: #17).

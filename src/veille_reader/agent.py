@@ -121,13 +121,13 @@ def _usage_of(message: object) -> dict | None:
     }
 
 
-def _failure(message: str) -> dict:
+def _failure(message: str, usage: dict | None = None) -> dict:
     message = redact(message)
     if classify_error(message) is LlmLimitError:
-        return events.error("limit", message)
+        return events.error("limit", message, usage)
     if classify_error(message) is LlmAuthError or _AUTH.search(message):
-        return events.error("auth", AUTH_HELP)
-    return events.error("failed", message)
+        return events.error("auth", AUTH_HELP, usage)
+    return events.error("failed", message, usage)
 
 
 def _result(text: str, error: bool = False) -> dict:
@@ -326,10 +326,10 @@ async def sdk_runner(request: RunRequest, query: Callable | None = None) -> Asyn
             elif name == "ResultMessage":
                 subtype = getattr(message, "subtype", "") or ""
                 if subtype in ("error_max_turns", "error_max_budget_usd"):
-                    yield events.error("limit", LIMIT_HELP)
+                    yield events.error("limit", LIMIT_HELP, _usage_of(message))
                 elif message.is_error:
                     detail = message.result or "; ".join(message.errors or []) or "unknown error"
-                    yield _failure(detail)
+                    yield _failure(detail, _usage_of(message))
                 else:
                     elapsed = int((time.monotonic() - started) * 1000)
                     yield events.done(

@@ -30,8 +30,15 @@ def done(duration_ms: int, usage: dict | None = None) -> dict:
     return event
 
 
-def error(kind: str, message: str) -> dict:
-    return {"type": "error", "kind": kind, "message": message}
+def error(kind: str, message: str, usage: dict | None = None) -> dict:
+    event = {"type": "error", "kind": kind, "message": message}
+    if usage:
+        event["usage"] = usage  # an answer that fails or hits a limit still cost something
+    return event
+
+
+def compaction(replaced: int) -> dict:
+    return {"type": "compaction", "replaced": replaced}
 
 
 @dataclass
