@@ -42,6 +42,11 @@ def citations(items: list[dict]) -> dict:
     return {"type": "citations", "items": items}
 
 
+def suggestions(items: list[str]) -> dict:
+    """Follow-up questions for the user, already validated (sent just before `done`)."""
+    return {"type": "suggestions", "items": items}
+
+
 def compaction(replaced: int) -> dict:
     return {"type": "compaction", "replaced": replaced}
 
@@ -59,6 +64,8 @@ class RunRequest:
     notes: list[str] = field(default_factory=list)
     tool_limits: Any = None
     agent_limits: AgentLimits | None = None
+    # the images attached to the question being asked, as validated `veille_reader.images.Image`
+    images: list[Any] = field(default_factory=list)
 
 
 AgentRunner = Callable[[RunRequest], AsyncIterator[dict]]

@@ -12,8 +12,10 @@ from veille_reader import events
 from veille_reader.citations import parse_citations, verify_citations
 from veille_reader.compaction import Summarizer, compact, current_history, needs_compaction
 from veille_reader.events import AgentRunner, RunRequest
+from veille_reader.images import IMAGE_ID, Image
 from veille_reader.limits import AgentLimits
 from veille_reader.storage import ReaderStore
+from veille_reader.suggestions import SuggestionFilter
 
 
 def sse(event: dict) -> str:
@@ -30,6 +32,7 @@ class _Answer:
         self.error: dict | None = None
         self.usage: dict | None = None
         self.citations: list[dict] = []
+        self.suggestions: list[str] = []
         self.tool_log: list[dict] = []
         self._tool_started: dict[str, tuple[str, float]] = {}
         self.started = time.monotonic()
@@ -88,6 +91,8 @@ class _Answer:
         }
         if self.citations:
             content["citations"] = self.citations
+        if self.suggestions:
+            content["suggestions"] = self.suggestions
         if self.usage:
             content["usage"] = self.usage
         if self.error:
@@ -118,6 +123,19 @@ def session_refusal(
         "This conversation reached its budget. Start a new conversation, or send your "
         "message again with the limit raised (this can be done once per conversation)."
     )
+
+
+def load_images(store: ReaderStore, item_id: str, messages: list[dict]) -> list[Image]:
+    """The images of the last question (it is the only turn that sends the bytes again)."""
+    last = next((m for m in reversed(messages) if m["role"] == "user"), None)
+    found = []
+    for ref in (last["content"].get("images") or []) if last else []:
+        if not isinstance(ref, dict) or not IMAGE_ID.fullmatch(str(ref.get("id", ""))):
+            continue
+        stored = store.image(item_id, ref["id"])
+        if stored is not None:
+            found.append(Image(ref["id"], stored[1], stored[0], ref.get("name")))
+    return found
 
 
 def check_citations(tools: object, text: str) -> list[dict]:
@@ -190,15 +208,28 @@ async def stream_turn(
             notes=list(notes or []),
             tool_limits=tool_limits,
             agent_limits=limits,
+            images=load_images(store, str(item.get("id", "")), messages),
         )
         events_stream = runner(request)
+        hider = SuggestionFilter()
         try:
             async for event in events_stream:
-                answer.apply(event)
+                if event.get("type") == "text_delta":
+                    event = {**event, "text": hider.feed(event["text"])}
+                    if not event["text"]:
+                        continue
                 if event.get("type") == "done":
+                    rest, answer.suggestions = hider.finish()
+                    if rest:
+                        late = events.text_delta(rest)
+                        answer.apply(late)
+                        yield sse(late)
                     answer.citations = check_citations(tools, answer.answer)
                     if answer.citations:
                         yield sse(events.citations(answer.citations))
+                    if answer.suggestions:
+                        yield sse(events.suggestions(answer.suggestions))
+                answer.apply(event)
                 yield sse(event)
                 if event.get("type") in ("done", "error"):
                     break

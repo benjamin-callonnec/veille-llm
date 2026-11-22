@@ -1,12 +1,16 @@
 """Local storage of the reader: one SQLite file and a PDF cache, all under one data dir."""
 
 import functools
+import hashlib
 import inspect
 import json
+import re
 import sqlite3
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
+
+from veille_reader.images import EXTENSIONS, IMAGE_ID, Image
 
 MIGRATIONS: list[str] = [
     """
@@ -88,6 +92,16 @@ MIGRATIONS: list[str] = [
 ]
 
 
+_SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}")
+
+
+def _safe_name(item_id: str) -> str:
+    """A folder name for an item: the id itself when harmless, else a hash (no path tricks)."""
+    if _SAFE_NAME.fullmatch(item_id):
+        return item_id
+    return hashlib.sha256(item_id.encode()).hexdigest()
+
+
 class StorageError(Exception):
     pass
 
@@ -134,6 +148,26 @@ class ReaderStore:
 
     def schema_version(self) -> int:
         return self._con.execute("PRAGMA user_version").fetchone()[0]
+
+    def save_image(self, item_id: str, image: Image) -> None:
+        """Keep an image, content addressed: <data>/images/<item>/<sha256>.<ext>. Never deleted
+        with the conversation (a conversation can share an image with another one)."""
+        folder = self.data_dir / "images" / _safe_name(item_id)
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{image.id}.{EXTENSIONS[image.mime]}"
+        if not path.exists():
+            path.write_bytes(image.data)
+
+    def image(self, item_id: str, image_id: str) -> tuple[bytes, str] | None:
+        """The bytes and MIME type of a stored image, None if unknown (or a malformed id)."""
+        if not IMAGE_ID.fullmatch(image_id):
+            return None
+        folder = self.data_dir / "images" / _safe_name(item_id)
+        for mime, ext in EXTENSIONS.items():
+            path = folder / f"{image_id}.{ext}"
+            if path.is_file():
+                return path.read_bytes(), mime
+        return None
 
     def record_pdf(self, item_id: str, pdf_file: str) -> None:
         with self._con:
@@ -307,7 +341,8 @@ class ReaderStore:
                 lines += [f"> {quote.get('text', '')} (p. {quote.get('page', '?')})", ""]
                 lines += [f"**You:** {content.get('question', '')}", ""]
             elif message["role"] == "user":
-                lines += [f"**You:** {content.get('text', '')}", ""]
+                notes = "".join(" [image]" for _ in content.get("images") or [])
+                lines += [f"**You:** {content.get('text', '')}{notes}", ""]
             elif message["role"] == "assistant":
                 lines += [content.get("answer", ""), ""]
         return "\n".join(lines)
