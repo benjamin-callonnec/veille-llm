@@ -6,6 +6,7 @@ from pathlib import Path
 
 import uvicorn
 
+from veille_reader.agent import sdk_runner
 from veille_reader.server import create_app
 
 HOST = "127.0.0.1"
@@ -27,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     static = args.static if args.static.is_dir() else None
     try:
-        app = create_app(args.data_dir, args.catalogue, static_dir=static)
+        app = create_app(args.data_dir, args.catalogue, static_dir=static, runner=sdk_runner)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
