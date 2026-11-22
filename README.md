@@ -96,8 +96,18 @@ chat is a streaming conversation with the tutor (Agent SDK on your subscription,
 tools yet): answers stream token by token, a discreet "Thinking" line shows the reasoning (open while
 the agent works, folded when the answer starts, reopenable any time), `[p.N]` citations scroll the PDF,
 conversations are kept per paper (dropdown in the chat header: new, rename, delete, export to
-Markdown). The tutor uses Sonnet by default (`VEILLE_READER_MODEL` to change it) and, for now, only sees
-the title, summary and the passage you selected, not the full text (tools come with #23).
+Markdown). The tutor uses Sonnet by default (`VEILLE_READER_MODEL` to change it).
+
+**The tutor reads the paper (#23).** It has three local, read-only tools: `load_artifact` (pages, a
+section by title, the references, a figure or a table, your highlights), `search_paper` and
+`session_memory` (short notes about you, kept per paper; list, add, edit and delete them through
+`/api/items/<id>/memory`). The text comes from the cached PDF (extracted with `pypdf`, cached in the
+database); everything a tool returns is an escaped data block, never instructions. Limits per answer:
+12 tool calls (6 per tool, 15 s each), 8 model turns and 0.50 USD; per conversation 3.00 USD, which you
+can raise once by sending `raise_limit: true` with a message. Long conversations are summarised (the
+last 4 turns and your notes are always kept). Every turn leaves a trace (tools, tokens, time, cost, never
+the text) at `/api/items/<id>/conversations/<cid>/trace`. Not there yet: the `ask_user` tool and the
+screens for the notes, the limit and the trace.
 Remaining pieces: #23 to #26 (parent: #17).
 
 ## Deploy on GitHub Pages
