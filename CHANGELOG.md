@@ -5,6 +5,9 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+### Added
+- Reader: a "← Catalogue" link at the top of the page goes back to the catalogue with all the articles (also shown while loading and when a paper cannot be opened).
+
 ## [0.12.0] - 2026-11-22
 
 ### Added

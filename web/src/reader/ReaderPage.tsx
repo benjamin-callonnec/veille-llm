@@ -31,6 +31,20 @@ const MAX_QUOTE_RECTS = 200;
 const MAX_HIGHLIGHT_TEXT = 5000;
 const clip = (text: string) => text.slice(0, MAX_HIGHLIGHT_TEXT);
 
+/** Back to the catalogue page (index.html next to reader.html). */
+function HomeLink() {
+  return (
+    <a
+      className="home-link"
+      href="./"
+      aria-label="Back to the catalogue"
+      title="Back to the catalogue"
+    >
+      ← Catalogue
+    </a>
+  );
+}
+
 const pdfUrl = (id: string) => `/api/items/${encodeURIComponent(id)}/pdf`;
 
 const OPEN_ERRORS = {
@@ -113,8 +127,26 @@ export function ReaderPage({
     window.getSelection()?.removeAllRanges();
   };
 
-  if (error) return <p role="alert">{error}</p>;
-  if (!item) return <p className="muted">Loading…</p>;
+  if (error) {
+    return (
+      <div className="reader-shell">
+        <header className="reader-head">
+          <HomeLink />
+        </header>
+        <p role="alert">{error}</p>
+      </div>
+    );
+  }
+  if (!item) {
+    return (
+      <div className="reader-shell">
+        <header className="reader-head">
+          <HomeLink />
+        </header>
+        <p className="muted">Loading…</p>
+      </div>
+    );
+  }
 
   const pdfPane = source ? (
     <>
@@ -134,6 +166,7 @@ export function ReaderPage({
   return (
     <div className="reader-shell">
       <header className="reader-head">
+        <HomeLink />
         <h1>{item.title}</h1>
         <p className="hook">
           <strong>{item.hook}</strong>

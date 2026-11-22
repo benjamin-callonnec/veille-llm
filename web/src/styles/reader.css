@@ -10,6 +10,17 @@
   padding: 8px 16px;
   border-bottom: 1px solid var(--border);
 }
+.home-link {
+  display: inline-block;
+  margin-bottom: 2px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-decoration: none;
+}
+.home-link:hover,
+.home-link:focus-visible {
+  color: var(--accent);
+}
 .reader-head h1 {
   font-size: 1.05rem;
 }

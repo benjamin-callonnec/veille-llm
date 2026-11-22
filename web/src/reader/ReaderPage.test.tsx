@@ -384,3 +384,33 @@ test("asking while an answer is streaming keeps the box and says to wait", async
   expect(api.add).toHaveBeenCalledTimes(1); // no highlight for a question that was not sent
   release();
 });
+
+test("a home link goes back to the catalogue with all the articles", async () => {
+  setup();
+  const home = await screen.findByRole("link", { name: "Back to the catalogue" });
+  expect(home.getAttribute("href")).toBe("./");
+  expect(home.getAttribute("rel")).toBeNull(); // same site: a normal link
+});
+
+test("the way home is also offered when the paper cannot be opened", async () => {
+  setup({
+    load: async () => {
+      throw new Error("404");
+    },
+  });
+  await screen.findByRole("alert");
+  expect(screen.getByRole("link", { name: "Back to the catalogue" }).getAttribute("href")).toBe(
+    "./",
+  );
+});
+
+test("the way home is offered while loading and when the PDF fails", async () => {
+  setup({
+    open: async () => {
+      throw new PdfOpenError("invalid");
+    },
+  });
+  expect(screen.getByRole("link", { name: "Back to the catalogue" })).toBeTruthy();
+  await screen.findByRole("alert");
+  expect(screen.getByRole("link", { name: "Back to the catalogue" })).toBeTruthy();
+});
