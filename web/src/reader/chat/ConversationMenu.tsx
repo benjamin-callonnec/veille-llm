@@ -9,6 +9,7 @@ interface Props {
   onRename(id: number, title: string): void;
   onDelete(id: number): void;
   onExport(id: number): void;
+  disabled?: boolean;
 }
 
 /** The conversation list as a dropdown in the chat header. Every action closes it. */
@@ -23,7 +24,7 @@ export function ConversationMenu(p: Props) {
   if (p.conversations.length === 0) {
     return (
       <div className="conversations">
-        <button type="button" onClick={p.onCreate}>
+        <button type="button" disabled={p.disabled} onClick={p.onCreate}>
           New conversation
         </button>
       </div>
@@ -31,7 +32,12 @@ export function ConversationMenu(p: Props) {
   }
   return (
     <div className="conversations">
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button
+        type="button"
+        disabled={p.disabled}
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
         {current?.title ?? "Conversations"} ▾
       </button>
       {open && (

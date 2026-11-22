@@ -120,3 +120,18 @@ test("an empty chat invites the user to ask", async () => {
   render(<Host api={makeApi(Promise.resolve())} onGo={() => {}} />);
   expect(await screen.findByText(/ask about the paper|select a passage/i)).toBeTruthy();
 });
+
+test("the conversation menu is disabled while an answer streams", async () => {
+  let open: () => void = () => {};
+  const gate = new Promise<void>((r) => {
+    open = r;
+  });
+  render(<Host api={makeApi(gate)} onGo={() => {}} />);
+  await userEvent.type(await screen.findByRole("textbox", { name: "Message" }), "Q{Enter}");
+  const menu = await screen.findByRole("button", { name: /T ▾/ });
+  expect((menu as HTMLButtonElement).disabled).toBe(true);
+  open();
+  await waitFor(() =>
+    expect((screen.getByRole("button", { name: /T ▾/ }) as HTMLButtonElement).disabled).toBe(false),
+  );
+});

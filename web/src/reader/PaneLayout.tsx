@@ -1,4 +1,11 @@
-import { type KeyboardEvent, type PointerEvent, type ReactNode, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   clampRatio,
   loadPanes,
@@ -30,10 +37,27 @@ export function PaneLayout({ pdf, chat, storage }: Props) {
   const [dragging, setDragging] = useState(false);
   const container = useRef<HTMLDivElement>(null);
 
+  const latest = useRef(panes);
+  latest.current = panes;
+
   const update = (next: PaneState) => {
     setPanes(next);
     savePanes(store, next);
   };
+
+  // Alt+1 toggles the PDF pane, Alt+2 the chat pane (never both collapsed).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the handler reads the latest state through a ref
+  useEffect(() => {
+    const onShortcut = (e: globalThis.KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.code === "Digit1") update(togglePdf(latest.current));
+      else if (e.code === "Digit2") update(toggleChat(latest.current));
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  }, []);
 
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "ArrowLeft") update(nudge(panes, -0.02));
@@ -58,20 +82,15 @@ export function PaneLayout({ pdf, chat, storage }: Props) {
   const both = !panes.pdfCollapsed && !panes.chatCollapsed;
   return (
     <div className="panes">
-      <div className="panes-bar">
-        <button type="button" onClick={() => update(togglePdf(panes))}>
-          {panes.pdfCollapsed ? "Show PDF" : "Hide PDF"}
-        </button>
-        <button type="button" onClick={() => update(toggleChat(panes))}>
-          {panes.chatCollapsed ? "Show chat" : "Hide chat"}
-        </button>
-      </div>
       <div className="panes-body" ref={container}>
-        {!panes.pdfCollapsed && (
+        {panes.pdfCollapsed ? (
+          <Rail label="Expand PDF" shortcut="Alt+1" onClick={() => update(togglePdf(panes))} />
+        ) : (
           <div
             className="pane pane-pdf"
             style={{ flexBasis: both ? `${panes.ratio * 100}%` : "100%" }}
           >
+            <Cross label="Collapse PDF" shortcut="Alt+1" onClick={() => update(togglePdf(panes))} />
             {pdf}
           </div>
         )}
@@ -96,15 +115,54 @@ export function PaneLayout({ pdf, chat, storage }: Props) {
             onPointerCancel={endDrag}
           />
         )}
-        {!panes.chatCollapsed && (
+        {panes.chatCollapsed ? (
+          <Rail label="Expand chat" shortcut="Alt+2" onClick={() => update(toggleChat(panes))} />
+        ) : (
           <div
             className="pane pane-chat"
             style={{ flexBasis: both ? `${(1 - panes.ratio) * 100}%` : "100%" }}
           >
+            <Cross
+              label="Collapse chat"
+              shortcut="Alt+2"
+              onClick={() => update(toggleChat(panes))}
+            />
             {chat}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** A discreet cross in the corner of a pane. */
+function Cross({ label, shortcut, onClick }: { label: string; shortcut: string; onClick(): void }) {
+  return (
+    <button
+      type="button"
+      className="pane-cross"
+      aria-label={label}
+      title={`${label} (${shortcut})`}
+      onClick={onClick}
+    >
+      ×
+    </button>
+  );
+}
+
+/** What stays of a collapsed pane: a thin rail with a discreet control to bring it back. */
+function Rail({ label, shortcut, onClick }: { label: string; shortcut: string; onClick(): void }) {
+  return (
+    <div className="pane-rail">
+      <button
+        type="button"
+        className="pane-cross"
+        aria-label={label}
+        title={`${label} (${shortcut})`}
+        onClick={onClick}
+      >
+        +
+      </button>
     </div>
   );
 }

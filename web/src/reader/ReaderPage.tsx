@@ -26,6 +26,8 @@ export async function loadItem(id: string): Promise<ReaderItem> {
   return (await response.json()) as ReaderItem;
 }
 
+const MAX_QUOTE_TEXT = 5000;
+const MAX_QUOTE_RECTS = 200;
 const MAX_HIGHLIGHT_TEXT = 5000;
 const clip = (text: string) => text.slice(0, MAX_HIGHLIGHT_TEXT);
 
@@ -59,6 +61,7 @@ export function ReaderPage({
   const [source, setSource] = useState<PdfSource | null>(null);
   const [page, setPage] = useState(() => parseHash(window.location.hash).page ?? 1);
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const { highlights, add, remove, error: saveError } = useHighlights(itemId, api);
   const chat = useChat(itemId, chatApi);
 
@@ -136,6 +139,11 @@ export function ReaderPage({
           <strong>{item.hook}</strong>
         </p>
       </header>
+      {notice && (
+        <p role="status" className="muted">
+          {notice}
+        </p>
+      )}
       {saveError && (
         <p role="status" className="muted">
           The highlight could not be saved.
@@ -147,6 +155,11 @@ export function ReaderPage({
           quote={selection.quote}
           anchor={selection.anchor}
           onAsk={(question) => {
+            if (chat.streaming) {
+              setNotice("Wait for the current answer to finish before asking again.");
+              return;
+            }
+            setNotice(null);
             void add(
               selection.quote.page,
               "yellow",
@@ -156,9 +169,9 @@ export function ReaderPage({
             void chat.send({
               kind: "ask_agent",
               quote: {
-                text: selection.quote.text,
+                text: selection.quote.text.slice(0, MAX_QUOTE_TEXT),
                 page: selection.quote.page,
-                rects: selection.quote.rects,
+                rects: selection.quote.rects.slice(0, MAX_QUOTE_RECTS),
               },
               question,
             });

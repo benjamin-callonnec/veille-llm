@@ -22,19 +22,36 @@
   flex-direction: column;
   min-height: 0;
 }
-.panes-bar {
-  display: flex;
-  gap: 8px;
-  padding: 6px 16px;
-  border-bottom: 1px solid var(--border);
-}
-.panes-bar button {
-  border: 1px solid var(--border);
-  background: var(--card);
-  color: var(--muted);
+.pane-cross {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  z-index: 4;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
   border-radius: 6px;
-  padding: 2px 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  opacity: 0.4;
   cursor: pointer;
+}
+.pane-cross:hover,
+.pane-cross:focus-visible {
+  opacity: 1;
+  background: var(--card);
+}
+.pane-rail {
+  position: relative;
+  flex: 0 0 28px;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+.pane-rail .pane-cross {
+  right: 3px;
 }
 .panes-body {
   flex: 1;
@@ -42,6 +59,7 @@
   min-height: 0;
 }
 .pane {
+  position: relative;
   min-width: 0;
   overflow: hidden;
   display: flex;

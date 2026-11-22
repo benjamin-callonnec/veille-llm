@@ -33,6 +33,7 @@ export function ChatPane({
     <div className="chat">
       <div className="chat-head">
         <ConversationMenu
+          disabled={chat.streaming}
           conversations={chat.conversations}
           currentId={chat.current?.id ?? null}
           onSelect={chat.select}

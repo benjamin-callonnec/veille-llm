@@ -199,3 +199,93 @@ test("API errors set error without throwing", async () => {
   await act(() => result.current.send({ kind: "text", text: "x" }));
   expect(result.current.streaming).toBe(false);
 });
+
+test("after Stop the partial answer stays until the server has stored it", async () => {
+  let release: () => void = () => {};
+  const hold = new Promise<void>((r) => {
+    release = r;
+  });
+  const { api } = fakeApi(SCRIPT, hold);
+  const base = api.messages;
+  let hide = 0;
+  api.messages = async (item, id) => {
+    const all = await base(item, id);
+    if (hide > 0 && all.at(-1)?.role === "assistant") {
+      hide--;
+      return all.slice(0, -1);
+    }
+    return all;
+  };
+  const { result } = renderHook(() => useChat("a1", api));
+  await waitFor(() => expect(result.current.ready).toBe(true));
+  let pending: Promise<void> = Promise.resolve();
+  act(() => {
+    pending = result.current.send({ kind: "text", text: "Hi" });
+  });
+  await waitFor(() => expect(result.current.assistant?.answer).toBe("Hello"));
+  act(() => result.current.stop());
+  hide = 2; // the server answers "not stored yet" twice
+  release();
+  await act(() => pending);
+  expect(result.current.assistant).toBeNull();
+  expect(result.current.messages.at(-1)?.role).toBe("assistant");
+  expect(result.current.messages.at(-1)?.content).toMatchObject({ stopped: true });
+});
+
+test("switching, creating or deleting a conversation is ignored while an answer streams", async () => {
+  let release: () => void = () => {};
+  const hold = new Promise<void>((r) => {
+    release = r;
+  });
+  const { api } = fakeApi(SCRIPT, hold);
+  const { result } = renderHook(() => useChat("a1", api));
+  await waitFor(() => expect(result.current.ready).toBe(true));
+  await act(() => result.current.create());
+  const first = result.current.current?.id as number;
+  let pending: Promise<void> = Promise.resolve();
+  act(() => {
+    pending = result.current.send({ kind: "text", text: "Hi" });
+  });
+  await waitFor(() => expect(result.current.streaming).toBe(true));
+  await act(() => result.current.create());
+  await act(() => result.current.select(999));
+  await act(() => result.current.remove(first));
+  expect(result.current.conversations).toHaveLength(1);
+  expect(result.current.current?.id).toBe(first);
+  release();
+  await act(() => pending);
+});
+
+test("an error is cleared by the next successful action", async () => {
+  const { api } = fakeApi(SCRIPT);
+  const make = api.createConversation;
+  let fail = true;
+  api.createConversation = async (item, title) => {
+    if (fail) throw new Error("down");
+    return make(item, title);
+  };
+  const { result } = renderHook(() => useChat("a1", api));
+  await waitFor(() => expect(result.current.ready).toBe(true));
+  await act(() => result.current.create());
+  expect(result.current.error).toBe(true);
+  fail = false;
+  await act(() => result.current.create());
+  expect(result.current.error).toBe(false);
+});
+
+test("leaving the page aborts a running answer", async () => {
+  let release: () => void = () => {};
+  const hold = new Promise<void>((r) => {
+    release = r;
+  });
+  const { api, signals } = fakeApi(SCRIPT, hold);
+  const { result, unmount } = renderHook(() => useChat("a1", api));
+  await waitFor(() => expect(result.current.ready).toBe(true));
+  act(() => {
+    void result.current.send({ kind: "text", text: "Hi" });
+  });
+  await waitFor(() => expect(result.current.streaming).toBe(true));
+  unmount();
+  expect(signals[0]?.aborted).toBe(true);
+  release();
+});

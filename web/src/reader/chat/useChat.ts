@@ -34,16 +34,35 @@ export function useChat(
   const busy = useRef(false);
   const currentRef = useRef<number | null>(null);
   currentRef.current = currentId;
+  const conversationsRef = useRef<Conversation[]>([]);
+  conversationsRef.current = conversations;
+  const loadToken = useRef(0);
 
   const loadMessages = useCallback(
     async (id: number) => {
+      const token = ++loadToken.current;
       try {
-        setMessages(await api.messages(itemId, id));
+        const loaded = await api.messages(itemId, id);
+        if (token === loadToken.current) setMessages(loaded);
+        return loaded;
       } catch {
         setError(true);
+        return [];
       }
     },
     [api, itemId],
+  );
+
+  // After Stop the server stores the partial answer a moment later: wait for it.
+  const settle = useCallback(
+    async (id: number) => {
+      for (let i = 0; i < 10; i++) {
+        const loaded = await loadMessages(id);
+        if (loaded.at(-1)?.role === "assistant") return;
+        await new Promise((r) => setTimeout(r, 120));
+      }
+    },
+    [loadMessages],
   );
 
   useEffect(() => {
@@ -52,11 +71,13 @@ export function useChat(
       .listConversations(itemId)
       .then(async (list) => {
         if (!current) return;
+        setError(false);
         setConversations(list);
         const first = list[0];
         if (first) {
           setCurrentId(first.id);
-          setMessages(await api.messages(itemId, first.id));
+          const loaded = await api.messages(itemId, first.id);
+          if (current) setMessages(loaded);
         }
       })
       .catch(() => current && setError(true))
@@ -65,6 +86,8 @@ export function useChat(
       current = false;
     };
   }, [api, itemId]);
+
+  useEffect(() => () => controller.current?.abort(), []);
 
   const run = useCallback(
     async (id: number, stream: AsyncIterable<ChatEvent>, ctrl: AbortController) => {
@@ -77,20 +100,22 @@ export function useChat(
       } catch {
         if (!ctrl.signal.aborted) setError(true);
       } finally {
-        await loadMessages(id);
+        if (ctrl.signal.aborted) await settle(id);
+        else await loadMessages(id);
         setAssistant(null);
         setStreaming(false);
         controller.current = null;
         busy.current = false;
       }
     },
-    [clock, loadMessages],
+    [clock, loadMessages, settle],
   );
 
   const send = useCallback(
     async (body: SendBody) => {
       if (busy.current) return;
       busy.current = true;
+      setError(false);
       let id = currentRef.current;
       try {
         if (id === null) {
@@ -130,6 +155,7 @@ export function useChat(
     const id = currentRef.current;
     if (busy.current || id === null) return;
     busy.current = true;
+    setError(false);
     const ctrl = new AbortController();
     controller.current = ctrl;
     setMessages((m) => (m.at(-1)?.role === "assistant" ? m.slice(0, -1) : m));
@@ -143,6 +169,8 @@ export function useChat(
 
   const select = useCallback(
     async (id: number) => {
+      if (busy.current) return;
+      setError(false);
       setCurrentId(id);
       currentRef.current = id;
       await loadMessages(id);
@@ -151,7 +179,9 @@ export function useChat(
   );
 
   const create = useCallback(async () => {
+    if (busy.current) return;
     try {
+      setError(false);
       const made = await api.createConversation(itemId, "New conversation");
       setConversations((c) => [made, ...c]);
       setCurrentId(made.id);
@@ -176,13 +206,15 @@ export function useChat(
 
   const remove = useCallback(
     async (id: number) => {
+      if (busy.current) return;
       try {
         await api.deleteConversation(itemId, id);
+        setError(false);
       } catch {
         setError(true);
         return;
       }
-      const rest = conversations.filter((x) => x.id !== id);
+      const rest = conversationsRef.current.filter((x) => x.id !== id);
       setConversations(rest);
       if (currentRef.current === id) {
         const next = rest[0] ?? null;
@@ -192,7 +224,7 @@ export function useChat(
         else setMessages([]);
       }
     },
-    [api, itemId, conversations, loadMessages],
+    [api, itemId, loadMessages],
   );
 
   const exportMarkdown = useCallback((id: number) => api.exportMarkdown(itemId, id), [api, itemId]);

@@ -36,7 +36,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const fakeChatApi = (reply = "Streamed answer [p.3]") => {
+const fakeChatApi = (reply = "Streamed answer [p.3]", hold?: Promise<void>) => {
   const messages: StoredMessage[] = [];
   const sent: unknown[] = [];
   const api: ChatApi = {
@@ -66,6 +66,7 @@ const fakeChatApi = (reply = "Streamed answer [p.3]") => {
         created_at: "",
       });
       yield { type: "text_delta", text: reply };
+      if (hold) await hold;
       yield { type: "done", duration_ms: 10 };
       messages.push({
         id: 2,
@@ -96,10 +97,15 @@ const fakeApi = () => {
 };
 
 const setup = (
-  opts: { open?: () => Promise<PdfSource>; load?: () => Promise<ReaderItem>; chat?: ChatApi } = {},
+  opts: {
+    open?: () => Promise<PdfSource>;
+    load?: () => Promise<ReaderItem>;
+    chat?: ChatApi;
+    hold?: Promise<void>;
+  } = {},
 ) => {
   const { api, rows } = fakeApi();
-  const chat = fakeChatApi();
+  const chat = fakeChatApi("Streamed answer [p.3]", opts.hold);
   const open = opts.open ?? (async () => new FakeSource({ numPages: 5 }));
   const utils = render(
     <ReaderPage
@@ -314,4 +320,67 @@ test("a very long selection is trimmed so the highlight can be saved", async () 
   await waitFor(() => expect(api.add).toHaveBeenCalled());
   const body = (api.add as ReturnType<typeof vi.fn>).mock.calls[0]?.[1];
   expect(body.text.length).toBeLessThanOrEqual(5000);
+});
+
+const selectPage = async (text: string) => {
+  Range.prototype.getClientRects = () =>
+    [{ x: 160, y: 130, width: 100, height: 20 }] as unknown as DOMRectList;
+  const span = (await screen.findAllByText(text))[0] as HTMLElement;
+  vi.spyOn(span.closest("[data-page]") as Element, "getBoundingClientRect").mockReturnValue({
+    x: 100,
+    y: 100,
+    width: 600,
+    height: 800,
+    left: 100,
+    top: 100,
+    right: 700,
+    bottom: 900,
+    toJSON: () => ({}),
+  });
+  const range = document.createRange();
+  range.selectNodeContents(span);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+  fireEvent.mouseUp(screen.getByTestId("pdf-scroll"));
+};
+
+test("asking about a very long selection sends a quote the server accepts", async () => {
+  const { chatSent } = setup({
+    open: async () => new FakeSource({ numPages: 5, text: () => "y".repeat(6000) }),
+  });
+  await selectPage("y".repeat(6000));
+  await userEvent.type(
+    await screen.findByPlaceholderText("Ask about this passage…"),
+    "Why?{Enter}",
+  );
+  await waitFor(() => expect(chatSent).toHaveLength(1));
+  const quote = (chatSent[0] as { quote: { text: string; rects: unknown[] } }).quote;
+  expect(quote.text.length).toBeLessThanOrEqual(5000);
+  expect(quote.rects.length).toBeLessThanOrEqual(200);
+});
+
+test("asking while an answer is streaming keeps the box and says to wait", async () => {
+  let release: () => void = () => {};
+  const hold = new Promise<void>((r) => {
+    release = r;
+  });
+  const { chatSent, api } = setup({ hold });
+  await select();
+  await userEvent.type(
+    await screen.findByPlaceholderText("Ask about this passage…"),
+    "First{Enter}",
+  );
+  await waitFor(() => expect(chatSent).toHaveLength(1));
+  await selectPage("Text of page 1");
+  await userEvent.type(
+    await screen.findByPlaceholderText("Ask about this passage…"),
+    "Second{Enter}",
+  );
+  expect(screen.getByPlaceholderText("Ask about this passage…")).toBeTruthy();
+  expect(
+    (await screen.findAllByRole("status")).some((s) => /wait/i.test(s.textContent ?? "")),
+  ).toBe(true);
+  expect(chatSent).toHaveLength(1);
+  expect(api.add).toHaveBeenCalledTimes(1); // no highlight for a question that was not sent
+  release();
 });
