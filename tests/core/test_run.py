@@ -201,3 +201,31 @@ def test_main_defaults_to_20_batches_and_returns_0_when_capped(tmp_path):
 def test_capped_is_reported_when_the_budget_ends_before_the_hooks(tmp_path):
     report = run(Store(":memory:"), tmp_path / "c.json", [news("a")], Llm(), max_batches=1)
     assert report.classified == 1 and report.enriched == 0 and report.capped
+
+
+def test_a_capped_backlog_still_leaves_budget_for_hooks(tmp_path):
+    store, out = Store(":memory:"), tmp_path / "c.json"
+    items = [news(f"{n:03d}") for n in range(15 * 6)]  # 6 classification batches
+    first = run(store, out, items, Llm(), max_batches=3)
+    assert first.classified == 15 * 3 and first.enriched == 0  # nothing to enrich yet: all spent
+    # Interesting items now wait for hooks: next run must spend part of its budget on them.
+    second_llm = Llm()
+    second = run(store, out, items, second_llm, max_batches=3)
+    assert second.enriched > 0 and second.classified > 0
+
+
+def test_main_rejects_a_zero_batch_budget(tmp_path):
+    import pytest
+
+    args = ["run", "--db", str(tmp_path / "v.db"), "--out", str(tmp_path / "c.json")]
+    with pytest.raises(SystemExit):
+        main([*args, "--max-batches", "0"], sources=source([news("a")]), runner=Llm(), now=NOW)
+
+
+def test_run_fails_visibly_when_every_batch_is_rejected(tmp_path):
+    class Garbage(Llm):
+        async def __call__(self, prompt, options):
+            return RawReply("not json", 1, 1, None)
+
+    report = run(Store(":memory:"), tmp_path / "c.json", [news("a")], Garbage())
+    assert report.classified == 0 and report.skipped_batches == 1 and report.stopped

@@ -5,12 +5,16 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-22
+
 ### Added
-- `--max-batches` (default 20) caps LLM batches per run, shared by classification and hooks; the rest resumes on the next run.
-- `daily.yml`: scheduled run that restores `veille.db` from the orphan `data` branch, runs the pipeline, republishes the database (even on failure) and deploys Pages; the job fails visibly if the LLM stops. `veille_llm.persist` implements the branch round trip.
+- `--max-batches` (default 20) caps LLM batches per run, shared by classification and hooks (a third of the budget is kept for hooks when some wait); the rest resumes on the next run.
+- `daily.yml`: scheduled run in three jobs. `core` (LLM token, read-only) restores `veille.db` from the orphan `data` branch and runs the pipeline; `persist` (only job with write access, no third-party code) republishes the database even on failure; `deploy` (no secret) publishes Pages. The run fails visibly if the LLM stops or rejects every batch.
+- `veille_llm.persist`: verified snapshot of the database (integrity check, crashed transaction rolled back) published as a single commit on `data`; remote URLs with tokens are never echoed.
 
 ### Changed
-- `pages.yml` no longer has a schedule (done by `daily.yml`).
+- `pages.yml` is removed: `daily.yml` is the only Pages deployer (run it manually to redeploy).
+- `--max-batches` must be at least 1.
 
 ## [0.2.0] - 2026-11-22
 

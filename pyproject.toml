@@ -1,6 +1,6 @@
 [project]
 name = "veille-llm"
-version = "0.2.0"
+version = "0.3.0"
 description = "Personal tech watch on LLM architecture papers (arXiv + Hugging Face), published as a static site"
 requires-python = ">=3.11"
 dependencies = [

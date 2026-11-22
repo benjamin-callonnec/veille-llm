@@ -5,6 +5,7 @@ working tree of the caller is never touched. The database holds no personal data
 """
 
 import re
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -45,12 +46,30 @@ def restore(db: Path, remote: str) -> bool:
     return True
 
 
+def _snapshot(db: Path, target: Path) -> None:
+    """Copy a consistent, verified database. Opening it rolls back a crashed transaction."""
+    try:
+        source = sqlite3.connect(db)
+        try:
+            if source.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                raise sqlite3.DatabaseError("integrity_check failed")
+            copy = sqlite3.connect(target)
+            try:
+                source.backup(copy)
+            finally:
+                copy.close()
+        finally:
+            source.close()
+    except sqlite3.DatabaseError as exc:
+        raise RuntimeError(f"refusing to publish: database integrity check failed ({exc})") from exc
+
+
 def publish(db: Path, remote: str) -> None:
     """Replace the `data` branch by one commit holding only the database."""
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
         _git("init", "-q", "-b", BRANCH, cwd=work)
-        (work / FILE).write_bytes(db.read_bytes())
+        _snapshot(db, work / FILE)
         _git("add", FILE, cwd=work)
         _git(*_IDENTITY, "commit", "-q", "-m", "chore(data): update veille.db", cwd=work)
         _git("push", "-q", "--force", remote, f"{BRANCH}:{BRANCH}", cwd=work)

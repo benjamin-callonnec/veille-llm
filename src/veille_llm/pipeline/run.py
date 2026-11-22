@@ -11,7 +11,7 @@ from pathlib import Path
 
 from veille_llm.llm import DEFAULT_MODEL, RawReply, Runner, claude_runner
 from veille_llm.pipeline.categorize import enrich_pending
-from veille_llm.pipeline.classify import classify_pending
+from veille_llm.pipeline.classify import BATCH_SIZE, classify_pending
 from veille_llm.pipeline.export import export_catalogue
 from veille_llm.pipeline.filtering import deterministic_filter
 from veille_llm.sources import RSS_FEEDS, Source, SourceReport, collect_all
@@ -84,7 +84,13 @@ async def run_pipeline(
     )
     report.new = store.upsert_items(fresh, stamp)
 
-    classified = await classify_pending(store, runner=meter, model=model, max_batches=max_batches)
+    # Keep part of the budget for hooks, or a long backlog would abandon interesting items
+    # (after 3 days) before they were ever enriched.
+    classify_cap = max_batches
+    if max_batches is not None:
+        waiting = -(-len(store.pending_enrichment()) // BATCH_SIZE)
+        classify_cap = max_batches - min(waiting, max_batches // 3)
+    classified = await classify_pending(store, runner=meter, model=model, max_batches=classify_cap)
     report.classified = classified.classified
     report.skipped_batches = classified.skipped_batches
     report.skip_reasons = list(classified.skip_reasons)
@@ -102,6 +108,9 @@ async def run_pipeline(
     elif classified.stopped is None:
         report.capped = report.capped or bool(store.pending_enrichment())
 
+    if report.stopped is None and report.classified == 0 and report.enriched == 0:
+        if report.skipped_batches:
+            report.stopped = "every LLM batch was rejected (see skipped reasons)"
     report.input_tokens, report.output_tokens = meter.input_tokens, meter.output_tokens
     report.cost_usd = meter.cost_usd
     export_catalogue(store, out, now=now)
@@ -130,6 +139,13 @@ def _summary(report: RunReport) -> str:
     return "\n".join(lines)
 
 
+def _positive_int(text: str) -> int:
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return value
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -145,7 +161,7 @@ def main(
     run.add_argument("--days", type=int, default=7)
     run.add_argument(
         "--max-batches",
-        type=int,
+        type=_positive_int,
         default=DEFAULT_MAX_BATCHES,
         help="LLM batches per run (classification + hooks); the rest waits for the next run",
     )
