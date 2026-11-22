@@ -1,0 +1,165 @@
+.chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.chat-head {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.conversations {
+  position: relative;
+}
+.conversations > button,
+.composer button,
+.chat .regenerate,
+.user-message button,
+.markdown .cite,
+.markdown .copy {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--fg);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.conversations ul {
+  position: absolute;
+  z-index: 6;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 260px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.conversations li {
+  display: flex;
+  gap: 4px;
+  padding: 2px 0;
+}
+.conversations li .conv-title {
+  flex: 1;
+  text-align: left;
+  border: 0;
+  background: transparent;
+}
+.chat-feed {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.chat-empty {
+  margin: 8px 0;
+}
+.user-message {
+  align-self: flex-end;
+  max-width: 85%;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-radius: 14px;
+  padding: 8px 12px;
+}
+.user-message p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.user-message blockquote {
+  margin: 0 0 6px;
+  padding-left: 8px;
+  border-left: 3px solid currentColor;
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+.user-message blockquote button {
+  margin-left: 8px;
+  background: transparent;
+  color: inherit;
+}
+.assistant {
+  max-width: 100%;
+}
+.thinking {
+  margin-bottom: 4px;
+}
+.thinking-toggle {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.thinking-body {
+  margin: 4px 0 6px 14px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.thinking-text {
+  margin: 2px 0;
+  white-space: pre-wrap;
+}
+.thinking-tool {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  margin: 2px 0;
+}
+.markdown p {
+  margin: 0 0 0.7em;
+  margin-left: 0;
+  margin-right: 0;
+}
+.markdown pre {
+  overflow: auto;
+  padding: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.markdown .code {
+  position: relative;
+}
+.markdown .copy {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  font-size: 0.75rem;
+}
+.markdown table {
+  border-collapse: collapse;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+}
+.markdown .cite {
+  padding: 0 6px;
+  font-size: 0.8rem;
+  color: var(--accent);
+  border-color: var(--accent);
+  border-radius: 10px;
+}
+.chat-error {
+  color: #c0392b;
+}
+.composer {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--border);
+}
+.composer textarea {
+  flex: 1;
+  resize: none;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--fg);
+  font: inherit;
+}

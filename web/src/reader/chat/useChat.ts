@@ -195,6 +195,8 @@ export function useChat(
     [api, itemId, conversations, loadMessages],
   );
 
+  const exportMarkdown = useCallback((id: number) => api.exportMarkdown(itemId, id), [api, itemId]);
+
   const toggle = useCallback(() => setAssistant((s) => (s ? toggleThinking(s) : s)), []);
 
   const current = conversations.find((c) => c.id === currentId) ?? null;
@@ -213,6 +215,7 @@ export function useChat(
     create,
     rename,
     remove,
+    exportMarkdown,
     toggleThinking: toggle,
   };
 }

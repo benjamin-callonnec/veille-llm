@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "../styles/styles.css";
 import "../styles/reader.css";
+import "../styles/chat.css";
 import { ReaderPage } from "./ReaderPage";
 
 const root = document.getElementById("root");
