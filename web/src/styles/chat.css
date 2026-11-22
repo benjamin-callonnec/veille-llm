@@ -385,12 +385,9 @@
   text-align: left;
   cursor: pointer;
 }
-.suggestions li {
-  display: flex;
-  align-items: center;
-}
-.suggestion-key {
-  margin-left: 8px;
+.composer-key {
+  align-self: center;
+  flex: none;
   padding: 0 5px;
   border-radius: 4px;
   background: var(--bubble);

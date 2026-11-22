@@ -159,18 +159,13 @@ export function ChatPane({
             onCite={onCite}
           />
         )}
-        {suggestions.length > 0 && (
+        {suggestions.length > 1 && (
           <ul className="suggestions" aria-label="Suggested questions">
-            {suggestions.map((q, i) => (
+            {suggestions.slice(1).map((q) => (
               <li key={q}>
                 <button type="button" className="suggestion" onClick={() => pick(q)}>
                   {q}
                 </button>
-                {i === 0 && (
-                  <kbd className="suggestion-key" title="Press Tab to put it in the box">
-                    Tab
-                  </kbd>
-                )}
               </li>
             ))}
           </ul>

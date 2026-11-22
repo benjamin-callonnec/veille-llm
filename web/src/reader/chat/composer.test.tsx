@@ -255,7 +255,10 @@ test("sending an image alone passes it, base64 encoded, to the api", async () =>
 });
 
 test("suggestions show under the last answer only, send on click, and fold away while typing", async () => {
-  const stored = [user({ text: "q" }), answer({ suggestions: ["Why does it work?", "<b>x</b>"] })];
+  const stored = [
+    user({ text: "q" }),
+    answer({ suggestions: ["First idea?", "Why does it work?", "<b>x</b>"] }),
+  ];
   const { api, sent } = chatApi(stored);
   render(<Host api={api} />);
   const chip = await screen.findByRole("button", { name: "Why does it work?" });
@@ -268,8 +271,34 @@ test("suggestions show under the last answer only, send on click, and fold away 
   await waitFor(() => expect(sent).toEqual([{ kind: "text", text: "Why does it work?" }]));
 });
 
+test("the first suggestion is the composer's placeholder, the others are buttons: no repeat", async () => {
+  const stored = [
+    user({ text: "q" }),
+    answer({ suggestions: ["First idea?", "Why does it work?", "What are the limits?"] }),
+  ];
+  render(<Host api={chatApi(stored).api} />);
+  await screen.findByRole("button", { name: "Why does it work?" });
+  expect(box().placeholder).toBe("First idea?");
+  expect(screen.queryByRole("button", { name: "First idea?" })).toBeNull();
+  expect(screen.getByRole("button", { name: "What are the limits?" })).toBeTruthy();
+  expect(screen.getByText("Tab")).toBeTruthy(); // the hint sits in the composer
+  await userEvent.type(box(), "a");
+  expect(screen.queryByText("Tab")).toBeNull(); // gone while typing
+});
+
+test("a single suggestion is only the placeholder, with no button", async () => {
+  const stored = [user({ text: "q" }), answer({ suggestions: ["Only one?"] })];
+  render(<Host api={chatApi(stored).api} />);
+  await screen.findAllByText("Because.");
+  expect(box().placeholder).toBe("Only one?");
+  expect(screen.queryByRole("button", { name: "Only one?" })).toBeNull();
+});
+
 test("a suggestion with a placeholder fills the composer instead of sending", async () => {
-  const stored = [user({ text: "q" }), answer({ suggestions: ["Explain [term] simply"] })];
+  const stored = [
+    user({ text: "q" }),
+    answer({ suggestions: ["Lead question?", "Explain [term] simply"] }),
+  ];
   const { api, sent } = chatApi(stored);
   render(<Host api={api} />);
   await userEvent.click(await screen.findByRole("button", { name: "Explain [term] simply" }));

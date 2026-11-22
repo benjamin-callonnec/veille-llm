@@ -173,7 +173,7 @@ export function Composer({
           <textarea
             ref={area}
             aria-label="Message"
-            placeholder={streaming ? "Answering…" : "Ask about the paper…"}
+            placeholder={streaming ? "Answering…" : (tabFill ?? "Ask about the paper…")}
             rows={1}
             value={text}
             onChange={(e) => edit(e.target.value)}
@@ -207,6 +207,11 @@ export function Composer({
               }
             }}
           />
+          {tabFill && !text && !streaming && images.length === 0 && (
+            <kbd className="composer-key" title="Press Tab to use this suggestion">
+              Tab
+            </kbd>
+          )}
           {streaming ? (
             <IconButton
               icon="stop"
