@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+import anyio
 import pytest
 from fastapi.testclient import TestClient
 
@@ -239,3 +240,67 @@ def test_unknown_conversation_and_cross_site(tmp_path):
         headers={"Sec-Fetch-Site": "cross-site"},
     )
     assert blocked.status_code == 403
+
+
+def test_cancelling_the_consuming_task_still_stores_the_partial_answer(tmp_path):
+    """Browser Stop = the server task is cancelled (not a clean aclose)."""
+    closed = []
+
+    async def runner(request):
+        try:
+            yield events.text_delta("partial before stop")
+            await asyncio.sleep(30)
+            yield events.done(1)
+        finally:
+            closed.append(True)
+
+    store = ReaderStore(tmp_path / "data")
+    cid = store.create_conversation("a1", "t")["id"]
+
+    async def go():
+        stream = stream_turn(store, runner, ITEMS[0], cid, "text", {"text": "q"})
+        # a cancel scope is level-triggered like the server's: every later await is cancelled again
+        with anyio.CancelScope() as scope:
+            async for _line in stream:
+                scope.cancel()
+
+    anyio.run(go)
+    stored = store.messages(cid)
+    assert [m["role"] for m in stored] == ["user", "assistant"]
+    assert stored[1]["content"]["stopped"] is True
+    assert stored[1]["content"]["answer"] == "partial before stop"
+    assert closed == [True]
+
+
+def test_deleting_a_streaming_conversation_is_refused(tmp_path):
+    client, app = make_client(tmp_path, script(*FULL))
+    cid = new_conversation(client)
+    app.state.streaming.add(cid)
+    assert client.delete(f"/api/items/a1/conversations/{cid}").status_code == 409
+    app.state.streaming.discard(cid)
+    assert client.delete(f"/api/items/a1/conversations/{cid}").status_code == 204
+
+
+def test_a_conversation_deleted_under_a_running_turn_does_not_crash(tmp_path):
+    store = ReaderStore(tmp_path / "data")
+    cid = store.create_conversation("a1", "t")["id"]
+    runner = script(events.text_delta("x"), events.done(1))
+
+    async def go():
+        stream = stream_turn(store, runner, ITEMS[0], cid, "text", {"text": "q"})
+        await anext(stream)
+        store.delete_conversation("a1", cid)
+        async for _ in stream:
+            pass
+
+    asyncio.run(go())  # must not raise sqlite3.IntegrityError
+
+
+def test_failure_messages_are_redacted(tmp_path):
+    runner = script(RuntimeError("boom sk-ant-secret999"))
+    client, _ = make_client(tmp_path, runner)
+    cid = new_conversation(client)
+    response = client.post(
+        f"/api/items/a1/conversations/{cid}/messages", json={"kind": "text", "text": "Hi"}
+    )
+    assert "secret999" not in response.text

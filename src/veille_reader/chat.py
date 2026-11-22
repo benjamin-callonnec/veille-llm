@@ -1,10 +1,13 @@
 """One chat turn: store the user message, stream the runner's events, store the answer."""
 
-import asyncio
 import json
+import sqlite3
 import time
 from collections.abc import AsyncIterator
 
+import anyio
+
+from veille_llm.llm import redact
 from veille_reader import events
 from veille_reader.events import AgentRunner, RunRequest
 from veille_reader.storage import ReaderStore
@@ -119,17 +122,23 @@ async def stream_turn(
                 if event.get("type") in ("done", "error"):
                     break
         except Exception as exc:  # noqa: BLE001 - reported to the user as a stream event
-            failure = events.error("failed", f"{type(exc).__name__}: {exc}")
+            failure = events.error("failed", redact(f"{type(exc).__name__}: {exc}"))
             answer.apply(failure)
             stopped = False
             yield sse(failure)
         else:
             stopped = False
     finally:
+        # Save first, with no await before it: a cancelled request (Stop) is cancelled again at
+        # every later await, so the answer must already be stored by then.
+        try:
+            store.add_message(cid, "assistant", "assistant", answer.content(stopped))
+        except sqlite3.IntegrityError:
+            pass  # the conversation was deleted while the answer was being produced
         aclose = getattr(events_stream, "aclose", None)
         if aclose is not None:
-            try:
-                await asyncio.shield(aclose())
-            except Exception:  # noqa: BLE001, S110 - closing a finished generator is best effort
-                pass
-        store.add_message(cid, "assistant", "assistant", answer.content(stopped))
+            with anyio.move_on_after(5, shield=True):
+                try:
+                    await aclose()
+                except Exception:  # noqa: BLE001, S110 - closing a finished generator is best effort
+                    pass

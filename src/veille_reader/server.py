@@ -197,6 +197,8 @@ def create_app(
 
     @app.delete("/api/items/{item_id}/conversations/{cid}")
     def delete_conversation(item_id: str, cid: int):  # noqa: ANN202
+        if cid in app.state.streaming:
+            return JSONResponse({"reason": "busy"}, status_code=409)
         if not store.delete_conversation(item_id, cid):
             return unknown("unknown_conversation")
         return Response(status_code=204)
