@@ -154,3 +154,26 @@ def test_store_adds_the_brief_column_to_an_existing_database(tmp_path):
     Store(path).close()
     cols = [r[1] for r in sqlite3.connect(path).execute("PRAGMA table_info(enrichments)")]
     assert "brief" in cols
+
+
+def test_fallback_category_is_english_and_old_autres_rows_are_migrated(tmp_path):
+    import sqlite3
+
+    from veille_llm.pipeline.categorize import FALLBACK_CATEGORY
+
+    assert FALLBACK_CATEGORY == "Other"
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(
+        "CREATE TABLE categories (name TEXT PRIMARY KEY);"
+        "INSERT INTO categories VALUES ('Autres'), ('Other'), ('Agents');"
+        "CREATE TABLE enrichments (item_id TEXT PRIMARY KEY, category TEXT NOT NULL, "
+        "hook TEXT NOT NULL);"
+        "INSERT INTO enrichments VALUES ('x', 'Autres', 'h');"
+    )
+    old.commit()
+    old.close()
+    store = Store(path)
+    assert sorted(store.category_names()) == ["Agents", "Other"]
+    row = sqlite3.connect(path).execute("SELECT category FROM enrichments").fetchone()
+    assert row == ("Other",)
