@@ -228,7 +228,7 @@ test("a live answer follows the open state it is given and has no action yet", (
 // --- composer -------------------------------------------------------------------------------
 
 const composer = (over: Partial<Parameters<typeof Composer>[0]> = {}) => {
-  const props = { onSend: vi.fn(), onStop: vi.fn(), onNew: vi.fn(), streaming: false, ...over };
+  const props = { onSend: vi.fn(), onStop: vi.fn(), streaming: false, ...over };
   render(<Composer {...props} />);
   return props;
 };
@@ -274,15 +274,10 @@ test("while the answer streams the stop icon replaces send, and Enter sends noth
   expect(p.onStop).toHaveBeenCalled();
 });
 
-test("a plus icon starts a new conversation, except while answering", async () => {
-  const p = composer();
-  await userEvent.click(screen.getByRole("button", { name: "New conversation" }));
-  expect(p.onNew).toHaveBeenCalledTimes(1);
-  cleanup();
-  composer({ streaming: true });
-  expect(
-    (screen.getByRole("button", { name: "New conversation" }) as HTMLButtonElement).disabled,
-  ).toBe(true);
+test("the composer has no plus: that control is kept for attachments and audio", () => {
+  composer();
+  expect(screen.queryByRole("button", { name: "New conversation" })).toBeNull();
+  expect(document.querySelector(".composer-new")).toBeNull();
 });
 
 test("the model is shown quietly under the composer", () => {

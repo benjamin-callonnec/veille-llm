@@ -4,18 +4,16 @@ import { IconButton } from "../../components/Icon";
 interface Props {
   onSend(text: string): void;
   onStop(): void;
-  /** Start a new conversation (the plus icon). */
-  onNew?(): void;
   streaming: boolean;
   /** The model that answers, shown quietly under the input. */
   model?: string;
 }
 
 /**
- * One quiet pill: a plus (new conversation), the text, and on the right only what applies now:
+ * One quiet pill: the text, and on the right only what applies now:
  * nothing while it is empty, a send icon once there is text, a stop icon while it answers.
  */
-export function Composer({ onSend, onStop, onNew, streaming, model }: Props) {
+export function Composer({ onSend, onStop, streaming, model }: Props) {
   const [text, setText] = useState("");
   const ready = text.trim().length > 0;
   const submit = () => {
@@ -27,16 +25,6 @@ export function Composer({ onSend, onStop, onNew, streaming, model }: Props) {
   return (
     <div className="composer-wrap">
       <div className="composer">
-        {onNew && (
-          <IconButton
-            icon="plus"
-            label="New conversation"
-            className="composer-new"
-            disabled={streaming}
-            onClick={onNew}
-            size={20}
-          />
-        )}
         <textarea
           aria-label="Message"
           placeholder={streaming ? "Answering…" : "Ask about the paper…"}

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { IconButton } from "../../components/Icon";
 import { AssistantMessage, StoredAssistantMessage } from "./AssistantMessage";
 import { Composer } from "./Composer";
 import { ConversationMenu } from "./ConversationMenu";
@@ -39,6 +40,13 @@ export function ChatPane({
   return (
     <div className="chat">
       <div className="chat-tools">
+        <IconButton
+          icon="compose"
+          label="New conversation"
+          disabled={chat.streaming}
+          onClick={chat.create}
+          size={18}
+        />
         <ConversationMenu
           disabled={chat.streaming}
           conversations={chat.conversations}
@@ -99,7 +107,6 @@ export function ChatPane({
         streaming={chat.streaming}
         model={model}
         onStop={chat.stop}
-        onNew={chat.create}
         onSend={(text) => chat.send({ kind: "text", text })}
       />
     </div>

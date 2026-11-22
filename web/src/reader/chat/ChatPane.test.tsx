@@ -169,14 +169,35 @@ test("retry asks for another answer to the last question", async () => {
   expect(spy).toHaveBeenCalledTimes(1);
 });
 
-test("the plus icon of the composer starts a new empty conversation", async () => {
+test("a new conversation starts from its own icon in the corner of the chat, not from a plus", async () => {
   const api = makeApi(Promise.resolve());
   render(<Host api={api} onGo={() => {}} />);
   await userEvent.type(await screen.findByRole("textbox", { name: "Message" }), "Q{Enter}");
   await screen.findByRole("button", { name: /Thought for/ });
-  await userEvent.click(screen.getByRole("button", { name: "New conversation" }));
+  const fresh = screen.getByRole("button", { name: "New conversation" });
+  expect(fresh.textContent).toBe("");
+  expect(fresh.closest(".chat-tools")).not.toBeNull();
+  expect(document.querySelector(".composer [aria-label='New conversation']")).toBeNull();
+  await userEvent.click(fresh);
   await waitFor(() => expect(screen.queryByRole("button", { name: /Thought for/ })).toBeNull());
   expect(screen.getByText(/select a passage/i)).toBeTruthy();
+});
+
+test("the new conversation icon is there from the start and disabled while an answer streams", async () => {
+  let open: () => void = () => {};
+  const gate = new Promise<void>((r) => {
+    open = r;
+  });
+  render(<Host api={makeApi(gate)} onGo={() => {}} />);
+  const icon = await screen.findByRole("button", { name: "New conversation" });
+  expect((icon as HTMLButtonElement).disabled).toBe(false);
+  await userEvent.type(screen.getByRole("textbox", { name: "Message" }), "Q{Enter}");
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "New conversation" }) as HTMLButtonElement).disabled,
+    ).toBe(true),
+  );
+  open();
 });
 
 test("a compaction shows as a quiet note, not as a message with actions", async () => {
