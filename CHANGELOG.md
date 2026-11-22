@@ -5,6 +5,13 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-22
+
+### Added
+- Local paper reader foundations (#20, part of #17): a separate `veille_reader` module with a local FastAPI server (`veille-reader serve`, 127.0.0.1 only, `make reader`), versioned SQLite storage and a PDF cache under `.local/reader/` (gitignored). arXiv PDFs are fetched from arxiv.org on first use (size cap, `%PDF` check, redirects only inside arxiv.org) and never redistributed.
+- A "Read" link on paper cards and a placeholder `reader.html` page, built only by `make reader`; the public Pages build contains neither (checked by a harness test).
+- The server refuses non-local `Host` headers and cross-site requests, so a web page visited by the author cannot make it download papers.
+
 ## [0.9.0] - 2026-11-22
 
 ### Added
