@@ -74,9 +74,19 @@ function makeApi(gate: Promise<void>) {
   return api;
 }
 
-function Host({ api, onGo, model }: { api: ChatApi; onGo: (p: number) => void; model?: string }) {
+function Host({
+  api,
+  onGo,
+  onCite,
+  model,
+}: {
+  api: ChatApi;
+  onGo: (p: number) => void;
+  onCite?: (p: number, q?: string) => void;
+  model?: string;
+}) {
   const chat = useChat("a1", api);
-  return <ChatPane chat={chat} onGo={onGo} model={model} />;
+  return <ChatPane chat={chat} onGo={onGo} onCite={onCite} model={model} />;
 }
 
 test("sending streams the answer, thinking folds when it starts and reopens on demand", async () => {
@@ -203,4 +213,14 @@ test("a compaction shows as a quiet note, not as a message with actions", async 
   expect(note.closest(".turn")).toBeNull();
   expect(screen.queryByText("SECRET SUMMARY")).toBeNull();
   expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(1); // only the old question
+});
+
+test("a citation chip goes through onCite when given, onGo stays for the quote arrow", async () => {
+  const onGo = vi.fn();
+  const onCite = vi.fn();
+  render(<Host api={makeApi(Promise.resolve())} onGo={onGo} onCite={onCite} />);
+  await userEvent.type(await screen.findByRole("textbox", { name: "Message" }), "Hi{Enter}");
+  await userEvent.click(await screen.findByRole("button", { name: "p.3" }));
+  expect(onCite).toHaveBeenCalledWith(3);
+  expect(onGo).not.toHaveBeenCalled();
 });

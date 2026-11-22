@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
+import type { Citation } from "./events";
 import { Markdown } from "./Markdown";
 
 afterEach(cleanup);
@@ -61,4 +62,100 @@ test("GFM tables and code blocks render, and code can be copied", async () => {
 test("a very long answer renders", () => {
   show("word ".repeat(20000));
   expect(document.body.textContent?.length).toBeGreaterThan(90000);
+});
+
+const verdict = (over: Partial<Citation>): Citation => ({
+  page: 4,
+  quote: "short exact quote",
+  status: "verified",
+  section: null,
+  ...over,
+});
+
+const chip = (name: string) => screen.getByRole("button", { name });
+
+test("a page with a quote becomes a chip showing only the page, and passes the quote on click", async () => {
+  const onCite = show('As shown [p.4 "short exact quote"] here.');
+  expect(document.body.textContent).not.toContain("short exact quote");
+  await userEvent.click(chip("p.4"));
+  expect(onCite).toHaveBeenCalledWith(4, "short exact quote");
+});
+
+test("the typographic quote forms and separators are understood", () => {
+  show("[p.2: “a quote one”] [p.3, «a quote two»] [p.5 ]");
+  expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["p.2", "p.3", "p.5"]);
+});
+
+test("the tooltip reads page, section and quote, omitting what is missing", () => {
+  render(
+    <Markdown
+      text={'[p.4 "short exact quote"] [p.7]'}
+      citations={[
+        verdict({ section: "Method" }),
+        verdict({ page: 7, quote: null, status: "page_only" }),
+      ]}
+    />,
+  );
+  expect(chip("p.4").getAttribute("title")).toBe("p.4 · Method · “short exact quote”");
+  expect(chip("p.7").getAttribute("title")).toBe("p.7");
+  expect(chip("p.4").className).not.toContain("cite-doubt");
+});
+
+test("without a verdict the chip is normal and the tooltip uses the written quote", () => {
+  show('[p.4 "short exact quote"]');
+  expect(chip("p.4").className).toBe("cite");
+  expect(chip("p.4").getAttribute("title")).toBe("p.4 · “short exact quote”");
+});
+
+test("an unverified or invalid citation is doubtful and says the quote was not found", () => {
+  render(
+    <Markdown
+      text={'[p.4 "short exact quote"] [p.99 "elsewhere in space"]'}
+      citations={[
+        verdict({ status: "unverified" }),
+        verdict({ page: 99, quote: "elsewhere in space", status: "invalid_page" }),
+      ]}
+    />,
+  );
+  for (const name of ["p.4", "p.99"]) {
+    expect(chip(name).className).toContain("cite-doubt");
+    expect(chip(name).getAttribute("title")).toMatch(/not found/i);
+  }
+});
+
+test("a wrong page is doubtful, says where it was found, and goes there", async () => {
+  const onCite = vi.fn();
+  render(
+    <Markdown
+      text={'[p.4 "short exact quote"]'}
+      citations={[verdict({ status: "wrong_page", found_page: 9 })]}
+      onCite={onCite}
+    />,
+  );
+  expect(chip("p.4").className).toContain("cite-doubt");
+  expect(chip("p.4").getAttribute("title")).toContain("p.9 instead");
+  await userEvent.click(chip("p.4"));
+  expect(onCite).toHaveBeenCalledWith(9, "short exact quote");
+});
+
+test("a verdict is matched by page and normalised quote", () => {
+  render(
+    <Markdown
+      text={'[p.4 "Short,  EXACT quote"] [p.5 "short exact quote"]'}
+      citations={[verdict({ status: "unverified" })]}
+    />,
+  );
+  expect(chip("p.4").className).toContain("cite-doubt");
+  expect(chip("p.5").className).toBe("cite");
+});
+
+test("a hostile quote is never rendered as HTML", () => {
+  render(
+    <Markdown
+      text={'[p.4 "</b><img src=x onerror=alert(1)>"]'}
+      citations={[verdict({ quote: "</b><img src=x onerror=alert(1)>", section: "<i>S</i>" })]}
+    />,
+  );
+  expect(document.querySelector("img,b,i")).toBeNull();
+  expect(chip("p.4").getAttribute("title")).toContain("</b>");
 });

@@ -1,4 +1,4 @@
-import type { ChatEvent } from "./events";
+import type { ChatEvent, Citation } from "./events";
 
 export type Block =
   | { type: "thinking"; text: string }
@@ -20,6 +20,8 @@ export interface AssistantState {
   durationMs: number | null;
   status: "streaming" | "done" | "stopped" | "error";
   error?: { kind: string; message: string };
+  /** The server's verdicts on the answer's citations, sent just before the end. */
+  citations?: Citation[];
 }
 
 export const initialAssistant = (now: number): AssistantState => ({
@@ -73,6 +75,8 @@ export function applyEvent(s: AssistantState, event: ChatEvent, now: number): As
         answer: s.answer + event.text,
         thinkingOpen: s.userToggled ? s.thinkingOpen : false,
       };
+    case "citations":
+      return { ...s, citations: event.items };
     case "done":
       return { ...s, status: "done", durationMs: event.duration_ms };
     case "error":

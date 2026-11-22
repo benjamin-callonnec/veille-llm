@@ -50,7 +50,7 @@ const contains = (a: Rect, b: Rect) =>
   bottom(a) + 1e-9 >= bottom(b);
 
 /** One rectangle per line: drop contained pieces, join pieces of the same line, cap the count. */
-function mergeRects(rects: Rect[]): Rect[] {
+export function mergeRects(rects: Rect[]): Rect[] {
   const kept = rects.filter(
     (r, i) => !rects.some((o, j) => j !== i && contains(o, r) && (!contains(r, o) || j < i)),
   );

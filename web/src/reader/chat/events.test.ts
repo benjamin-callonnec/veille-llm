@@ -58,3 +58,35 @@ test("validates every event shape", async () => {
   );
   expect(out.map((e) => e.type)).toEqual(["thinking_delta", "tool_use", "tool_result", "error"]);
 });
+
+test("a citations event keeps well-formed items and drops malformed ones", async () => {
+  const out = await collect(
+    chunks(
+      line({
+        type: "citations",
+        items: [
+          { page: 4, quote: "exact words", status: "verified", section: "Intro" },
+          { page: 5, quote: null, status: "page_only", section: null },
+          { page: 6, quote: "x", status: "wrong_page", section: null, found_page: 9 },
+          { page: "7", quote: "x", status: "verified", section: null },
+          { page: 8, quote: "x", status: "bogus", section: null },
+          "nope",
+        ],
+      }),
+    ),
+  );
+  expect(out).toEqual([
+    {
+      type: "citations",
+      items: [
+        { page: 4, quote: "exact words", status: "verified", section: "Intro" },
+        { page: 5, quote: null, status: "page_only", section: null },
+        { page: 6, quote: "x", status: "wrong_page", section: null, found_page: 9 },
+      ],
+    },
+  ]);
+});
+
+test("a citations event without a list is dropped", async () => {
+  expect(await collect(chunks(line({ type: "citations", items: "x" })))).toEqual([]);
+});
