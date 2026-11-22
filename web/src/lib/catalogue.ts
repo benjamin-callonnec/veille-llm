@@ -45,7 +45,7 @@ function parseItem(raw: unknown): Item | null {
   if (
     !isStr(r.id) || !isStr(r.title) || !isStr(r.url) || !isStr(r.published) ||
     !isStr(r.category) || !isStr(r.hook) || !isNum(r.score) ||
-    !TYPES.includes(r.type as ItemType)
+    !TYPES.includes(r.type as ItemType) || Number.isNaN(Date.parse(r.published))
   ) {
     return null;
   }
@@ -58,7 +58,7 @@ function parseItem(raw: unknown): Item | null {
     authors: Array.isArray(r.authors) ? r.authors.filter(isStr) : [],
     published: r.published,
     upvotes: isNum(r.upvotes) ? r.upvotes : 0,
-    score: r.score,
+    score: Math.min(10, Math.max(0, r.score)),
     type: r.type as ItemType,
     category: r.category,
     hook: r.hook,
@@ -100,7 +100,8 @@ function matches(item: Item, f: Filters, ignoreCategory = false): boolean {
 export function applyFilters(items: Item[], f: Filters): Item[] {
   const byDate = (a: Item, b: Item) => b.published.localeCompare(a.published);
   const order: Record<SortKey, (a: Item, b: Item) => number> = {
-    trending: (a, b) => b.upvotes - a.upvotes || b.score - a.score || byDate(a, b),
+    // News never have upvotes: adding the 0-10 score keeps strong news among trending papers.
+    trending: (a, b) => b.upvotes + b.score - (a.upvotes + a.score) || byDate(a, b),
     date: (a, b) => byDate(a, b) || b.score - a.score,
     score: (a, b) => b.score - a.score || byDate(a, b),
   };
@@ -133,6 +134,12 @@ export function chipCategories(
   const chips = all.slice(0, limit);
   for (const s of selected) if (!chips.includes(s)) chips.push(s); // never hide a selection
   return { chips, more: all.filter((c) => !chips.includes(c)) };
+}
+
+/** Drop categories that are not in today's catalogue (renamed or gone). */
+export function pruneCategories(f: Filters, known: Set<string>): Filters {
+  const categories = f.categories.filter((c) => known.has(c));
+  return categories.length === f.categories.length ? f : { ...f, categories };
 }
 
 export function writeHash(f: Filters): string {

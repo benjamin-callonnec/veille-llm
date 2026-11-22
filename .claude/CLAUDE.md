@@ -17,11 +17,10 @@ Si `graphify-out/` existe (graphe local, ignoré par git, à régénérer avec `
 
 ## Architecture (3 lignes)
 
-- `packages/core` : pipeline d'étapes (déterministes ou LLM) → SQLite → `data.json`.
-- `services/newsletter` : job hebdomadaire, template Jinja2, envoi SMTP.
-- `web` : catalogue React en lecture seule sur GitHub Pages (thème Papier clair / Nuit sombre).
-
-Le code v0 actuel est dans `src/veille_llm` et `site/` ; il sera repris dans les plans suivants.
+- `src/veille_llm` : pipeline d'étapes (sources → filtre → LLM) → SQLite → `catalogue.json` (`pipeline/`,
+  `sources/`, `llm.py`, `persist.py` pour la branche `data`). CLI : `veille-core`.
+- `web/` : catalogue React (Vite, TypeScript) en lecture seule, `components/`, `hooks/`, `lib/`, `styles/`.
+- `.github/workflows/daily.yml` : pipeline, persistance, build web et déploiement Pages. Newsletter à venir.
 
 ## Git et GitHub
 

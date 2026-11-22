@@ -8,7 +8,7 @@ GitHub Pages.
 ```bash
 make install     # uv sync + npm ci (web/)
 make check       # ruff, pytest, tsc and vitest
-make serve       # builds web/ and serves it on http://localhost:8000 (put a catalogue.json in web/dist)
+make serve       # builds web/, copies build/catalogue.json next to it, serves http://localhost:8000
 ```
 
 ## Core pipeline

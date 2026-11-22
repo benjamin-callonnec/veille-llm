@@ -1,4 +1,4 @@
-import { safeUrl, type Item } from "./catalogue";
+import { safeUrl, type Item } from "../lib/catalogue";
 
 const date = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });

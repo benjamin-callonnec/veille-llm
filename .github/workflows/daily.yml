@@ -69,22 +69,14 @@ jobs:
           REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
         run: PYTHONPATH=src python3 -m veille_llm.persist publish veille.db "$REMOTE"
 
-  deploy:
-    needs: [core, persist]
-    # The previous catalogue stays valid when the LLM stopped: deploy needs only its export.
+  build-web:
+    # Third-party npm code runs here, with read-only access and no Pages token.
+    needs: core
     if: ${{ !cancelled() && needs.core.result != 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    concurrency:
-      group: pages
-      cancel-in-progress: false
     permissions:
       contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -94,7 +86,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
         working-directory: web
       - run: npm run build
         working-directory: web
@@ -103,9 +95,25 @@ jobs:
         with:
           name: catalogue
           path: web/dist
-      - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/dist
+
+  deploy:
+    # Only publishes the built artifact: no checkout, no Node, no third-party build code.
+    needs: [persist, build-web]
+    if: ${{ !cancelled() && needs.build-web.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4

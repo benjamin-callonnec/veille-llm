@@ -177,3 +177,18 @@ def test_fallback_category_is_english_and_old_autres_rows_are_migrated(tmp_path)
     assert sorted(store.category_names()) == ["Agents", "Other"]
     row = sqlite3.connect(path).execute("SELECT category FROM enrichments").fetchone()
     assert row == ("Other",)
+
+
+def test_autres_migration_is_idempotent_and_handles_a_missing_other(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(
+        "CREATE TABLE categories (name TEXT PRIMARY KEY); INSERT INTO categories VALUES ('Autres');"
+    )
+    old.commit()
+    old.close()
+    Store(path).close()
+    again = Store(path)
+    assert again.category_names() == ["Other"]

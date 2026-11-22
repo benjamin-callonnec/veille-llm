@@ -1,71 +1,34 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useCatalogue, fetchCatalogue } from "../hooks/useCatalogue";
+import { useFilters } from "../hooks/useFilters";
 import { Card } from "./Card";
 import {
   applyFilters,
   chipCategories,
   countsByCategory,
-  DEFAULT_FILTERS,
-  parseCatalogue,
-  readHash,
   TYPES,
-  writeHash,
-  type Catalogue,
-  type Filters,
   type SortKey,
-} from "./catalogue";
-
-export const CATALOGUE_URL: string = import.meta.env.VITE_CATALOGUE_URL ?? "catalogue.json";
-
-async function fetchCatalogue(): Promise<unknown> {
-  const response = await fetch(CATALOGUE_URL, { cache: "no-cache" });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json();
-}
+} from "../lib/catalogue";
 
 const SORT_LABELS: Record<SortKey, string> = { trending: "Trending", date: "Date", score: "Score" };
 const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }) {
-  const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
-  const [error, setError] = useState(false);
-  const [filters, setFilters] = useState<Filters>(() => readHash(window.location.hash));
+  const { catalogue, error } = useCatalogue(load);
+  const items = useMemo(() => catalogue?.items ?? [], [catalogue]);
+  const known = useMemo(() => (catalogue ? new Set(items.map((i) => i.category)) : null), [catalogue, items]);
+  const { filters, setFilters, toggle } = useFilters(known);
 
-  useEffect(() => {
-    load()
-      .then((raw) => setCatalogue(parseCatalogue(raw)))
-      .catch(() => setError(true));
-  }, [load]);
-
-  useEffect(() => {
-    const hash = writeHash(filters);
-    if (hash !== window.location.hash) {
-      window.history.replaceState(null, "", hash || window.location.pathname + window.location.search);
-    }
-  }, [filters]);
-
-  const items = catalogue?.items ?? [];
   const counts = useMemo(() => countsByCategory(items, filters), [items, filters]);
-  // A category that no longer exists must not silently empty the list.
-  const known = useMemo(() => new Set(items.map((i) => i.category)), [items]);
-  const effective = useMemo<Filters>(
-    () => ({ ...filters, categories: filters.categories.filter((c) => known.has(c) || !catalogue) }),
-    [filters, known, catalogue],
-  );
-  const shown = useMemo(() => applyFilters(items, effective), [items, effective]);
-  const { chips, more } = chipCategories(counts, effective.categories);
-
-  const toggle = (key: "categories" | "types", value: string) =>
-    setFilters((f) => ({
-      ...f,
-      [key]: f[key].includes(value) ? f[key].filter((v) => v !== value) : [...f[key], value],
-    }));
+  const shown = useMemo(() => applyFilters(items, filters), [items, filters]);
+  const { chips, more } = chipCategories(counts, filters.categories);
 
   const chip = (name: string, list: "categories" | "types", label: string, count?: number) => (
     <button
       key={name}
       type="button"
       className="chip"
-      aria-pressed={effective[list].includes(name)}
+      aria-pressed={filters[list].includes(name)}
       onClick={() => toggle(list, name)}
     >
       {label}
@@ -77,7 +40,7 @@ export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }
     <>
       <header>
         <h1>LLM watch</h1>
-        <p className="muted">
+        <p className="muted" aria-live="polite">
           {catalogue
             ? `Updated ${new Date(catalogue.generated_at).toLocaleDateString("en-US")} · ${shown.length} of ${items.length} items`
             : error ? "" : "Loading…"}

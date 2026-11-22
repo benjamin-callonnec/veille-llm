@@ -1,8 +1,8 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { App } from "./App";
-import type { Item } from "./catalogue";
+import type { Item } from "../lib/catalogue";
 
 const item = (over: Partial<Item>): Item => ({
   id: "a",
@@ -135,4 +135,56 @@ test("shows a loading state, then an error state when the catalogue fails", asyn
   );
   expect(screen.getByText(/Loading/)).toBeTruthy();
   expect(await screen.findByRole("alert")).toBeTruthy();
+});
+
+test("categories that no longer exist are dropped from the url once loaded", async () => {
+  window.location.hash = "#cat=Security,Gone";
+  render(<App load={loader([item({ id: "2", title: "About security", category: "Security" })])} />);
+  await screen.findByText("About security");
+  await waitFor(() => expect(window.location.hash).toBe("#cat=Security"));
+});
+
+test("editing the hash (back/forward) updates the filters", async () => {
+  render(
+    <App
+      load={loader([
+        item({ id: "1", title: "About agents", category: "Agents" }),
+        item({ id: "2", title: "About security", category: "Security" }),
+      ])}
+    />,
+  );
+  await screen.findByText("About agents");
+  act(() => {
+    window.location.hash = "#cat=Security";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+  });
+  expect(screen.queryByText("About agents")).toBeNull();
+});
+
+test("the sort select reorders the list and is kept in the url", async () => {
+  const user = userEvent.setup();
+  render(
+    <App
+      load={loader([
+        item({ id: "1", title: "Low score", score: 2, upvotes: 90 }),
+        item({ id: "2", title: "High score", score: 9, upvotes: 1 }),
+      ])}
+    />,
+  );
+  await screen.findByText("Low score");
+  await user.selectOptions(screen.getByRole("combobox"), "score");
+  const titles = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+  expect(titles).toEqual(["High score", "Low score"]);
+  expect(window.location.hash).toContain("sort=score");
+});
+
+test("a slow older response never overwrites a newer catalogue", async () => {
+  let release: (v: unknown) => void = () => {};
+  const slow = () => new Promise((resolve) => (release = resolve));
+  const { rerender } = render(<App load={slow} />);
+  rerender(<App load={loader([item({ id: "n", title: "Newer" })])} />);
+  await screen.findByText("Newer");
+  await act(async () => release(payload([item({ id: "o", title: "Older" })])));
+  expect(screen.queryByText("Older")).toBeNull();
+  expect(screen.getByText("Newer")).toBeTruthy();
 });

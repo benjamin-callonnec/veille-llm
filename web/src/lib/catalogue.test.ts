@@ -51,6 +51,20 @@ describe("parseCatalogue", () => {
     expect(cat.items.map((i) => i.id)).toEqual(["a"]);
   });
 
+  test("drops items with an unparsable date and clamps the score to 0-10", () => {
+    const cat = parseCatalogue({
+      generated_at: "2026-11-22T00:00:00Z",
+      window_days: 30,
+      categories: [],
+      items: [
+        item({ id: "bad", published: "not a date" }),
+        item({ id: "big", score: 1e9 }),
+        item({ id: "neg", score: -4 }),
+      ],
+    });
+    expect(cat.items.map((i) => [i.id, i.score])).toEqual([["big", 10], ["neg", 0]]);
+  });
+
   test("rejects a payload that is not a catalogue", () => {
     expect(() => parseCatalogue(null)).toThrow();
     expect(() => parseCatalogue({ items: "nope" })).toThrow();
@@ -76,8 +90,15 @@ describe("applyFilters", () => {
   const ids = (f: Partial<typeof DEFAULT_FILTERS>) =>
     applyFilters(items, { ...DEFAULT_FILTERS, ...f }).map((i) => i.id);
 
-  test("no filter keeps everything, trending first (upvotes then score)", () => {
+  test("no filter keeps everything, trending first (upvotes plus score)", () => {
     expect(ids({})).toEqual(["2", "3", "1"]);
+  });
+  test("trending does not bury news, which never have upvotes", () => {
+    const mixed = [
+      item({ id: "p", type: "paper", upvotes: 2, score: 3 }),
+      item({ id: "n", type: "news", upvotes: 0, score: 9 }),
+    ];
+    expect(applyFilters(mixed, DEFAULT_FILTERS).map((i) => i.id)).toEqual(["n", "p"]);
   });
   test("sorts by date and by score", () => {
     expect(ids({ sort: "date" })).toEqual(["2", "3", "1"]);
