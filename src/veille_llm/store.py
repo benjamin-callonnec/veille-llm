@@ -37,6 +37,12 @@ CREATE TABLE IF NOT EXISTS enrichments (
     brief TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS categories (name TEXT PRIMARY KEY);
+-- Weekly newsletter progress: counts only, this database is public (never addresses).
+CREATE TABLE IF NOT EXISTS newsletter (
+    week TEXT PRIMARY KEY,
+    delivered INTEGER NOT NULL,
+    total INTEGER NOT NULL
+);
 """
 
 _ITEM_COLUMNS = "id, source, kind, title, summary, url, authors, published, upvotes"
@@ -162,6 +168,21 @@ class Store:
                 self._conn.execute(
                     "UPDATE items SET status = 'published' WHERE id = ?", (e.item_id,)
                 )
+
+    def newsletter_progress(self, week: str) -> tuple[int, int] | None:
+        row = self._conn.execute(
+            "SELECT delivered, total FROM newsletter WHERE week = ?", (week,)
+        ).fetchone()
+        return (row[0], row[1]) if row else None
+
+    def record_delivery(self, week: str, *, delivered: int, total: int) -> None:
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO newsletter (week, delivered, total) VALUES (?,?,?) "
+                "ON CONFLICT(week) DO UPDATE SET delivered = excluded.delivered, "
+                "total = excluded.total",
+                (week, delivered, total),
+            )
 
     def category_names(self) -> list[str]:
         return [row[0] for row in self._conn.execute("SELECT name FROM categories ORDER BY rowid")]

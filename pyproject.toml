@@ -5,6 +5,7 @@ description = "Personal tech watch on LLM research and news: daily pipeline, sta
 requires-python = ">=3.11"
 dependencies = [
     "feedparser>=6.0.14",
+    "jinja2>=3.1.6",
 ]
 
 [project.scripts]
