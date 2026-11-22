@@ -51,7 +51,7 @@ Public : l'auteur et 2 à 3 amis. Le projet ne coûte rien d'autre que l'abonnem
   désactivé. Quand la limite est atteinte, on suppose que l'agent s'arrête sans bascule payante.
   Ce comportement n'est pas documenté officiellement : **à vérifier avant la mise en production**.
 - Usage limité à l'auteur et à quelques proches (conditions d'usage de l'abonnement).
-- Modèle : Sonnet 5.5 (`claude-sonnet-5-5`) pour la classification et les hooks.
+- Modèle : Haiku 5.5 (`claude-haiku-5-5`) par défaut pour la classification et les hooks (issue #9 : 43/45 d'accord avec Sonnet, environ 3 fois moins cher) ; `--model` permet de revenir à Sonnet.
 - Envoi des mails : SMTP (Gmail avec mot de passe d'application), identifiants en GitHub Secrets.
 - **Sécurité (repo public)** :
   - Les workflows qui ont accès aux secrets ne se déclenchent que par `schedule` et `workflow_dispatch`.

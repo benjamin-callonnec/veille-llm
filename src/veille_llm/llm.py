@@ -89,6 +89,9 @@ SYSTEM_PROMPT = (
 _FENCE = re.compile(r"^```(?:json)?\s*\n(.*)\n```$", re.DOTALL)
 
 
+DEFAULT_MODEL = "claude-haiku-5-5"
+
+
 @dataclass(frozen=True)
 class LlmOptions:
     model: str
@@ -152,7 +155,7 @@ async def complete_json(
     schema: dict,
     *,
     data: object | None = None,
-    model: str = "claude-sonnet-5-5",
+    model: str = DEFAULT_MODEL,
     runner: Runner | None = None,
 ) -> LlmResult:
     """One tool-less turn that must return JSON valid for `schema`."""

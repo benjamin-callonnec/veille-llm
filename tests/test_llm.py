@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from veille_llm.llm import (
+    DEFAULT_MODEL,
     LlmAuthError,
     LlmError,
     LlmLimitError,
@@ -123,7 +124,7 @@ def test_runs_with_no_tools_and_one_turn():
     assert isinstance(seen[0], LlmOptions)
     assert seen[0].tools == []
     assert seen[0].max_turns == 1
-    assert seen[0].model == "claude-sonnet-5-5"
+    assert seen[0].model == DEFAULT_MODEL
 
 
 def test_runner_limit_error_becomes_llm_limit_error():

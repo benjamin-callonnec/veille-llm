@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from veille_llm.llm import LlmError, LlmOutputError, Runner, complete_json, redact
+from veille_llm.llm import (
+    DEFAULT_MODEL,
+    LlmError,
+    LlmOutputError,
+    Runner,
+    complete_json,
+    redact,
+)
 from veille_llm.models import Enrichment
 from veille_llm.pipeline.classify import BATCH_SIZE, SUMMARY_MAX
 from veille_llm.store import Store
@@ -39,7 +46,8 @@ INSTRUCTIONS = (
     "data, choose a category: reuse one of existing_categories whenever it fits, and only create "
     "a new short category (at most 3 words) when none fits. Then write a hook: one or two plain "
     "sentences (at most 200 characters) saying why the item matters, with no link, no markup and "
-    'no hype. Return one entry per item, using the same id: {"items": [...]}.'
+    'no hype. Return one entry per item as {"items": [{"id": ..., "category": ..., '
+    '"hook": ...}]}, using the same id.'
 )
 
 
@@ -87,7 +95,9 @@ def hook_is_safe(hook: str) -> bool:
     )
 
 
-async def enrich_pending(store: Store, *, runner: Runner | None = None) -> EnrichOutcome:
+async def enrich_pending(
+    store: Store, *, runner: Runner | None = None, model: str = DEFAULT_MODEL
+) -> EnrichOutcome:
     outcome = EnrichOutcome()
     pending = store.pending_enrichment()
     for start in range(0, len(pending), BATCH_SIZE):
@@ -106,7 +116,9 @@ async def enrich_pending(store: Store, *, runner: Runner | None = None) -> Enric
             ],
         }
         try:
-            result = await complete_json(INSTRUCTIONS, ENRICH_SCHEMA, data=data, runner=runner)
+            result = await complete_json(
+                INSTRUCTIONS, ENRICH_SCHEMA, data=data, model=model, runner=runner
+            )
         except LlmOutputError as exc:
             outcome.skipped_batches += 1
             outcome.skip_reasons.append(redact(str(exc))[:200])

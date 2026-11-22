@@ -38,9 +38,11 @@ class Llm:
     def __init__(self, limit_on_call=None, reject=()):
         self.calls, self.limit_on_call, self.reject = 0, limit_on_call, set(reject)
         self.classified_ids = []
+        self.models = set()
 
     async def __call__(self, prompt, options):
         self.calls += 1
+        self.models.add(options.model)
         if self.calls == self.limit_on_call:
             raise LlmLimitError("usage limit reached")
         data = data_of(prompt)
@@ -156,3 +158,14 @@ def test_run_reports_skipped_batches_and_token_usage(tmp_path):
     report = run(Store(":memory:"), tmp_path / "c.json", [news("a"), news("b")], llm)
     assert report.input_tokens == llm.calls and report.output_tokens == llm.calls
     assert report.skipped_batches == 0
+
+
+def test_main_model_option_reaches_every_llm_call_and_defaults_to_haiku(tmp_path):
+    args = ["run", "--db", str(tmp_path / "v.db"), "--out", str(tmp_path / "c.json")]
+    sonnet, default = Llm(), Llm()
+    main(
+        [*args, "--model", "claude-sonnet-5-5"], sources=source([news("a")]), runner=sonnet, now=NOW
+    )
+    main(args, sources=source([news("b")]), runner=default, now=NOW)
+    assert sonnet.models == {"claude-sonnet-5-5"}
+    assert default.models == {"claude-haiku-5-5"}
