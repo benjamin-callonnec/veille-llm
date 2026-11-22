@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { isMac, keysFor } from "./platform";
+import { combo, isMac, keysFor, modifierPressed } from "./platform";
 
 describe("isMac", () => {
   test("uses the modern platform hint first", () => {
@@ -50,5 +50,43 @@ describe("keysFor", () => {
       expect(keysFor(k, true)).toEqual([k]);
       expect(keysFor(k, false)).toEqual([k]);
     }
+  });
+});
+
+describe("Mod (Command on a Mac, Control elsewhere)", () => {
+  test("is written with the right symbol", () => {
+    expect(keysFor("Mod", true)).toEqual(["⌘"]);
+    expect(keysFor("Mod", false)).toEqual(["Ctrl"]);
+  });
+  test("a combination reads naturally on each platform", () => {
+    expect(combo(["Mod", "B"], true)).toBe("⌘B");
+    expect(combo(["Mod", "B"], false)).toBe("Ctrl+B");
+    expect(combo(["Mod", "Shift", "J"], true)).toBe("⌘⇧J");
+  });
+});
+
+describe("modifierPressed", () => {
+  const e = (over: Partial<Record<"metaKey" | "ctrlKey" | "altKey" | "shiftKey", boolean>>) => ({
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    ...over,
+  });
+  test("Command alone on a Mac, Control alone elsewhere", () => {
+    expect(modifierPressed(e({ metaKey: true }), true)).toBe(true);
+    expect(modifierPressed(e({ ctrlKey: true }), false)).toBe(true);
+  });
+  test("the other platform's modifier does nothing", () => {
+    expect(modifierPressed(e({ ctrlKey: true }), true)).toBe(false);
+    expect(modifierPressed(e({ metaKey: true }), false)).toBe(false);
+  });
+  test("with Shift or Alt it is a browser shortcut and is left alone", () => {
+    expect(modifierPressed(e({ metaKey: true, shiftKey: true }), true)).toBe(false);
+    expect(modifierPressed(e({ ctrlKey: true, altKey: true }), false)).toBe(false);
+  });
+  test("no modifier at all is not a shortcut", () => {
+    expect(modifierPressed(e({}), true)).toBe(false);
+    expect(modifierPressed(e({}), false)).toBe(false);
   });
 });

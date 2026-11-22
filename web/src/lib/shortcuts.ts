@@ -18,8 +18,8 @@ export const READER_SHORTCUTS: ShortcutGroup[] = [
   {
     title: "Panes",
     entries: [
-      { keys: ["Alt", "1"], label: "Toggle the PDF pane" },
-      { keys: ["Alt", "2"], label: "Toggle the chat pane" },
+      { keys: ["Mod", "B"], label: "Toggle the PDF pane" },
+      { keys: ["Mod", "J"], label: "Toggle the chat pane" },
       { keys: ["←", "→"], label: "Resize the panes (on the divider)" },
     ],
   },

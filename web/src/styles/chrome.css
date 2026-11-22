@@ -1,9 +1,10 @@
-/* The logo and the settings gear: fixed, at the same place on every page. */
+/* The logo is part of the page (it scrolls away with it), always at the same top-left spot; only
+   the settings gear floats. */
 .home-logo {
-  position: fixed;
+  position: absolute;
   top: 12px;
   left: 16px;
-  z-index: 30;
+  z-index: 5;
   display: inline-flex;
   border-radius: 8px;
   opacity: 0.95;

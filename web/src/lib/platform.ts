@@ -18,8 +18,10 @@ export function isMac(nav: NavigatorLike | undefined = globalThis.navigator): bo
 
 /** How a key is written on this platform (one key can be several caps, like Fn and an arrow). */
 export function keysFor(key: string, mac: boolean): string[] {
-  if (!mac) return [key];
+  if (!mac) return key === "Mod" ? ["Ctrl"] : [key];
   switch (key) {
+    case "Mod":
+      return ["⌘"];
     case "Alt":
       return ["⌥"];
     case "Shift":
@@ -35,4 +37,26 @@ export function keysFor(key: string, mac: boolean): string[] {
     default:
       return [key];
   }
+}
+
+/** A combination written for this platform: "⌘B" on a Mac, "Ctrl+B" elsewhere. */
+export function combo(keys: string[], mac: boolean): string {
+  const caps = keys.flatMap((k) => keysFor(k, mac));
+  return mac ? caps.join("") : caps.join("+");
+}
+
+interface Modifiers {
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+}
+
+/**
+ * Command alone on a Mac, Control alone elsewhere. With Shift or Alt it is a browser shortcut
+ * (Cmd+Shift+B shows Chrome's bookmarks bar), so it is left alone.
+ */
+export function modifierPressed(e: Modifiers, mac: boolean): boolean {
+  if (e.altKey || e.shiftKey) return false;
+  return mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 }

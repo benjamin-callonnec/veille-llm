@@ -1,11 +1,11 @@
 import { expect, test } from "vitest";
 import { CATALOGUE_SHORTCUTS, READER_SHORTCUTS } from "./shortcuts";
 
-test("the reader lists the pane shortcuts PaneLayout really uses", () => {
+test("the reader lists the pane shortcuts PaneLayout really uses (B and J, which Chrome does not take)", () => {
   const panes = READER_SHORTCUTS.find((g) => g.title === "Panes");
   const labels = panes?.entries.map((e) => `${e.keys.join("+")}:${e.label}`) ?? [];
-  expect(labels).toContain("Alt+1:Toggle the PDF pane");
-  expect(labels).toContain("Alt+2:Toggle the chat pane");
+  expect(labels).toContain("Mod+B:Toggle the PDF pane");
+  expect(labels).toContain("Mod+J:Toggle the chat pane");
 });
 
 test("every group has a title and entries with keys and a label", () => {

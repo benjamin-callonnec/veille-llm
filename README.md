@@ -52,7 +52,8 @@ unsubscribe). Nothing private is stored in the repository.
 ## App shell and settings
 
 Every page is rendered inside `AppShell` (`web/src/components/AppShell.tsx`), which provides the logo (home
-button to the catalogue, top-left) and the settings gear (bottom-left) at the same place on every page.
+button to the catalogue, top-left of the page) and the floating settings gear (bottom-left) at the same place
+on every page.
 The gear opens the settings: theme (Auto follows the system, Papier light, Nuit dark, remembered in the
 browser) and the keyboard shortcuts of the page; `?` opens it too. A new page only has to be put inside
 the shell with its list of shortcuts.
@@ -75,7 +76,7 @@ arXiv PDF is fetched from arxiv.org on first use and cached in `.local/reader/pd
 redistributed). Highlights, chats and scores live in `.local/reader/reader.db`. The public Pages build never
 contains the reader or the "Read" link. If port 8765 is taken (an older reader still running), stop it first.
 Panes: drag the divider (or use the arrow keys when it is focused), collapse a pane with its small cross
-or toggle with **Alt+1** (PDF) and **Alt+2** (chat); a thin rail with a "+" brings it back.
+or toggle with **Cmd+B** (PDF) and **Cmd+J** (chat), **Ctrl+B** / **Ctrl+J** on Windows and Linux; a thin rail with a "+" brings it back.
 
 The page shows the PDF (zoom, search with `/`, outline, PageUp/PageDown) next to a pane for the
 chat; the divider can be dragged (or moved with the arrow keys) and each pane collapsed. Select a

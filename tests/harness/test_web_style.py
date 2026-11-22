@@ -1,5 +1,5 @@
-"""Guards for the shared page chrome (logo, settings gear, theme): they are CSS facts, so they are
-checked on the stylesheets themselves."""
+"""Guards for the shared page chrome (logo in the page, floating settings gear, theme): they are CSS
+facts, so they are checked on the stylesheets themselves."""
 
 import re
 from pathlib import Path
@@ -16,9 +16,10 @@ CHROME = (STYLES / "chrome.css").read_text()
 TOKENS = (STYLES / "tokens.css").read_text()
 
 
-def test_the_logo_is_fixed_in_the_top_left_corner_on_every_page():
+def test_the_logo_is_in_the_page_at_the_top_left_corner_and_does_not_float():
     r = rule(CHROME, ".home-logo")
-    assert "position: fixed" in r
+    assert "position: absolute" in r  # part of the page: it scrolls away with it
+    assert "position: fixed" not in r
     assert re.search(r"top:\s*\d+px", r) and re.search(r"left:\s*\d+px", r)
 
 

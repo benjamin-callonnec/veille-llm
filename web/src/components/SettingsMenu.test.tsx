@@ -54,7 +54,7 @@ test("keys are shown as keyboard keys", async () => {
   await open();
   const keys = Array.from(document.querySelectorAll("kbd")).map((k) => k.textContent);
   expect(keys).toContain("PageDown");
-  expect(keys).toContain("Alt");
+  expect(keys).toContain("Ctrl"); // jsdom is not a Mac
 });
 
 test("choosing Nuit sets the dark theme and remembers it", async () => {
@@ -122,23 +122,23 @@ test("the question mark key toggles it, except while typing", async () => {
 
 const kbds = () => Array.from(document.querySelectorAll("kbd")).map((k) => k.textContent);
 
-test("on a Mac the shortcuts show Option, Return and the Fn arrows", async () => {
+test("on a Mac the shortcuts show Command, Return and the Fn arrows", async () => {
   render(<SettingsMenu shortcuts={READER_SHORTCUTS} storage={storage} platform="mac" />);
   await userEvent.click(gear());
-  expect(kbds()).toContain("⌥");
+  expect(kbds()).toContain("⌘");
   expect(kbds()).toContain("Return");
   expect(kbds()).toContain("fn");
-  expect(kbds()).not.toContain("Alt");
+  expect(kbds()).not.toContain("Ctrl");
   expect(kbds()).not.toContain("PageDown");
-  expect(screen.getByRole("dialog").textContent).toMatch(/Option/);
+  expect(screen.getByRole("dialog").textContent).toMatch(/Command key/);
 });
 
-test("on Windows or Linux the shortcuts show Alt, Enter and PageUp/PageDown", async () => {
+test("on Windows or Linux the shortcuts show Ctrl, Enter and PageUp/PageDown", async () => {
   render(<SettingsMenu shortcuts={READER_SHORTCUTS} storage={storage} platform="other" />);
   await userEvent.click(gear());
-  expect(kbds()).toContain("Alt");
+  expect(kbds()).toContain("Ctrl");
   expect(kbds()).toContain("Enter");
   expect(kbds()).toContain("PageDown");
-  expect(kbds()).not.toContain("⌥");
-  expect(screen.getByRole("dialog").textContent).not.toMatch(/Option/);
+  expect(kbds()).not.toContain("⌘");
+  expect(screen.getByRole("dialog").textContent).not.toMatch(/Command key/);
 });

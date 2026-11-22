@@ -1,6 +1,6 @@
 import { Logo } from "./Logo";
 
-/** The logo, fixed in the top-left corner of every page: it always goes back to the catalogue. */
+/** The logo, at the top-left corner of every page (in the page, not floating): home, the catalogue. */
 export function HomeLogo() {
   return (
     <a className="home-logo" href="./" aria-label="Home" title="Home (catalogue)">

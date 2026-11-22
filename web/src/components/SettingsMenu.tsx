@@ -86,7 +86,7 @@ export function SettingsMenu({ shortcuts, storage, platform }: Props) {
               </dl>
             </section>
           ))}
-          {mac && <p className="muted">⌥ is the Option key, fn the Function key.</p>}
+          {mac && <p className="muted">⌘ is the Command key, fn the Function key.</p>}
         </div>
       )}
       <button
