@@ -123,7 +123,14 @@ recall, verified quotes, expected facts, abstention, tool calls, cost and time (
 The question box next to a selected passage is one pill: three coloured dots, the question, copy, and a
 send icon once you typed. A new conversation starts from the compose icon in the chat corner (the "+"
 of the composer is kept for attachments and audio).
-Remaining pieces: #24 to #26 (parent: #17).
+**Composer (#24).** Paste (Cmd/Ctrl+V) or drop an image or screenshot: up to 4 per message, 5 MB each,
+PNG, JPEG, WebP or GIF (checked from the bytes, not the name), shown as removable thumbnails and
+scaled down in the browser when large. Images are stored under `.local/reader/images/`, served only
+to the local reader and passed to the tutor as image blocks; text inside an image is data, not
+instructions. After each answer, up to three suggested follow-up questions appear as chips (one click
+sends them; a suggestion with `[placeholders]` fills the composer, Tab jumps to the next one). Drafts
+are kept per conversation. Images are not deleted with their conversation.
+Remaining pieces: #25 (quizzes, in progress) and #26 (voice) (parent: #17).
 
 ## Deploy on GitHub Pages
 

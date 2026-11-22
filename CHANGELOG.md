@@ -17,6 +17,10 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 - `make eval-reader`: 10 questions on two papers run through the real tutor, with page precision and recall, verified quotes, facts, abstention, tool calls, cost and time.
 - The ask-the-agent box next to a selection is one quiet pill with three real-coloured dots (visible in the dark theme), copy and send icons, and it stays on screen. Copy is an icon.
 - A new conversation has its own compose icon in the chat corner; the composer's "+" is kept for attachments and audio.
+- Composer (#24): paste or drop images and screenshots (up to 4 per message, 5 MB each, PNG, JPEG, WebP or GIF checked by content) with removable thumbnails, large images scaled down in the browser, shown in your message (click opens the full image). Images are stored locally, served only to the local reader, and sent to the tutor as image blocks; text inside an image is treated as data.
+- After each answer the tutor offers up to 3 suggested follow-up questions (validated, one click to send); suggestions containing `[placeholders]` fill the composer and Tab jumps from one placeholder to the next. Drafts are kept per conversation.
+- Eval: page recall counts a case as found when any of its valid pages is cited; the tutor now says so, without citing, when the paper does not answer.
+- The highlights drawn on the page keep their light colours in the dark theme.
 
 ## [0.11.0] - 2026-11-22
 
