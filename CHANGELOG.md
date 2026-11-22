@@ -5,6 +5,10 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+### Added
+- Weekly newsletter (`weekly.yml`, `veille-newsletter send`): the 8 best items of the last 7 days (at least 3), Jinja2 HTML and text mail with the hook in bold, one message per subscriber, sent once per ISO week and resumable after a partial failure (counters only in `veille.db`). Addresses are validated (no header injection), masked in logs and never stored or printed. SMTP over TLS with settings from secrets; the job holding the secrets has read-only repository access, a separate job persists the counters.
+- `make subs-add|subs-remove|subs-list|subs-push` to manage the local `subscribers.txt` and push it to the `SUBSCRIBERS` secret with the personal GitHub account.
+
 ## [0.6.0] - 2026-11-22
 
 ### Added
