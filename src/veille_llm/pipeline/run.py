@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import io
+import os
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -14,6 +17,7 @@ from veille_llm.pipeline.categorize import enrich_pending
 from veille_llm.pipeline.classify import BATCH_SIZE, classify_pending
 from veille_llm.pipeline.export import export_catalogue
 from veille_llm.pipeline.filtering import deterministic_filter
+from veille_llm.pipeline.progress import Progress
 from veille_llm.sources import RSS_FEEDS, Source, SourceReport, collect_all
 from veille_llm.sources.arxiv_source import arxiv_source
 from veille_llm.sources.hf_source import hf_upvotes, with_upvotes
@@ -68,14 +72,43 @@ async def run_pipeline(
     upvotes: Callable[[], dict[str, int]] | None = None,
     model: str = DEFAULT_MODEL,
     max_batches: int | None = None,
+    progress: Progress | None = None,
+    heartbeat_seconds: float = 60.0,
+) -> RunReport:
+    progress = progress or Progress(io.StringIO())  # silent unless the caller wants output
+    progress.start()
+    heartbeat = asyncio.create_task(progress.heartbeat(heartbeat_seconds))
+    try:
+        return await _run(
+            store, sources, days, now, out, runner, upvotes, model, max_batches, progress
+        )
+    finally:
+        heartbeat.cancel()
+
+
+async def _run(
+    store: Store,
+    sources: dict[str, Source],
+    days: int,
+    now: datetime,
+    out: Path,
+    runner: Runner | None,
+    upvotes: Callable[[], dict[str, int]] | None,
+    model: str,
+    max_batches: int | None,
+    progress: Progress,
 ) -> RunReport:
     report = RunReport()
     meter = _Meter(runner or claude_runner)
     stamp = now.strftime(_STAMP)
     store.abandon_stale(stamp)
 
+    progress.group("Collect")
     items, report.sources = collect_all(sources, days)
     report.collected = len(items)
+    for source in report.sources:
+        state = "ok" if source.ok else f"FAILED ({source.error})"
+        progress.info(f"source {source.name}: {source.count} items, {state}")
     if upvotes is not None:
         items = with_upvotes(items, upvotes())
         store.refresh_upvotes({i.id: i.upvotes for i in items if i.upvotes})
@@ -83,6 +116,8 @@ async def run_pipeline(
         items, known_ids=store.known_ids([i.id for i in items]), now=now, days=days
     )
     report.new = store.upsert_items(fresh, stamp)
+    progress.info(f"collected={report.collected} new={report.new}")
+    progress.endgroup()
 
     # Always keep a third of the budget for hooks (more if many wait): otherwise a first run
     # classifies everything, publishes nothing, and a backlog abandons interesting items
@@ -91,7 +126,23 @@ async def run_pipeline(
     if max_batches is not None:
         waiting = -(-len(store.pending_enrichment()) // BATCH_SIZE)
         classify_cap = max_batches - min(max(waiting, max_batches // 3), max_batches - 1)
-    classified = await classify_pending(store, runner=meter, model=model, max_batches=classify_cap)
+    to_classify = len(store.pending_classification())
+    progress.group("Classify")
+
+    def classify_progress(n: int, total: int) -> None:
+        progress.batch(
+            "classify",
+            n,
+            total,
+            items=min(n * BATCH_SIZE, to_classify),
+            tokens=meter.input_tokens + meter.output_tokens,
+            cost=meter.cost_usd,
+        )
+
+    classified = await classify_pending(
+        store, runner=meter, model=model, max_batches=classify_cap, on_batch=classify_progress
+    )
+    progress.endgroup()
     report.classified = classified.classified
     report.skipped_batches = classified.skipped_batches
     report.skip_reasons = list(classified.skip_reasons)
@@ -100,7 +151,23 @@ async def run_pipeline(
     left = None if max_batches is None else max_batches - meter.calls
     if classified.stopped is None and not (left is not None and left <= 0):
         # never call the LLM again right after it stopped us or once the budget is spent
-        enriched = await enrich_pending(store, runner=meter, model=model, max_batches=left)
+        to_enrich = len(store.pending_enrichment())
+        progress.group("Hooks")
+
+        def hooks_progress(n: int, total: int) -> None:
+            progress.batch(
+                "hooks",
+                n,
+                total,
+                items=min(n * BATCH_SIZE, to_enrich),
+                tokens=meter.input_tokens + meter.output_tokens,
+                cost=meter.cost_usd,
+            )
+
+        enriched = await enrich_pending(
+            store, runner=meter, model=model, max_batches=left, on_batch=hooks_progress
+        )
+        progress.endgroup()
         report.enriched = enriched.enriched
         report.skipped_batches += enriched.skipped_batches
         report.skip_reasons += enriched.skip_reasons
@@ -114,8 +181,11 @@ async def run_pipeline(
             report.stopped = "every LLM batch was rejected (see skipped reasons)"
     report.input_tokens, report.output_tokens = meter.input_tokens, meter.output_tokens
     report.cost_usd = meter.cost_usd
+    progress.group("Export")
     export_catalogue(store, out, now=now)
     report.published = len(store.published_items("0000-01-01T00:00:00Z"))
+    progress.info(f"published={report.published}")
+    progress.endgroup()
     return report
 
 
@@ -174,6 +244,7 @@ def main(
         sources = {"arxiv": lambda days: arxiv_source(days)}
         sources.update({name: rss_source(name, url) for name, url in RSS_FEEDS.items()})
     store = Store(args.db)
+    progress = Progress(sys.stdout, github=os.environ.get("GITHUB_ACTIONS") == "true")
     try:
         report = asyncio.run(
             run_pipeline(
@@ -186,11 +257,30 @@ def main(
                 model=args.model,
                 max_batches=args.max_batches,
                 upvotes=hf_upvotes if live else None,
+                progress=progress,
             )
         )
     finally:
         store.close()
     print(_summary(report))
+    summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_file:
+        progress.write_summary(
+            Path(summary_file),
+            {
+                "collected": report.collected,
+                "new": report.new,
+                "classified": report.classified,
+                "enriched": report.enriched,
+                "published": report.published,
+                "skipped batches": report.skipped_batches,
+                "input tokens": report.input_tokens,
+                "output tokens": report.output_tokens,
+                "indicative cost (USD)": round(report.cost_usd, 4),
+            },
+            capped=report.capped,
+            stopped=report.stopped,
+        )
     return 1 if report.stopped else 0
 
 

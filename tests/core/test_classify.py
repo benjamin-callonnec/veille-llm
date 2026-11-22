@@ -170,3 +170,17 @@ def test_prompts_name_every_field_the_schema_requires():
     ):
         for key in schema["properties"]["items"]["items"]["required"]:
             assert f'"{key}"' in instructions
+
+
+def test_classify_pending_reports_every_batch_even_skipped_ones():
+    store = Store(":memory:")
+    store.upsert_items([make(f"i{n:02d}") for n in range(BATCH_SIZE + 1)], NOW)
+    calls = []
+
+    async def bad(prompt, options):
+        return RawReply("not json", 1, 1, None)
+
+    asyncio.run(
+        classify_pending(store, runner=bad, on_batch=lambda n, total: calls.append((n, total)))
+    )
+    assert calls == [(1, 2), (2, 2)]
