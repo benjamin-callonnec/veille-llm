@@ -13,12 +13,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from veille_llm.llm import DEFAULT_MODEL, RawReply, Runner, claude_runner
-from veille_llm.pipeline.categorize import enrich_pending
-from veille_llm.pipeline.classify import BATCH_SIZE, classify_pending
+from veille_llm.pipeline.categorize import enrich_pending, refresh_stale_hooks
+from veille_llm.pipeline.classify import BATCH_SIZE, classify_pending, reclassify_stale
 from veille_llm.pipeline.consolidate import consolidate
 from veille_llm.pipeline.export import export_catalogue
 from veille_llm.pipeline.filtering import deterministic_filter
 from veille_llm.pipeline.progress import Progress
+from veille_llm.pipeline.version import classify_provenance, hooks_provenance
 from veille_llm.sources import RSS_FEEDS, Source, SourceReport, collect_all
 from veille_llm.sources.arxiv_source import arxiv_source
 from veille_llm.sources.hf_source import hf_upvotes, with_upvotes
@@ -28,6 +29,7 @@ from veille_llm.store import Store
 _STAMP = "%Y-%m-%dT%H:%M:%SZ"
 CATALOGUE_DAYS = 30  # the exported window, and the window categories are counted over
 CONSOLIDATE_ROUNDS = 3
+RECOMPUTE_DEFAULT = 5  # batches of recomputation per run when no cap is given
 DEFAULT_MAX_BATCHES = 20  # about 300 items per run; revisit once Haiku consumption is measured
 
 
@@ -48,6 +50,7 @@ class RunReport:
     capped: bool = False
     merged: int = 0
     reassigned: int = 0
+    refreshed: int = 0
 
 
 class _Meter:
@@ -146,7 +149,12 @@ async def _run(
         )
 
     classified = await classify_pending(
-        store, runner=meter, model=model, max_batches=classify_cap, on_batch=classify_progress
+        store,
+        runner=meter,
+        model=model,
+        max_batches=classify_cap,
+        on_batch=classify_progress,
+        provenance=classify_provenance(model),
     )
     progress.endgroup()
     report.classified = classified.classified
@@ -177,6 +185,7 @@ async def _run(
             max_batches=left,
             on_batch=hooks_progress,
             since=window_start,
+            provenance=hooks_provenance(model),
         )
         progress.endgroup()
         report.enriched = enriched.enriched
@@ -186,6 +195,35 @@ async def _run(
         report.capped = report.capped or enriched.capped
     elif classified.stopped is None:
         report.capped = report.capped or bool(store.pending_enrichment())
+
+    # Results made under another model, prompt or minor pipeline version are recomputed lazily,
+    # with whatever budget the new items left (they always go first).
+    if report.stopped is None:
+        spare = RECOMPUTE_DEFAULT if max_batches is None else max_batches - meter.calls
+        if spare > 0:
+            progress.group("Recompute")
+            verdicts = await reclassify_stale(
+                store,
+                runner=meter,
+                model=model,
+                max_batches=spare,
+                provenance=classify_provenance(model),
+            )
+            report.refreshed += verdicts.classified
+            report.stopped = verdicts.stopped
+            spare = spare if max_batches is None else max_batches - meter.calls
+            if report.stopped is None and spare > 0:
+                hooks = await refresh_stale_hooks(
+                    store,
+                    runner=meter,
+                    model=model,
+                    max_batches=spare,
+                    provenance=hooks_provenance(model),
+                )
+                report.refreshed += hooks.enriched
+                report.stopped = hooks.stopped
+            progress.info(f"refreshed={report.refreshed}")
+            progress.endgroup()
 
     # Tidy the categories (at most CONSOLIDATE_ROUNDS small calls, outside the batch budget:
     # otherwise a big backlog spends the whole cap and "Other" never gets fixed).
@@ -221,7 +259,7 @@ def _summary(report: RunReport) -> str:
     lines = [
         f"collected={report.collected} new={report.new} classified={report.classified} "
         f"enriched={report.enriched} published={report.published} "
-        f"merged={report.merged} reassigned={report.reassigned}"
+        f"merged={report.merged} reassigned={report.reassigned} refreshed={report.refreshed}"
     ]
     lines.append(
         f"  llm: tokens in={report.input_tokens} out={report.output_tokens} "
@@ -304,6 +342,7 @@ def main(
                 "published": report.published,
                 "categories merged": report.merged,
                 "items re-homed from Other": report.reassigned,
+                "results recomputed (new version)": report.refreshed,
                 "skipped batches": report.skipped_batches,
                 "input tokens": report.input_tokens,
                 "output tokens": report.output_tokens,

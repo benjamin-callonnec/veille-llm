@@ -33,3 +33,26 @@ class Enrichment:
     category: str
     hook: str
     brief: str = ""
+
+
+@dataclass(frozen=True)
+class Provenance:
+    """What produced a stored result: the model, the prompt (hash) and the pipeline version."""
+
+    model: str
+    prompt: str
+    pipeline: str
+
+
+def content_hash(title: str) -> str:
+    """Hash of the normalised title, to spot the same article under two ids ('' if too short)."""
+    import hashlib
+    import re
+
+    words = " ".join(re.findall(r"[a-z0-9]+", title.lower()))
+    if len(words) < 25:  # short titles ("Introducing X") would collide across unrelated posts
+        return ""
+    return hashlib.sha256(words.encode()).hexdigest()[:16]
+
+
+LEGACY = Provenance("legacy", "legacy", "legacy")  # rows written before provenance existed

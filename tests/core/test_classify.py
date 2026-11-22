@@ -2,7 +2,7 @@ import asyncio
 import json
 
 from veille_llm.llm import LlmError, LlmLimitError, RawReply
-from veille_llm.models import Item
+from veille_llm.models import Item, Verdict
 from veille_llm.pipeline.classify import BATCH_SIZE, classify_batch, classify_pending
 from veille_llm.store import Store
 
@@ -108,7 +108,7 @@ def test_classify_pending_stops_on_limit_and_reports_it():
     assert len(store.pending_classification()) == 1
 
 
-def test_classify_pending_skips_a_batch_on_output_error_and_continues():
+def test_classify_pending_recovers_from_one_bad_reply_by_retrying_halves():
     store = Store(":memory:")
     store.upsert_items([make(f"i{n:02d}") for n in range(20)], NOW)
     calls = []
@@ -120,10 +120,10 @@ def test_classify_pending_skips_a_batch_on_output_error_and_continues():
         return reply([entry(i) for i in ids_in_prompt(prompt)])
 
     outcome = asyncio.run(classify_pending(store, runner=run))
-    assert outcome.skipped_batches == 1
-    assert outcome.classified == 5
+    assert outcome.skipped_batches == 0  # the two halves of the first batch went through
+    assert outcome.classified == 20
     assert outcome.stopped is None
-    assert len(store.pending_classification()) == 15
+    assert store.pending_classification() == []
 
 
 def test_classify_pending_stops_on_unknown_llm_error():
@@ -184,3 +184,103 @@ def test_classify_pending_reports_every_batch_even_skipped_ones():
         classify_pending(store, runner=bad, on_batch=lambda n, total: calls.append((n, total)))
     )
     assert calls == [(1, 2), (2, 2)]
+
+
+def _stored(n, model="A"):
+    from veille_llm.models import Provenance
+
+    store = Store(":memory:")
+    items = [make(f"i{k:02d}", title=f"Distinct article number {k} for the test") for k in range(n)]
+    store.upsert_items(items, NOW)
+    store.save_verdicts(
+        [Verdict(i.id, True, 5, "paper", "old") for i in items], Provenance(model, "p", "1.0.0")
+    )
+    return store
+
+
+def test_reclassify_stale_refreshes_outdated_verdicts_within_the_batch_budget():
+    from veille_llm.models import Provenance
+    from veille_llm.pipeline.classify import reclassify_stale
+
+    store = _stored(BATCH_SIZE * 2 + 3)
+    calls = []
+
+    async def run(prompt, options):
+        ids = [d["id"] for d in json.loads(prompt.split("<data>")[1].split("</data>")[0])]
+        calls.append(ids)
+        return RawReply(json.dumps({"items": [entry(i, score=9) for i in ids]}), 1, 1, None)
+
+    current = Provenance("B", "p", "1.0.0")
+    outcome = asyncio.run(reclassify_stale(store, runner=run, provenance=current, max_batches=2))
+    assert len(calls) == 2 and outcome.classified == BATCH_SIZE * 2
+    left = store.stale_classification(current, 100)
+    assert len(left) == 3  # the rest waits for the next run
+
+
+def test_reclassify_stale_makes_no_call_when_nothing_is_outdated():
+    from veille_llm.models import Provenance
+    from veille_llm.pipeline.classify import reclassify_stale
+
+    store = _stored(5, model="B")
+
+    async def run(prompt, options):
+        raise AssertionError("no LLM call expected")
+
+    current = Provenance("B", "p", "1.0.0")
+    outcome = asyncio.run(reclassify_stale(store, runner=run, provenance=current, max_batches=5))
+    assert outcome.classified == 0
+
+
+def test_a_bad_reply_during_a_recompute_keeps_the_previous_verdicts():
+    from veille_llm.models import Provenance
+    from veille_llm.pipeline.classify import reclassify_stale
+
+    store = _stored(3)
+
+    async def run(prompt, options):
+        return RawReply("not json", 1, 1, None)
+
+    current = Provenance("B", "p", "1.0.0")
+    outcome = asyncio.run(reclassify_stale(store, runner=run, provenance=current, max_batches=1))
+    assert outcome.skipped_batches >= 1
+    assert len(store.stale_classification(current, 10)) == 3  # unchanged, retried next run
+    assert {r[0] for r in store._conn.execute("SELECT category_hint FROM verdicts")} == {"old"}
+
+
+def test_a_rejected_batch_is_retried_in_two_halves_instead_of_being_lost():
+    store = Store(":memory:")
+    store.upsert_items(
+        [make(f"i{k:02d}", title=f"Distinct article number {k} for the test") for k in range(15)],
+        NOW,
+    )
+    sizes = []
+
+    async def picky(prompt, options):
+        ids = [d["id"] for d in json.loads(prompt.split("<data>")[1].split("</data>")[0])]
+        sizes.append(len(ids))
+        if len(ids) > 8:
+            return RawReply("not json", 1, 1, None)
+        return RawReply(json.dumps({"items": [entry(i) for i in ids]}), 1, 1, None)
+
+    outcome = asyncio.run(classify_pending(store, runner=picky))
+    assert sizes == [15, 8, 7]
+    assert outcome.classified == 15 and outcome.skipped_batches == 0
+    assert store.pending_classification() == []
+
+
+def test_a_half_that_still_fails_is_counted_as_skipped_and_the_other_half_is_kept():
+    store = Store(":memory:")
+    store.upsert_items(
+        [make(f"i{k:02d}", title=f"Distinct article number {k} for the test") for k in range(4)],
+        NOW,
+    )
+
+    async def run(prompt, options):
+        ids = [d["id"] for d in json.loads(prompt.split("<data>")[1].split("</data>")[0])]
+        if len(ids) > 2 or "i00" in ids:
+            return RawReply("not json", 1, 1, None)
+        return RawReply(json.dumps({"items": [entry(i) for i in ids]}), 1, 1, None)
+
+    outcome = asyncio.run(classify_pending(store, runner=run))
+    assert outcome.classified == 2 and outcome.skipped_batches == 1
+    assert len(store.pending_classification()) == 2  # still pending: retried on a later run

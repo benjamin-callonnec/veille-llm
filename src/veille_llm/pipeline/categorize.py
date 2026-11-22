@@ -13,8 +13,9 @@ from veille_llm.llm import (
     complete_json,
     redact,
 )
-from veille_llm.models import Enrichment
+from veille_llm.models import LEGACY, Enrichment, Provenance
 from veille_llm.pipeline.classify import BATCH_SIZE, SUMMARY_MAX
+from veille_llm.pipeline.resilient import with_halves
 from veille_llm.store import Store
 
 MAX_CATEGORIES = 12
@@ -120,6 +121,7 @@ async def enrich_pending(
     max_batches: int | None = None,
     on_batch: Callable[[int, int], None] | None = None,
     since: str = "0000-01-01T00:00:00Z",
+    provenance: Provenance = LEGACY,
 ) -> EnrichOutcome:
     outcome = EnrichOutcome()
     pending = store.pending_enrichment()
@@ -134,34 +136,97 @@ async def enrich_pending(
         # Only categories in use inside the window: an empty one frees its slot.
         known = [name for name, _ in store.category_usage(since)]
         at_cap = len([c for c in known if c != FALLBACK_CATEGORY]) >= MAX_CATEGORIES
+
+        async def write(part: list, known: list[str] = known, at_cap: bool = at_cap) -> list:
+            data = {
+                "existing_categories": known,
+                "items": [
+                    {
+                        "id": item.id,
+                        "title": item.title,
+                        "summary": item.summary[:SUMMARY_MAX],
+                        "category_hint": verdict.category_hint,
+                    }
+                    for item, verdict in part
+                ],
+            }
+            result = await complete_json(
+                instructions_for(at_cap), ENRICH_SCHEMA, data=data, model=model, runner=runner
+            )
+            wanted = {item.id for item, _ in part}
+            seen: set[str] = set()
+            written = []
+            for entry in result.data["items"]:
+                if (
+                    entry["id"] not in wanted
+                    or entry["id"] in seen
+                    or not hook_is_safe(entry["hook"])
+                    or not hook_is_safe(entry["brief"], BRIEF_MAX)
+                ):
+                    continue
+                seen.add(entry["id"])
+                category = normalise_category(entry["category"], known)
+                if category not in known:
+                    known.append(category)
+                written.append(
+                    Enrichment(entry["id"], category, entry["hook"].strip(), entry["brief"].strip())
+                )
+            return written
+
+        try:
+            enrichments = await with_halves(batch, write, outcome)
+        except LlmError as exc:
+            outcome.stopped = redact(f"{type(exc).__name__}: {exc}")
+            break
+        store.save_enrichments(enrichments, provenance)
+        outcome.enriched += len(enrichments)
+        if on_batch:
+            on_batch(start // BATCH_SIZE + 1, total)
+    return outcome
+
+
+async def refresh_stale_hooks(
+    store: Store,
+    *,
+    provenance: Provenance,
+    runner: Runner | None = None,
+    model: str = DEFAULT_MODEL,
+    max_batches: int,
+) -> EnrichOutcome:
+    """Rewrite hooks and briefs made under another model, prompt or minor pipeline version.
+
+    The category is never touched (consolidation may have chosen it); a hook that fails the
+    safety checks leaves the previous, published one in place.
+    """
+    outcome = EnrichOutcome()
+    stale = store.stale_hooks(provenance, max_batches * BATCH_SIZE)
+    for start in range(0, len(stale), BATCH_SIZE):
+        batch = stale[start : start + BATCH_SIZE]
         data = {
-            "existing_categories": known,
+            "existing_categories": sorted({e.category for _, _, e in batch}),
             "items": [
                 {
                     "id": item.id,
                     "title": item.title,
                     "summary": item.summary[:SUMMARY_MAX],
-                    "category_hint": verdict.category_hint,
+                    "category_hint": enrichment.category,
                 }
-                for item, verdict in batch
+                for item, _, enrichment in batch
             ],
         }
         try:
             result = await complete_json(
-                instructions_for(at_cap), ENRICH_SCHEMA, data=data, model=model, runner=runner
+                instructions_for(True), ENRICH_SCHEMA, data=data, model=model, runner=runner
             )
         except LlmOutputError as exc:
             outcome.skipped_batches += 1
             outcome.skip_reasons.append(redact(str(exc))[:200])
-            if on_batch:
-                on_batch(start // BATCH_SIZE + 1, total)
             continue
         except LlmError as exc:
             outcome.stopped = redact(f"{type(exc).__name__}: {exc}")
             break
-        wanted = {item.id for item, _ in batch}
+        wanted = {item.id for item, _, _ in batch}
         seen: set[str] = set()
-        enrichments = []
         for entry in result.data["items"]:
             if (
                 entry["id"] not in wanted
@@ -171,14 +236,8 @@ async def enrich_pending(
             ):
                 continue
             seen.add(entry["id"])
-            category = normalise_category(entry["category"], known)
-            if category not in known:
-                known.append(category)
-            enrichments.append(
-                Enrichment(entry["id"], category, entry["hook"].strip(), entry["brief"].strip())
+            store.refresh_enrichment(
+                entry["id"], entry["hook"].strip(), entry["brief"].strip(), provenance
             )
-        store.save_enrichments(enrichments)
-        outcome.enriched += len(enrichments)
-        if on_batch:
-            on_batch(start // BATCH_SIZE + 1, total)
+            outcome.enriched += 1
     return outcome

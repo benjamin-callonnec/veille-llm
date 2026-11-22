@@ -226,3 +226,69 @@ def test_prompt_forbids_new_categories_once_the_cap_is_reached_and_allows_them_b
     asyncio.run(enrich_pending(seeded(1), runner=run, since="2026-11-01T00:00:00Z"))
     assert "do not create any new category" in prompts[0].lower()
     assert "do not create any new category" not in prompts[1].lower()
+
+
+def _published_under(model, n=2):
+    from veille_llm.models import Provenance
+
+    store = seeded(n)
+    store.save_enrichments(
+        [Enrichment(f"i{k:02d}", "Consolidated", f"Old hook {k}.", "Old brief.") for k in range(n)],
+        Provenance(model, "hp", "1.0.0"),
+    )
+    return store
+
+
+def test_refresh_stale_hooks_rewrites_hook_and_brief_but_keeps_the_category():
+    from veille_llm.models import Provenance
+    from veille_llm.pipeline.categorize import refresh_stale_hooks
+
+    store = _published_under("A")
+
+    async def run(prompt, options):
+        ids = [d["id"] for d in prompt_data(prompt)["items"]]
+        return reply(
+            [
+                {"id": i, "category": "Something else", "hook": f"New {i}.", "brief": "New."}
+                for i in ids
+            ]
+        )
+
+    current = Provenance("B", "hp", "1.0.0")
+    outcome = asyncio.run(refresh_stale_hooks(store, runner=run, provenance=current, max_batches=2))
+    assert outcome.enriched == 2
+    rows = store.published_items("2026-01-01T00:00:00Z")
+    assert {r["category"] for r in rows} == {"Consolidated"}
+    assert {r["hook"] for r in rows} == {"New i00.", "New i01."}
+
+
+def test_an_unsafe_new_hook_leaves_the_old_published_hook_in_place():
+    from veille_llm.models import Provenance
+    from veille_llm.pipeline.categorize import refresh_stale_hooks
+
+    store = _published_under("A", 1)
+
+    async def run(prompt, options):
+        return reply(
+            [{"id": "i00", "category": "x", "hook": "See http://evil.example", "brief": "B."}]
+        )
+
+    current = Provenance("B", "hp", "1.0.0")
+    asyncio.run(refresh_stale_hooks(store, runner=run, provenance=current, max_batches=1))
+    (row,) = store.published_items("2026-01-01T00:00:00Z")
+    assert row["hook"] == "Old hook 0."
+
+
+def test_a_rejected_hook_batch_is_retried_in_halves():
+    store = seeded(4)
+    sizes = []
+
+    async def picky(prompt, options):
+        ids = [d["id"] for d in prompt_data(prompt)["items"]]
+        sizes.append(len(ids))
+        if len(ids) > 2:
+            return RawReply("not json", 1, 1, None)
+        return reply([{"id": i, "category": "Agents", "hook": "H.", "brief": "B."} for i in ids])
+
+    outcome = asyncio.run(enrich_pending(store, runner=picky))
+    assert sizes == [4, 2, 2] and outcome.enriched == 4 and outcome.skipped_batches == 0

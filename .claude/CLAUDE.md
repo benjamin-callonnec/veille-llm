@@ -62,6 +62,9 @@ Si `graphify-out/` existe (graphe local, ignoré par git, à régénérer avec `
 
 ## Règles de travail
 
+- Toute modification des fichiers qui influencent les résultats du LLM (`RESULT_FILES` dans
+  `pipeline/version.py`) demande une décision de version de la pipeline : `uv run python -m
+  veille_llm.pipeline.version bump patch|minor|major` (un test échoue sinon).
 - Rien d'incomplet n'est publié : seuls les items classés apparaissent.
 - Le pipeline doit survivre à un arrêt brutal du LLM : chaque verdict est enregistré aussitôt.
 - Une source distante en panne est ignorée sans bloquer les autres (retry avec backoff).

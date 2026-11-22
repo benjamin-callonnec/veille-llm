@@ -5,6 +5,14 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-22
+
+### Added
+- LLM result caching by version (#16). Every verdict and hook now records the **model**, a **prompt hash** and the **ingestion pipeline version** (`PIPELINE_VERSION`, separate from the product version; patch never invalidates, minor and major do). Results made under another model, prompt or minor/major version are recomputed lazily with the batch budget left after new items, one verdict or hook at a time, never unpublishing an item and never touching a category chosen by consolidation. Rows from before this release are marked `legacy` and are never recomputed.
+- A guard test fails when a file that influences results changes without a pipeline version decision (`python -m veille_llm.pipeline.version bump patch|minor|major`); the `release` skill and `CLAUDE.md` describe the rule.
+- The same article under a second id (arXiv and Hugging Face, a re-published post) is detected by normalised title and never sent to the LLM (`duplicate` status).
+- A rejected LLM batch is retried in two halves instead of being lost.
+
 ## [0.8.1] - 2026-11-22
 
 ### Fixed
