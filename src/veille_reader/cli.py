@@ -26,6 +26,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     serve.add_argument(
         "--reload", action="store_true", help="restart the server when a source file changes"
     )
+    serve.add_argument(
+        "--dev-front",
+        default=None,
+        help="with --reload: send the pages to this hot-reload front (the Vite dev server)",
+    )
     return parser.parse_args(argv)
 
 
@@ -44,6 +49,7 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["VEILLE_READER_STATIC"] = str(static or "")
         # the Vite dev server (make reader) proxies the API and rewrites the Host header
         os.environ["VEILLE_READER_DEV_ORIGINS"] = DEV_ORIGINS
+        os.environ["VEILLE_READER_DEV_FRONT"] = args.dev_front or ""
         uvicorn.run(
             "veille_reader.cli:reload_app",
             factory=True,
@@ -66,6 +72,7 @@ def reload_app():  # noqa: ANN201
         static_dir=Path(static) if static else None,
         runner=sdk_runner,
         dev_origins={o for o in os.environ.get("VEILLE_READER_DEV_ORIGINS", "").split(",") if o},
+        dev_front=os.environ.get("VEILLE_READER_DEV_FRONT") or None,
     )
 
 

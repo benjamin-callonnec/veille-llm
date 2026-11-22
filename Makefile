@@ -54,11 +54,11 @@ reader:
 	@# Port 8765 serves web/dist: rebuild it so it is never an older version than the dev server.
 	@cd web && VITE_READER_URL=$(READER_FRONT_URL) npx vite build --mode reader --logLevel warn
 	@echo ""
-	@echo "Reader: open $(READER_FRONT_URL)  (hot reload). Port 8765 is the API and a plain build."
+	@echo "Reader: open $(READER_FRONT_URL)  (hot reload; http://127.0.0.1:8765 sends you there too)."
 	@echo "Ctrl+C stops both."
 	@trap 'kill 0' INT TERM EXIT; \
 	(cd web && VITE_READER_URL=$(READER_FRONT_URL) npx vite --mode reader --host 127.0.0.1 --port 5173 --strictPort) & \
-	env $(READER_NO_BILLING) uv run veille-reader serve --reload & \
+	env $(READER_NO_BILLING) uv run veille-reader serve --reload --dev-front $(READER_FRONT_URL) & \
 	wait
 
 # One process, no auto-reload: builds the front once and serves it from the API server.

@@ -12,6 +12,7 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 - The "Read" link no longer carries a port written at build time (it was wrong when the front had been built for another port): it is relative to the catalogue page, so it works from the dev server and from the built front.
 
 ### Added
+- `make reader`: opening the API port (`http://127.0.0.1:8765`) now redirects the pages to the hot-reload front on 5173, so front changes always show up without relaunching; the static build on 8765 was what looked "not reloaded". (`veille-reader serve --reload --dev-front URL`.)
 - The keyboard shortcuts follow your keyboard: on a Mac they show ⌥ (Option), Return, ⇧ and fn with an arrow for PageUp/PageDown; on Windows and Linux they show Alt, Enter, Shift, PageUp and PageDown. The platform is detected from the browser.
 - The title of each page sits on the same line as the logo, to its right (the catalogue now has the same page head as the reader).
 - A shared app shell: the logo (home button, goes to the catalogue) is fixed in the top-left corner and the settings gear in the bottom-left corner, at the same place on every page, provided by one component (`AppShell`) so pages do not render them and any new page gets them for free. The gear opens the settings: theme (Auto follows the system, Papier light, Nuit dark; remembered) and the keyboard shortcuts of the current page. `?` opens and closes it. On the catalogue, `/` jumps to the search box.

@@ -6,7 +6,7 @@ from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 
@@ -99,6 +99,7 @@ def create_app(
     fetch: Fetcher = default_fetcher,
     runner: AgentRunner | None = None,
     dev_origins: set[str] | frozenset[str] = frozenset(),
+    dev_front: str | None = None,
 ) -> FastAPI:
     loaded = {"items": _load_items(catalogue_path), "mtime": catalogue_path.stat().st_mtime_ns}
 
@@ -263,6 +264,21 @@ def create_app(
     @app.get("/catalogue.json")
     def catalogue() -> FileResponse:
         return FileResponse(catalogue_path, media_type="application/json")
+
+    if dev_front:
+        # make reader: the pages live on the hot-reload dev server, wherever you opened the API
+        front = dev_front.rstrip("/")
+        for path, target in (
+            ("/", "/"),
+            ("/index.html", "/"),
+            ("/reader.html", "/reader.html"),
+        ):
+            app.add_api_route(
+                path,
+                lambda target=target: RedirectResponse(front + target, status_code=307),
+                methods=["GET"],
+                include_in_schema=False,
+            )
 
     if static_dir is not None:
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
