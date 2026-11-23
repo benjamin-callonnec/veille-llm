@@ -146,12 +146,16 @@ export function ReaderPage({
   );
   // A figure or a table is placed from the structure of the paper, asked for on the first need.
   const captions = useRef<Promise<Caption[]> | null>(null);
+  // Counts the ways back to the PDF: a late answer must not override a later click or paper.
+  const moves = useRef(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new paper has its own captions
   useEffect(() => {
     captions.current = null;
+    moves.current += 1;
   }, [itemId]);
   const cite = useCallback(
     (p: number, quote?: string, label?: Label) => {
+      const mine = ++moves.current;
       goTo(p, { quote });
       if (!label) return;
       captions.current ??= captionsApi(itemId);
@@ -159,12 +163,18 @@ export function ReaderPage({
       void asked.then((all) => {
         if (!all.length) captions.current = null; // not available now: ask again next time
         const found = findCaption(all, label, p);
-        if (found) goTo(found.page, { rects: [found.rect] });
+        if (found && mine === moves.current) goTo(found.page, { rects: [found.rect] });
       });
     },
     [goTo, itemId, captionsApi],
   );
-  const goToRects = useCallback((p: number, rects?: Rect[]) => goTo(p, { rects }), [goTo]);
+  const goToRects = useCallback(
+    (p: number, rects?: Rect[]) => {
+      moves.current += 1;
+      goTo(p, { rects });
+    },
+    [goTo],
+  );
 
   const closeBox = () => {
     setSelection(null);
