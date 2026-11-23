@@ -23,6 +23,12 @@ Si `graphify-out/` existe (graphe local, ignoré par git, à régénérer avec `
 - `src/veille_reader` : module local du lecteur de papiers (#17, serveur FastAPI sur 127.0.0.1, données dans
   `.local/reader/`) ; front `web/reader.html`, construit seulement par `make reader`, jamais par la CI.
 - `.github/workflows/daily.yml` : pipeline, persistance, build web et déploiement Pages. Newsletter à venir.
+- `scheduler/` : Worker Cloudflare qui déclenche `daily.yml` et `weekly.yml` à l'heure (`workflow_dispatch`
+  sur `main`), car les crons GitHub partent en retard ; le code est déployé par `wrangler`
+  (`make scheduler-deploy`), les crons et l'état sont à Terraform (`iac/`, `make tf-*`), mise en route dans
+  `setup/README.md`. Le token GitHub du Worker n'est qu'un secret du Worker (`make scheduler-secret`).
+  `daily.yml` et `weekly.yml` n'ont plus de `schedule:` (`workflow_dispatch` seul) : ne le remets pas, deux
+  planificateurs lanceraient deux fois le LLM. `freshness.yml` prévient si aucun `daily` n'a réussi en 30 h.
 
 ## Git et GitHub
 

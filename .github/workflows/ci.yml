@@ -7,9 +7,11 @@ on:
 permissions:
   contents: read
 
+# A newer push waits instead of cancelling: cancelling would kill a `wrangler deploy` or a
+# `terraform apply` half way (the scheduler-deploy job).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   check:
@@ -33,3 +35,56 @@ jobs:
       - run: uvx pre-commit run --all-files
       - run: make check
       - run: make web-build
+
+  # The Terraform of the Cloudflare scheduler (#38), validated without credentials. The Worker itself
+  # (Biome, tsc, Vitest) is checked by `make check` in the job above.
+  scheduler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: make tf-validate
+
+  # Deploys the Worker (wrangler) then the crons (Terraform). The Cloudflare secrets are given only to
+  # the steps that use them, after `npm ci --ignore-scripts`, so no install script sees them.
+  scheduler-deploy:
+    needs: [check, scheduler]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    concurrency:
+      group: scheduler-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scheduler/package-lock.json
+      - run: make scheduler-install
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: Deploy the Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: make scheduler-deploy
+      - name: Apply the crons with Terraform
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_STATE_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
+          R2_STATE_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
+        run: |
+          make tf-init
+          make tf-apply-ci

@@ -1,11 +1,11 @@
 name: daily
 
 # Collect, classify with the LLM, persist veille.db on the `data` branch, deploy Pages.
-# Triggers: schedule and manual only (this workflow holds secrets: never PR/issue triggers).
-# It is the only Pages deployer (builds web/); to redeploy after a push, run it manually.
+# Trigger: workflow_dispatch only (this workflow holds secrets: never PR/issue triggers). The
+# Cloudflare Worker `veille-llm-scheduler` dispatches it on main every day at 06:00 UTC (GitHub's own
+# cron started hours late): see scheduler/ and iac/. Run it by hand to redeploy Pages after a push.
+# It is the only Pages deployer (builds web/).
 on:
-  schedule:
-    - cron: "0 6 * * *"
   workflow_dispatch:
 
 permissions:

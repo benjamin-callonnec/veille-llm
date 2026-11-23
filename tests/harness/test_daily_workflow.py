@@ -11,8 +11,10 @@ def triggers(doc):
     return set(doc.get("on", doc.get(True)))
 
 
-def test_daily_runs_only_on_schedule_and_manually():
-    assert triggers(DOC) == {"schedule", "workflow_dispatch"}
+def test_daily_runs_only_when_dispatched_by_the_cloudflare_worker_or_by_hand():
+    # GitHub's own cron starts hours late: the Worker `veille-llm-scheduler` dispatches it (#38)
+    assert triggers(DOC) == {"workflow_dispatch"}
+    assert "schedule:" not in DAILY and "cron:" not in DAILY
 
 
 def test_oauth_token_is_used_only_by_the_pipeline_step():

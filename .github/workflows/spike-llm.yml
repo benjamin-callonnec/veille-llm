@@ -9,6 +9,8 @@ permissions:
 
 jobs:
   spike:
+    # The Cloudflare Worker's GitHub token can dispatch this workflow on any branch: run only main's code.
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

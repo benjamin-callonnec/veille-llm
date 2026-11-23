@@ -156,7 +156,10 @@ their own speech service, so it is not local; nothing is recorded by the reader.
 
 1. Push the repo to GitHub.
 2. Settings > Pages > Source: **GitHub Actions**.
-3. `.github/workflows/daily.yml` runs every day at 06:00 UTC (or by hand): pipeline, then build of `web/` and deploy.
+3. `.github/workflows/daily.yml` is started every day at 06:00 UTC by the Cloudflare Worker below (or by hand): pipeline, then build of `web/` and deploy.
+
+GitHub's own crons start hours late, so `daily.yml` and `weekly.yml` have no schedule of their own: a
+Cloudflare Worker (`scheduler/`, crons and state in `iac/`) dispatches them on time. One-time setup, tokens and rotation: `setup/README.md`.
 
 ## Known limits
 

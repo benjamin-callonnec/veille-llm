@@ -11,8 +11,10 @@ SECRETS = {
 }  # fmt: skip
 
 
-def test_weekly_runs_only_on_schedule_and_manually():
-    assert set(DOC.get("on", DOC.get(True))) == {"schedule", "workflow_dispatch"}
+def test_weekly_runs_only_when_dispatched_by_the_cloudflare_worker_or_by_hand():
+    # GitHub's own cron starts hours late: the Worker `veille-llm-scheduler` dispatches it (#38)
+    assert set(DOC.get("on", DOC.get(True))) == {"workflow_dispatch"}
+    assert "schedule:" not in RAW and "cron:" not in RAW
 
 
 def test_secrets_reach_only_the_send_step_and_never_the_persist_job():
