@@ -6,6 +6,7 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 ## [Unreleased]
 
 ### Fixed
+- Memory panel: a failed load message disappears after a later successful load, and an older, slower response can no longer overwrite a newer one.
 - Regenerate also drops, in the open conversation, the question cards and note lines that sat just before the replaced answer (as the server does).
 - Auto read aloud: the start is idempotent, so React StrictMode's double mount no longer stops a reading that began while the answer streamed.
 - `make reader`: the ports are variables (`READER_PORT`, `FRONT_PORT`) shared by the port check and the commands, and the front URL follows `FRONT_PORT`.
