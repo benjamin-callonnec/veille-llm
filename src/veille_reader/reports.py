@@ -37,6 +37,26 @@ def check_html(html: str) -> None:
         )
 
 
+_SVG = re.compile(r"<svg\b([^>]*)>(.*?)</svg>", re.I | re.S)
+_IMG = re.compile(r"<img\b[^>]*>", re.I)
+MAX_WARNINGS = 5
+
+
+def lint_html(html: str) -> list[str]:
+    """What the model should fix before the report is good (the report is saved anyway)."""
+    warnings = []
+    for n, (attrs, body) in enumerate(_SVG.findall(html), start=1):
+        if not re.search(r"<title\b", body, re.I):
+            warnings.append(f"svg {n} has no <title> (give it a title that states what it shows)")
+        if not re.search(r"\bviewBox\s*=", attrs, re.I):
+            warnings.append(f"svg {n} has no viewBox (it would not scale)")
+    for img in _IMG.findall(html):
+        if not re.search(r"\balt\s*=", img, re.I):
+            warnings.append("an <img> has no alt text")
+            break
+    return warnings[:MAX_WARNINGS]
+
+
 def with_csp(html: str) -> str:
     """The page with the policy first (after the doctype); never searches for <head>."""
     found = _DOCTYPE.match(html)
@@ -66,7 +86,15 @@ class ReportTools:
             saved = self.store.save_report(self.item_id, title, html, wanted)
         except KeyError:
             raise ToolError("There is no report with that id for this paper.") from None
-        return f"Saved report {saved['id']}, version {saved['version']}."
+        message = f"Saved report {saved['id']}, version {saved['version']}."
+        warnings = lint_html(html)
+        if warnings:
+            message += (
+                f" Fix these and call write_report again with report_id {saved['id']}: "
+                + "; ".join(warnings)
+                + "."
+            )
+        return message
 
     def read(self, report_id: object) -> str:
         view = self.store.report(self.item_id, _int(report_id, "report_id"))

@@ -9,6 +9,8 @@ export function HtmlFrame({ content, title }: { content: string; title: string }
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
       srcDoc={withCsp(content)}
+      // the arrow keys work at once, without a first click into the page
+      onLoad={(e) => e.currentTarget.focus()}
     />
   );
 }
