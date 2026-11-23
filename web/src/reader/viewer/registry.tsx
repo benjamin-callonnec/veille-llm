@@ -6,6 +6,8 @@ export type ViewerKind = "html";
 export interface ViewerProps {
   content: string;
   title: string;
+  /** The viewer is shown (it was hidden while closed, the page keeps its state). */
+  active?: boolean;
   /** A key typed inside the file that the app wants (V, Escape). */
   onKey?: (key: string) => void;
 }

@@ -12,6 +12,8 @@ import {
 interface Props {
   itemId: string;
   reports: ReportMeta[];
+  /** False: hidden but kept, so the page is where you left it when it opens again. */
+  open?: boolean;
   selectedId: number | null;
   onSelect(id: number): void;
   onClose(): void;
@@ -20,7 +22,15 @@ interface Props {
 }
 
 /** The viewer: one report at a time, its versions, export and full screen. HTML for now. */
-export function FileViewer({ itemId, reports, selectedId, onSelect, onClose, onChanged }: Props) {
+export function FileViewer({
+  itemId,
+  reports,
+  open = true,
+  selectedId,
+  onSelect,
+  onClose,
+  onChanged,
+}: Props) {
   const [version, setVersion] = useState<number | undefined>(undefined);
   const [view, setView] = useState<ReportView | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -45,10 +55,11 @@ export function FileViewer({ itemId, reports, selectedId, onSelect, onClose, onC
   useEffect(() => setVersion(undefined), [selectedId, latest]);
 
   useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && !e.defaultPrevented && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [open, onClose]);
 
   const Render = rendererFor("html");
   const shown = view?.version;
@@ -60,7 +71,11 @@ export function FileViewer({ itemId, reports, selectedId, onSelect, onClose, onC
   };
 
   return (
-    <section className={fullscreen ? "viewer viewer-fullscreen" : "viewer"} aria-label="Viewer">
+    <section
+      className={fullscreen ? "viewer viewer-fullscreen" : "viewer"}
+      aria-label="Viewer"
+      hidden={!open}
+    >
       <header className="viewer-bar">
         {reports.length > 1 ? (
           <select
@@ -116,7 +131,7 @@ export function FileViewer({ itemId, reports, selectedId, onSelect, onClose, onC
       </header>
       <div className="viewer-body">
         {view && Render ? (
-          <Render content={view.html} title={view.title} onKey={() => onClose()} />
+          <Render content={view.html} title={view.title} active={open} onKey={() => onClose()} />
         ) : (
           <p className="viewer-empty">
             {reports.length === 0

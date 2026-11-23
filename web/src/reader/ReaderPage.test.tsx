@@ -129,6 +129,17 @@ const setup = (
   return { api, rows, open, chatSent: chat.sent, ...utils };
 };
 
+// The page in the viewer has the keyboard focus: V and Escape typed in it reach the app through
+// its key bridge (a message), never as a key event of the app's window.
+const fromFrame = (key: string) =>
+  fireEvent(
+    window,
+    new MessageEvent("message", {
+      data: { veilleKey: key },
+      source: (screen.getByTitle("Deck") as HTMLIFrameElement).contentWindow,
+    }),
+  );
+
 const select = async () => {
   Range.prototype.getClientRects = () =>
     [{ x: 160, y: 130, width: 100, height: 20 }] as unknown as DOMRectList;
@@ -641,7 +652,8 @@ test("a closed viewer comes back with the reports icon of the chat", async () =>
   const icon = await screen.findByRole("button", { name: "Reports (V)" });
   await userEvent.click(icon);
   expect(screen.getByRole("region", { name: "Viewer" })).toBeTruthy();
-  await userEvent.keyboard("{Escape}");
+  await screen.findByTitle("Deck");
+  fromFrame("Escape");
   expect(screen.queryByRole("region", { name: "Viewer" })).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "Reports (V)" }));
   expect(screen.getByRole("region", { name: "Viewer" })).toBeTruthy();
@@ -651,4 +663,23 @@ test("with no report there is no reports icon", async () => {
   setup();
   await screen.findByText("Text of page 1");
   expect(screen.queryByRole("button", { name: "Reports (V)" })).toBeNull();
+});
+
+test("closing the viewer with V and opening it again keeps the page where it was", async () => {
+  const meta: ReportMeta = { id: 7, title: "Deck", version: 1, updated_at: "" };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: 7, title: "Deck", version: 1, versions: [], html: "<p>x</p>" }),
+    })),
+  );
+  setup({ reports: async () => [meta] });
+  await screen.findByText("Text of page 1");
+  await userEvent.keyboard("v");
+  const frame = await screen.findByTitle("Deck");
+  fromFrame("v");
+  expect(screen.queryByRole("region", { name: "Viewer" })).toBeNull();
+  fireEvent.keyDown(document.body, { key: "v" }); // a hidden frame gives the focus back to the page
+  expect(await screen.findByTitle("Deck")).toBe(frame); // the same frame, not a new one
 });

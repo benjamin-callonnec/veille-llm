@@ -121,3 +121,12 @@ test("V or Escape typed inside the page (it has the focus) close the viewer", as
   );
   expect(h.onClose).toHaveBeenCalledTimes(1);
 });
+
+test("closed (open=false) it is hidden but still mounted, and Esc does nothing", async () => {
+  const h = setup({ open: false });
+  await waitFor(() => expect(document.querySelector("iframe")).not.toBeNull());
+  expect(document.querySelector(".viewer")?.hasAttribute("hidden")).toBe(true);
+  expect(screen.queryByRole("region", { name: "Viewer" })).toBeNull();
+  await userEvent.keyboard("{Escape}");
+  expect(h.onClose).not.toHaveBeenCalled();
+});

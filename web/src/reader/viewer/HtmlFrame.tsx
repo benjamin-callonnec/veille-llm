@@ -8,15 +8,22 @@ export function HtmlFrame({
   content,
   title,
   onKey,
+  active = true,
 }: {
   content: string;
   title: string;
   /** V or Escape typed inside the page (it has the focus, so the app never sees them). */
   onKey?: (key: string) => void;
+  /** Becomes true when the viewer is shown again: the page takes the keyboard back. */
+  active?: boolean;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const latest = useRef(onKey);
   latest.current = onKey;
+
+  useEffect(() => {
+    if (active) frame.current?.focus();
+  }, [active]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {

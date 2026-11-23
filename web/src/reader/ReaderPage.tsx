@@ -89,6 +89,11 @@ export function ReaderPage({
   const { highlights, add, remove, error: saveError } = useHighlights(itemId, api);
   const { reports, reload } = useReports(itemId, reportsApi);
   const [viewerOpen, setViewerOpen] = useState(false);
+  // once opened, the viewer stays mounted (hidden when closed): the slide is kept
+  const [viewerSeen, setViewerSeen] = useState(false);
+  useEffect(() => {
+    if (viewerOpen) setViewerSeen(true);
+  }, [viewerOpen]);
   const [reportId, setReportId] = useState<number | null>(null);
   const onReport = useCallback(async () => {
     const found = await reload();
@@ -272,8 +277,9 @@ export function ReaderPage({
           />
         }
       />
-      {viewerOpen && (
+      {viewerSeen && (
         <FileViewer
+          open={viewerOpen}
           itemId={itemId}
           reports={reports}
           selectedId={reportId ?? reports[0]?.id ?? null}
