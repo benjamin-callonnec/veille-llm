@@ -1,0 +1,28 @@
+name: freshness
+
+# Alert (a failed run emails the owner) when no `daily` run succeeded for 30 hours: the Cloudflare Worker
+# that starts it may have stopped, expired token included. This check may itself start late, which does
+# not matter here. Read-only; no secret (the built-in token is enough to list runs).
+on:
+  schedule:
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check the latest successful daily run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run list -R "${{ github.repository }}" --workflow daily.yml --status success --limit 1 --json createdAt \
+            | PYTHONPATH=src python3 -m veille_llm.freshness --max-hours 30
