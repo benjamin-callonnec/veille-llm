@@ -140,7 +140,10 @@ def session_refusal(
             "This conversation already used its raised limit. Start a new conversation "
             "to keep going."
         )
-    return "This conversation reached its budget. Start a new conversation to keep going."
+    return (
+        "This conversation reached its budget. Continue once with a raised limit (the arrow), "
+        "or start a new conversation."
+    )
 
 
 def load_images(store: ReaderStore, item_id: str, messages: list[dict]) -> list[Image]:

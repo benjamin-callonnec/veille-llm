@@ -5,6 +5,19 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+### Added
+- `ask_user` tool (#29): the tutor can pause a turn to ask you one short question (free text or up to 4 options, 2 per answer, 2 minutes to reply). A card appears in the chat, your reply goes back to the model as escaped data, an expired card lets the turn carry on without an answer, and the card is stored (answered or expired) so a reload shows it. New stream events `ask_user` and `ask_resolved`, and the route `POST /api/items/<id>/conversations/<cid>/asks/<ask>/answer`.
+- Chat tools (#29): a session memory panel (notes with who wrote each one, edit, delete, add), a turn trace panel (tools, tokens, cache tokens, time, cost), a quiet line when the tutor saves or removes a note, the summary behind the compaction note, and an arrow icon to continue once with the raised limit when the conversation budget is reached.
+
+### Changed
+- A conversation refused for its budget says it can be raised once; regenerate takes `raise_limit`.
+- `pypdf` is pinned below 7.1 (7.0.1, 13 days old) instead of the 4-day-old 7.1.1.
+
+### Fixed
+- Asking again a question that was just refused no longer stores it twice.
+- The 30-note limit is checked and the note inserted in one statement, so two writes cannot exceed it.
+- Cache read and write tokens are kept in the trace.
+
 ## [0.12.0] - 2026-11-23
 
 ### Added

@@ -13,6 +13,12 @@ afterEach(cleanup);
 const mine: Note = { id: 1, text: "wants proofs", created_at: "", source: "user" };
 const tutors: Note = { id: 2, text: "knows RNNs", created_at: "", source: "tutor" };
 
+function rowOf(text: string) {
+  const li = screen.getByText(text).closest("li");
+  if (!li) throw new Error(`no row for ${text}`);
+  return within(li);
+}
+
 function api(over: Partial<SessionApi> = {}): SessionApi {
   return {
     notes: vi.fn(async () => [mine, tutors]),
@@ -38,7 +44,7 @@ test("a note can be edited, with Escape to give up", async () => {
   render(<MemoryPanel itemId="a1" api={a} />);
   await screen.findByText("wants proofs");
   await userEvent.click(
-    within(screen.getByText("wants proofs").closest("li")!).getByRole("button", {
+    rowOf("wants proofs").getByRole("button", {
       name: "Edit note",
     }),
   );
@@ -49,7 +55,7 @@ test("a note can be edited, with Escape to give up", async () => {
   expect(a.editNote).toHaveBeenCalledWith("a1", 1, "prefers examples");
   expect(await screen.findByText("prefers examples")).toBeTruthy();
   await userEvent.click(
-    within(screen.getByText("knows RNNs").closest("li")!).getByRole("button", {
+    rowOf("knows RNNs").getByRole("button", {
       name: "Edit note",
     }),
   );
@@ -62,7 +68,7 @@ test("a note can be deleted and one added with Enter", async () => {
   render(<MemoryPanel itemId="a1" api={a} />);
   await screen.findByText("wants proofs");
   await userEvent.click(
-    within(screen.getByText("wants proofs").closest("li")!).getByRole("button", {
+    rowOf("wants proofs").getByRole("button", {
       name: "Delete note",
     }),
   );

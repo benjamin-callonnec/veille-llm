@@ -730,8 +730,13 @@
 }
 .raise-limit {
   vertical-align: middle;
-  margin-left: 4px;
+  margin-left: 6px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
   color: var(--fg);
+}
+.raise-limit:hover {
+  border-color: var(--muted);
 }
 
 /* The memory and trace panels hang under the chat tools, like the conversations list. */
@@ -800,7 +805,7 @@
   font: inherit;
   resize: vertical;
 }
-.note .icon-btn {
+.notes li .icon-btn {
   width: 24px;
   height: 24px;
 }

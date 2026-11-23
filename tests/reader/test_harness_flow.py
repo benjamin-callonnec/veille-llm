@@ -234,7 +234,7 @@ def test_a_conversation_over_its_budget_is_refused_without_calling_the_model(tmp
     assert runner.seen == []
     message = json.loads(response.text.split("\n\n")[0][6:])
     assert message["kind"] == "budget" and "conversation" in message["message"].lower()
-    assert "raised" not in message["message"]  # the UI has no way to raise the limit
+    assert "raised limit" in message["message"]  # the chat offers the raise icon
     # the refusal is kept in the conversation like any other answer
     stored = client.get(f"/api/items/a1/conversations/{cid}/messages").json()
     assert stored[-1]["content"]["error"]["kind"] == "budget"

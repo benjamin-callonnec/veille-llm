@@ -70,7 +70,12 @@ export function ChatPane({
   useEffect(() => {
     const el = feed.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [chat.messages.length, chat.assistant?.answer, chat.assistant?.blocks.length]);
+  }, [
+    chat.messages.length,
+    chat.assistant?.answer,
+    chat.assistant?.blocks.length,
+    chat.assistant?.asks?.length,
+  ]);
 
   const [dirty, setDirty] = useState(false);
   const [fill, setFill] = useState<{ text: string; n: number } | null>(null);

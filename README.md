@@ -106,8 +106,16 @@ database); everything a tool returns is an escaped data block, never instruction
 can raise once by sending `raise_limit: true` with a message. Long conversations are summarised (the
 last 4 exchanges and your notes are always kept; the cost of a conversation counts every answer, even
 those that hit a limit or were regenerated). Notes say whether you or the tutor wrote them. Every turn leaves a trace (tools, tokens, time, cost, never
-the text) at `/api/items/<id>/conversations/<cid>/trace`. Not there yet: the `ask_user` tool and the
-screens for the notes, the limit and the trace.
+the text) at `/api/items/<id>/conversations/<cid>/trace`. Screens (#29), all quiet icons in the chat corner:
+the notes icon lists what the tutor keeps for the paper (you or the tutor wrote each note; edit, delete,
+add), the pulse icon shows the trace of each turn (tools, tokens with cache tokens, time, cost), a line in
+the chat tells you whenever the tutor saves or removes a note, the summary behind the "earlier messages were
+summarised" note opens on a click (read only), and a refusal for the conversation budget offers one arrow
+icon to continue once with the raised limit. The `ask_user` tool lets the tutor pause and ask you one short
+question (free text or up to 4 options, 2 per answer at most, 2 minutes to reply): the stream sends
+`ask_user`, you reply with `POST /api/items/<id>/conversations/<cid>/asks/<ask>/answer`, and the turn goes
+on with your reply as escaped data (after the timeout the card shows it expired and the turn continues
+without an answer). The card is stored, so a reload shows it answered or expired.
 
 **Grounded citations (#31).** The tutor cites as `[p.4 "short exact quote"]`. After each answer the
 server checks every quote against the page text (letters and digits only, case and spacing ignored)
