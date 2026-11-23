@@ -1,4 +1,5 @@
 import json
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -411,7 +412,7 @@ def test_a_deleted_conversation_keeps_the_scores(store, paper):
 # ---- server
 
 
-def client_for(tmp_path, maker=None, grader=None, runner=None, paper=True):
+def client_for(tmp_path, maker=None, grader=None, runner=None, paper=True, load_delay=0.0):
     tmp_path.mkdir(parents=True, exist_ok=True)
     cat = tmp_path / "c.json"
     cat.write_text(json.dumps({"items": ITEMS}), encoding="utf-8")
@@ -422,7 +423,7 @@ def client_for(tmp_path, maker=None, grader=None, runner=None, paper=True):
         runner=runner,
         quiz_maker=maker,
         grader=grader,
-        tools_factory=lambda item_id, item: (tools, []),
+        tools_factory=lambda item_id, item: (time.sleep(load_delay), (tools, []))[1],
     )
     return TestClient(app, base_url="http://127.0.0.1:8765")
 
@@ -604,6 +605,26 @@ def test_regenerate_works_after_a_quiz_card_or_a_failed_quiz_notice(tmp_path):
         assert seen[0].question == "quiz me" and seen[0].history == []
         roles = [m["role"] for m in client.get(f"{url}/messages").json()]
         assert roles.count("assistant") == 1 and roles[0] == "user"
+
+
+def test_two_quiz_starts_at_once_make_one_quiz_and_a_409(tmp_path):
+    import asyncio
+
+    import httpx
+
+    maker = Maker(GOOD, GOOD)
+    client = client_for(tmp_path, maker, load_delay=0.2)
+    cid = cid_of(client)
+
+    async def both():
+        transport = httpx.ASGITransport(app=client.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8765") as c:
+            url = f"/api/items/a1/conversations/{cid}/quizzes"
+            return await asyncio.gather(c.post(url, json={}), c.post(url, json={}))
+
+    codes = sorted(r.status_code for r in asyncio.run(both()))
+    assert codes == [201, 409] and len(maker.requests) == 1
+    assert cid not in client.app.state.streaming
 
 
 def test_the_marker_is_ignored_when_the_turn_failed_or_without_a_paper(tmp_path):

@@ -420,17 +420,18 @@ def create_app(
         if cid in app.state.streaming:
             return JSONResponse({"reason": "busy"}, status_code=409)
         item = current_items()[item_id]
+        app.state.streaming.add(cid)  # before any await: one quiz at a time, none during an answer
         try:
-            tools, _ = await asyncio.wait_for(
-                asyncio.to_thread(tools_factory or default_tools, item_id, item), TOOLS_TIMEOUT
-            )
-        except Exception:  # noqa: BLE001 - reported as "no paper"
-            tools = None
-        paper = getattr(tools, "paper", None)
-        if paper is None:
-            return JSONResponse({"reason": "no_paper"}, status_code=422)
-        app.state.streaming.add(cid)  # one quiz at a time, and not during an answer
-        try:
+            try:
+                tools, _ = await asyncio.wait_for(
+                    asyncio.to_thread(tools_factory or default_tools, item_id, item),
+                    TOOLS_TIMEOUT,
+                )
+            except Exception:  # noqa: BLE001 - reported as "no paper"
+                tools = None
+            paper = getattr(tools, "paper", None)
+            if paper is None:
+                return JSONResponse({"reason": "no_paper"}, status_code=422)
             message = await create_quiz(
                 store, quiz_maker, item_id, item, cid, paper, body.kind, body.focus.strip(),
                 recent_turns(store, cid),
