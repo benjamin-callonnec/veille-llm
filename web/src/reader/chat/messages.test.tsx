@@ -432,15 +432,26 @@ test("the dots move while the agent works (thinking or a tool call) and stand st
   expect(moving()).toBe(false);
 });
 
-test("the dots come before the label and the timer sits on the same line as the label", () => {
+test("the dots come before the label; the timer belongs to the whole message, not to Thinking", () => {
   render(<AssistantMessage state={initialAssistant(Date.now())} onToggleThinking={() => {}} />);
-  const head = document.querySelector(".thinking-head") as HTMLElement;
-  expect(head).not.toBeNull();
-  const toggle = head.querySelector(".thinking-toggle") as HTMLElement;
-  const dots = toggle.querySelector(".thinking-dots") as HTMLElement;
-  expect(toggle.firstElementChild).toBe(dots); // before the word
-  expect(head.querySelector('[aria-label="Elapsed time"]')).not.toBeNull();
+  const toggle = document.querySelector(".thinking-toggle") as HTMLElement;
+  expect(toggle.firstElementChild).toBe(document.querySelector(".thinking-dots")); // before the word
+  const clock = document.querySelector(".turn-assistant > .turn-clock") as HTMLElement;
+  expect(clock.querySelector('[aria-label="Elapsed time"]')).not.toBeNull();
+  expect(document.querySelector('.thinking [aria-label="Elapsed time"]')).toBeNull();
   expect(document.querySelector(".answer-status")).toBeNull();
+});
+
+test("the timer stays on the message when thinking is folded, while the text arrives", () => {
+  let state = initialAssistant(Date.now());
+  state = applyEvent(state, { type: "text_delta", text: "The answer starts" }, Date.now());
+  render(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(document.querySelector(".turn-assistant > .turn-clock")).not.toBeNull();
+});
+
+test("a finished message has no running clock on its bubble", () => {
+  render(<StoredAssistantMessage content={{ answer: "Done.", blocks: [], duration_ms: 4000 }} />);
+  expect(document.querySelector(".turn-clock")).toBeNull();
 });
 
 test("a stored answer shows how long it took, with the quiet actions, and no timer ticks", () => {

@@ -1,5 +1,4 @@
 import { Icon } from "../../components/Icon";
-import { Elapsed } from "./Elapsed";
 import type { Block } from "./reducer";
 
 interface Props {
@@ -8,22 +7,12 @@ interface Props {
   working: boolean;
   /** Thinking tokens are arriving right now: the dots move (they stand still otherwise). */
   active?: boolean;
-  /** When the question was sent: the timer next to the label counts from there. */
-  startedAt?: number;
   durationMs: number | null;
   onToggle(): void;
 }
 
 /** The reasoning and tool activity of an answer: discreet, no box, foldable at any time. */
-export function Thinking({
-  blocks,
-  open,
-  working,
-  active = false,
-  startedAt,
-  durationMs,
-  onToggle,
-}: Props) {
+export function Thinking({ blocks, open, working, active = false, durationMs, onToggle }: Props) {
   if (!working && blocks.length === 0) return null;
   const seconds = Math.max(1, Math.round((durationMs ?? 0) / 1000));
   const label = working ? "Thinking" : `Thought for ${seconds}s`;
@@ -43,7 +32,6 @@ export function Thinking({
             <Icon name="chevron" size={14} />
           </span>
         </button>
-        {working && <Elapsed startedAt={startedAt} durationMs={null} running />}
       </div>
       {open && (
         <div className="thinking-body">

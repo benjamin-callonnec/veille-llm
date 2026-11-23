@@ -971,6 +971,15 @@
     opacity: 0.85;
   }
 }
+/* The clock of the whole message, in the top right corner of its bubble. */
+.turn-assistant {
+  position: relative;
+}
+.turn-clock {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
 /* The clock: under the answer while it is produced, then in the row of quiet actions. */
 .elapsed {
   color: var(--muted);

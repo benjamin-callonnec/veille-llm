@@ -42,13 +42,17 @@ interface BodyProps {
 function Body(p: BodyProps) {
   return (
     <div className="turn turn-assistant">
+      {p.working && (
+        <div className="turn-clock">
+          <Elapsed startedAt={p.startedAt} durationMs={null} running />
+        </div>
+      )}
       <div className="assistant">
         <Thinking
           blocks={p.blocks}
           open={p.open}
           working={p.working}
           active={p.thinking}
-          startedAt={p.startedAt}
           durationMs={p.durationMs}
           onToggle={p.onToggle}
         />
