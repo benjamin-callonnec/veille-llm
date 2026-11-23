@@ -5,6 +5,26 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-23
+
+### Added
+- Voice (#26): dictate into the composer with a quiet microphone icon (browser speech recognition, push to talk, live phrase, editable result, asked only on click, clear message if blocked) and read answers aloud with a speaker icon, sentence by sentence while they stream, with stop and replay; citations, markdown and code are not spoken.
+- Voice (#26): the answer to a dictated message is read aloud by default (a typed message keeps a silent answer); the speaker icon still stops and replays it.
+- Settings: a reading speed for the voice, slow (0.8×), normal or fast (1.3×), remembered in the browser and applied from the next sentence.
+- A local `/api/voice` WebSocket (loopback and same origin only, size and rate limits, no audio on disk) with an engine interface for a future local model, and a reconnecting client. Not used by the UI yet; see `docs/superpowers/specs/2026-11-23-reader-voice-design.md` for what is real and the evaluation of whisper.cpp and piper. Adds the `websockets` library to the reader dependencies.
+- `ask_user` tool (#29): the tutor can pause a turn to ask you one short question (free text or up to 4 options, 2 per answer, 2 minutes to reply). A card appears in the chat, your reply goes back to the model as escaped data, an expired card lets the turn carry on without an answer, and the card is stored (answered or expired) so a reload shows it. New stream events `ask_user` and `ask_resolved`, and the route `POST /api/items/<id>/conversations/<cid>/asks/<ask>/answer`.
+- Chat tools (#29): a session memory panel (notes with who wrote each one, edit, delete, add), a turn trace panel (tools, tokens, cache tokens, time, cost), a quiet line when the tutor saves or removes a note, the summary behind the compaction note, and an arrow icon to continue once with the raised limit when the conversation budget is reached.
+
+### Changed
+- A conversation refused for its budget says it can be raised once; regenerate takes `raise_limit`.
+- `pypdf` is pinned below 7.1 (7.0.1, 13 days old) instead of the 4-day-old 7.1.1.
+
+### Fixed
+- Asking again a question that was just refused no longer stores it twice.
+- The 30-note limit is checked and the note inserted in one statement, so two writes cannot exceed it.
+- Cache read and write tokens are kept in the trace.
+- `make reader` checks ports 8765 and 5173 first and names the leftover process; pdf.js and katex are split into their own chunks (no more chunk-size warning).
+
 ## [0.12.0] - 2026-11-23
 
 ### Added

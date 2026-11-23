@@ -186,3 +186,39 @@ def test_the_store_can_be_used_from_several_threads_at_once(tmp_path):
     assert errors == []
     assert len(store.memory_notes("a1")) == 1200
     assert len(store.messages(cid)) == 300
+
+
+def test_a_note_is_added_only_below_the_limit_in_one_step(tmp_path):
+    store = ReaderStore(tmp_path / "data")
+    for i in range(3):
+        assert store.add_memory_note("a1", f"n{i}", limit=3) is not None
+    assert store.add_memory_note("a1", "one too many", limit=3) is None
+    assert store.add_memory_note("b1", "other paper", limit=3) is not None
+    assert len(store.memory_notes("a1")) == 3
+
+
+def test_the_trace_keeps_the_cache_tokens(tmp_path):
+    store = ReaderStore(tmp_path / "data")
+    cid = store.create_conversation("a1", "t")["id"]
+    store.add_trace(
+        cid, duration_ms=5, tools=[], input_tokens=1, output_tokens=2, cost_usd=0.1, model="m",
+        stopped=False, error_kind="", cache_read_tokens=30, cache_write_tokens=40,
+    )  # fmt: skip
+    store.add_trace(
+        cid, duration_ms=5, tools=[], input_tokens=1, output_tokens=2, cost_usd=0.1, model="m",
+        stopped=False, error_kind="",
+    )  # fmt: skip
+    first, second = store.traces(cid)
+    assert (first["cache_read_tokens"], first["cache_write_tokens"]) == (30, 40)
+    assert (second["cache_read_tokens"], second["cache_write_tokens"]) == (0, 0)
+
+
+def test_a_message_can_be_updated_and_messages_deleted(tmp_path):
+    store = ReaderStore(tmp_path / "data")
+    cid = store.create_conversation("a1", "t")["id"]
+    first = store.add_message(cid, "user", "text", {"text": "a"})
+    second = store.add_message(cid, "system", "ask", {"status": "pending"})
+    store.update_message_content(second["id"], {"status": "answered"})
+    assert store.messages(cid)[1]["content"] == {"status": "answered"}
+    store.delete_messages(cid, [first["id"], second["id"]])
+    assert store.messages(cid) == []

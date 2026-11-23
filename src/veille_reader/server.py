@@ -8,12 +8,14 @@ from pathlib import Path
 from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
+from starlette.requests import HTTPConnection
 
 from veille_reader import events
+from veille_reader.asking import ASK_TIMEOUT, MAX_REPLY, AskBroker
 from veille_reader.chat import stream_turn
 from veille_reader.compaction import Summarizer
 from veille_reader.events import AgentRunner
@@ -39,6 +41,7 @@ from veille_reader.quiz import (
 )
 from veille_reader.storage import ReaderStore
 from veille_reader.tools import PaperTools
+from veille_reader.voice import CLOSE_POLICY, VoiceEngine, serve
 
 TOOLS_TIMEOUT = 45.0  # seconds to get the paper ready (PDF download and text extraction)
 LOCAL_HOSTS = {"127.0.0.1", "localhost"}
@@ -115,6 +118,21 @@ class QuizAnswerIn(BaseModel):
     order: list[int] | None = Field(default=None, max_length=5)
 
 
+class RegenerateIn(BaseModel):
+    raise_limit: bool = False
+
+
+class AskAnswerIn(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_REPLY)
+
+    @model_validator(mode="after")
+    def not_blank(self) -> Self:
+        if not self.text.strip():
+            raise ValueError("an answer cannot be blank")
+        self.text = self.text.strip()
+        return self
+
+
 class HighlightIn(BaseModel):
     page: int = Field(ge=1)
     color: Literal["yellow", "green", "red"]
@@ -139,7 +157,7 @@ def _hostname(header: str) -> str:
     return header.rsplit(":", 1)[0] if ":" in header else header
 
 
-def _cross_site(request: Request, dev_origins: frozenset[str] = frozenset()) -> bool:
+def _cross_site(request: HTTPConnection, dev_origins: frozenset[str] = frozenset()) -> bool:
     """A page on another origin must not drive the server (it has side effects: downloads)."""
     if request.headers.get("sec-fetch-site", "same-origin") not in {"same-origin", "none"}:
         return True
@@ -166,6 +184,8 @@ def create_app(
     summarizer: Summarizer | None = None,
     quiz_maker: QuizMaker | None = None,
     grader: Grader | None = None,
+    voice_engine: VoiceEngine | None = None,
+    ask_timeout: float = ASK_TIMEOUT,
 ) -> FastAPI:
     loaded = {"items": _load_items(catalogue_path), "mtime": catalogue_path.stat().st_mtime_ns}
 
@@ -184,6 +204,7 @@ def create_app(
     app.state.streaming = set()
     app.state.store = store
     app.state.runner = runner or _no_agent
+    app.state.asks = AskBroker()
 
     @app.middleware("http")
     async def local_only(request: Request, call_next):  # noqa: ANN001, ANN202
@@ -195,6 +216,17 @@ def create_app(
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         return response
+
+    @app.websocket("/api/voice")
+    async def voice(ws: WebSocket) -> None:
+        # the http middleware does not see WebSockets: same loopback and same-origin rules here
+        if _hostname(ws.headers.get("host", "")) not in LOCAL_HOSTS or _cross_site(
+            ws, frozenset(dev_origins)
+        ):
+            await ws.close(code=CLOSE_POLICY)
+            return
+        await ws.accept()
+        await serve(ws, voice_engine)
 
     def unknown(reason: str = "unknown_item") -> JSONResponse:
         return JSONResponse({"reason": reason}, status_code=404)
@@ -296,7 +328,28 @@ def create_app(
     def conversation_messages(item_id: str, cid: int):  # noqa: ANN202
         if store.conversation(item_id, cid) is None:
             return unknown("unknown_conversation")
-        return with_results(store, item_id, store.messages(cid))
+        return with_results(store, item_id, _asks_shown(store.messages(cid), cid))
+
+    def _asks_shown(messages: list[dict], cid: int) -> list[dict]:
+        """A card still pending that no live turn waits for (server restarted) shows as expired."""
+        for m in messages:
+            card = m["content"]
+            if (
+                m["kind"] == "ask"
+                and card.get("status") == "pending"
+                and not app.state.asks.is_open(cid, str(card.get("id")))
+            ):
+                m["content"] = {**card, "status": "expired"}
+        return messages
+
+    @app.post("/api/items/{item_id}/conversations/{cid}/asks/{ask_id}/answer")
+    async def answer_ask(item_id: str, cid: int, ask_id: str, body: AskAnswerIn):  # noqa: ANN202
+        """The user's reply to a question of the tutor; the paused turn goes on with it."""
+        if store.conversation(item_id, cid) is None:
+            return unknown("unknown_conversation")
+        if app.state.asks.answer(cid, ask_id, body.text) != "ok":
+            return unknown("unknown_ask")
+        return Response(status_code=204)
 
     @app.get("/api/items/{item_id}/conversations/{cid}/trace")
     def conversation_trace(item_id: str, cid: int):  # noqa: ANN202
@@ -362,6 +415,8 @@ def create_app(
                     raise_limit=raise_limit,
                     summarizer=summarizer,
                     after_turn=after_turn,
+                    asks=app.state.asks,
+                    ask_timeout=ask_timeout,
                 ):
                     yield line
             finally:
@@ -396,7 +451,7 @@ def create_app(
         return await run_turn(item_id, cid, body.kind, content, body.raise_limit)
 
     @app.post("/api/items/{item_id}/conversations/{cid}/regenerate")
-    async def regenerate(item_id: str, cid: int):  # noqa: ANN202
+    async def regenerate(item_id: str, cid: int, body: RegenerateIn | None = None):  # noqa: ANN202
         if store.conversation(item_id, cid) is None:
             return unknown("unknown_conversation")
         if cid in app.state.streaming:
@@ -405,7 +460,7 @@ def create_app(
         spoken = [m for m in store.messages(cid) if m["role"] in ("user", "assistant")]
         if not spoken or spoken[-1]["role"] != "user":
             return JSONResponse({"reason": "nothing_to_regenerate"}, status_code=400)
-        return await run_turn(item_id, cid, None, None)
+        return await run_turn(item_id, cid, None, None, bool(body and body.raise_limit))
 
     @app.post("/api/items/{item_id}/conversations/{cid}/quizzes", status_code=201)
     async def start_quiz(item_id: str, cid: int, body: QuizIn):  # noqa: ANN202
@@ -492,9 +547,10 @@ def create_app(
     def add_note(item_id: str, body: NoteIn):  # noqa: ANN202
         if item_id not in current_items():
             return unknown()
-        if len(store.memory_notes(item_id)) >= MAX_NOTES:
+        note = store.add_memory_note(item_id, body.text, limit=MAX_NOTES)
+        if note is None:
             return JSONResponse({"reason": "memory_full"}, status_code=409)
-        return store.add_memory_note(item_id, body.text)
+        return note
 
     @app.put("/api/items/{item_id}/memory/{note_id}")
     def edit_note(item_id: str, note_id: int, body: NoteIn):  # noqa: ANN202

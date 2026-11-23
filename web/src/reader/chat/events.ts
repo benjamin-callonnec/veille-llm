@@ -67,7 +67,29 @@ export function toSuggestions(raw: unknown): string[] {
   return out;
 }
 
+export const MAX_ASK_OPTIONS = 4;
+export const MAX_ASK_OPTION = 80;
+
+/** Keep the short plain options of a question (the server checks too; this is a second guard). */
+export function toOptions(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const text = item.trim();
+    if (!text || text.length > MAX_ASK_OPTION || out.includes(text)) continue;
+    out.push(text);
+    if (out.length === MAX_ASK_OPTIONS) break;
+  }
+  return out;
+}
+
+export type AskStatus = "pending" | "answered" | "expired";
+
 export type ChatEvent =
+  | { type: "ask_user"; id: string; question: string; options: string[]; timeout_s: number }
+  | { type: "ask_resolved"; id: string; status: "answered" | "expired"; answer?: string }
+  | { type: "memory_note"; action: "saved" | "deleted"; text: string }
   | { type: "citations"; items: Citation[] }
   | { type: "suggestions"; items: string[] }
   | { type: "thinking_delta"; text: string }
@@ -75,7 +97,7 @@ export type ChatEvent =
   | { type: "tool_result"; id: string; summary: string; is_error: boolean }
   | { type: "text_delta"; text: string }
   | { type: "done"; duration_ms: number }
-  | { type: "error"; kind: string; message: string };
+  | { type: "error"; kind: string; message: string; raisable?: boolean };
 
 const isStr = (v: unknown): v is string => typeof v === "string";
 
@@ -95,6 +117,29 @@ export function toEvent(raw: unknown): ChatEvent | null {
       return isStr(r.id) && isStr(r.summary)
         ? { type: "tool_result", id: r.id, summary: r.summary, is_error: r.is_error === true }
         : null;
+    case "ask_user":
+      return isStr(r.id) && isStr(r.question)
+        ? {
+            type: "ask_user",
+            id: r.id,
+            question: r.question,
+            options: toOptions(r.options),
+            timeout_s: typeof r.timeout_s === "number" ? r.timeout_s : 0,
+          }
+        : null;
+    case "ask_resolved":
+      return isStr(r.id) && (r.status === "answered" || r.status === "expired")
+        ? {
+            type: "ask_resolved",
+            id: r.id,
+            status: r.status,
+            ...(isStr(r.answer) ? { answer: r.answer } : {}),
+          }
+        : null;
+    case "memory_note":
+      return (r.action === "saved" || r.action === "deleted") && isStr(r.text)
+        ? { type: "memory_note", action: r.action, text: r.text }
+        : null;
     case "citations":
       return Array.isArray(r.items) ? { type: "citations", items: toCitations(r.items) } : null;
     case "suggestions":
@@ -105,7 +150,12 @@ export function toEvent(raw: unknown): ChatEvent | null {
         : null;
     case "error":
       return isStr(r.kind) && isStr(r.message)
-        ? { type: "error", kind: r.kind, message: r.message }
+        ? {
+            type: "error",
+            kind: r.kind,
+            message: r.message,
+            ...(r.raisable === true ? { raisable: true } : {}),
+          }
         : null;
     default:
       return null;

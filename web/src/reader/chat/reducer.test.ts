@@ -89,3 +89,32 @@ test("the citations event is kept in the state", () => {
   expect(s.citations).toEqual(items);
   expect(start().citations).toBeUndefined();
 });
+
+describe("the tutor's question and its note lines", () => {
+  test("a question waits for its answer, then shows how it ended", () => {
+    let s = applyEvent(
+      start(),
+      { type: "ask_user", id: "a", question: "Which?", options: ["A"], timeout_s: 60 },
+      1100,
+    );
+    expect(s.asks).toEqual([{ id: "a", question: "Which?", options: ["A"], status: "pending" }]);
+    s = applyEvent(s, { type: "ask_resolved", id: "a", status: "answered", answer: "A" }, 1200);
+    expect(s.asks?.[0]).toMatchObject({ status: "answered", answer: "A" });
+    s = applyEvent(s, { type: "ask_resolved", id: "zzz", status: "expired" }, 1300);
+    expect(s.asks).toHaveLength(1);
+  });
+
+  test("a saved note is a line of the answer", () => {
+    const s = applyEvent(start(), { type: "memory_note", action: "saved", text: "x" }, 1100);
+    expect(s.notes).toEqual([{ action: "saved", text: "x" }]);
+  });
+
+  test("an error keeps the flag that says the limit can be raised", () => {
+    const s = applyEvent(
+      start(),
+      { type: "error", kind: "budget", message: "m", raisable: true },
+      1100,
+    );
+    expect(s.error).toEqual({ kind: "budget", message: "m", raisable: true });
+  });
+});

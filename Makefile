@@ -50,6 +50,14 @@ READER_NO_BILLING = -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BA
 	-u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_VERTEX
 READER_FRONT_URL ?= http://127.0.0.1:5173
 reader:
+	@for port in 8765 5173; do \
+	  pid=$$(lsof -nP -tiTCP:$$port -sTCP:LISTEN 2>/dev/null | head -1); \
+	  if [ -n "$$pid" ]; then \
+	    echo "Port $$port is already used by PID $$pid ($$(ps -o command= -p $$pid | cut -c1-80))."; \
+	    echo "A leftover reader may survive its terminal: kill -9 $$pid, then run make reader again."; \
+	    exit 1; \
+	  fi; \
+	done
 	@test -f build/catalogue.json || $(MAKE) catalogue
 	@# Port 8765 serves web/dist: rebuild it so it is never an older version than the dev server.
 	@cd web && VITE_READER_URL=$(READER_FRONT_URL) npx vite build --mode reader --logLevel warn

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { isMac, keysFor } from "../lib/platform";
 import type { ShortcutGroup } from "../lib/shortcuts";
+import { loadSpeed, RATES, SPEEDS, type SpeechSpeed, saveSpeed } from "../lib/speechRate";
 import { applyTheme, defaultStorage, loadTheme, saveTheme, type Theme } from "../lib/theme";
 import { Icon } from "./Icon";
 
@@ -9,6 +10,14 @@ const THEME_LABELS: Record<Theme, string> = {
   light: "Papier (light)",
   dark: "Nuit (dark)",
 };
+
+const SPEED_LABELS: Record<SpeechSpeed, string> = {
+  slow: "Slow",
+  normal: "Normal",
+  fast: "Fast",
+};
+
+const canSpeak = () => typeof window !== "undefined" && "speechSynthesis" in window;
 
 const isTyping = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
@@ -27,6 +36,7 @@ export function SettingsMenu({ shortcuts, storage, platform }: Props) {
   const store = storage === undefined ? defaultStorage() : storage;
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => loadTheme(store));
+  const [speed, setSpeed] = useState<SpeechSpeed>(() => loadSpeed(store));
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,6 +63,11 @@ export function SettingsMenu({ shortcuts, storage, platform }: Props) {
     saveTheme(store, next);
   };
 
+  const chooseSpeed = (next: SpeechSpeed) => {
+    setSpeed(next);
+    saveSpeed(store, next);
+  };
+
   return (
     <div className="settings" ref={root}>
       {open && (
@@ -67,6 +82,25 @@ export function SettingsMenu({ shortcuts, storage, platform }: Props) {
               </label>
             ))}
           </fieldset>
+          {canSpeak() && (
+            <fieldset>
+              <legend className="sr-only">Reading speed</legend>
+              <h2>Reading speed</h2>
+              {SPEEDS.map((s) => (
+                <label key={s} className="theme-choice">
+                  <input
+                    type="radio"
+                    name="tts-speed"
+                    value={s}
+                    checked={speed === s}
+                    onChange={() => chooseSpeed(s)}
+                  />
+                  {SPEED_LABELS[s]}
+                  {s !== "normal" && <span className="muted"> ({RATES[s]}×)</span>}
+                </label>
+              ))}
+            </fieldset>
+          )}
           {shortcuts.map((group) => (
             <section key={group.title}>
               <h2>{group.title}</h2>

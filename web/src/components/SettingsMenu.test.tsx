@@ -144,3 +144,18 @@ test("on Windows or Linux the shortcuts show Ctrl, Enter and PageUp/PageDown", a
   expect(kbds()).not.toContain("⌘");
   expect(screen.getByRole("dialog").textContent).not.toMatch(/Command key/);
 });
+
+test("the reading speed of the voice is slow, normal or fast, normal by default and remembered", async () => {
+  Object.defineProperty(window, "speechSynthesis", { value: {}, configurable: true });
+  const store = new Map<string, string>();
+  const storage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => void store.set(k, v),
+  } as unknown as Storage;
+  render(<SettingsMenu shortcuts={[]} storage={storage} />);
+  await userEvent.click(screen.getByRole("button", { name: "Settings" }));
+  expect((screen.getByRole("radio", { name: /^Normal/ }) as HTMLInputElement).checked).toBe(true);
+  await userEvent.click(screen.getByRole("radio", { name: /^Slow/ }));
+  expect(store.get("veille-tts-speed")).toBe("slow");
+  Reflect.deleteProperty(window, "speechSynthesis");
+});

@@ -21,7 +21,14 @@ export type IconName =
   | "arrow-down"
   | "search"
   | "outline"
-  | "settings";
+  | "settings"
+  | "mic"
+  | "speaker"
+  | "note"
+  | "trace"
+  | "raise"
+  | "person"
+  | "sparkle";
 
 /** One line style for every icon of the app: 24px grid, round caps, drawn in the current colour. */
 const SHAPES: Record<IconName, ReactNode> = {
@@ -62,6 +69,18 @@ const SHAPES: Record<IconName, ReactNode> = {
       <path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15" />
     </>
   ),
+  mic: (
+    <>
+      <rect x="9" y="3.5" width="6" height="11" rx="3" />
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5" />
+    </>
+  ),
+  speaker: (
+    <>
+      <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+      <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />
+    </>
+  ),
   close: <path d="M6 6l12 12M18 6L6 18" />,
   check: <path d="M5 12.5l4.5 4.5L19 7" />,
   retry: (
@@ -87,6 +106,21 @@ const SHAPES: Record<IconName, ReactNode> = {
       <path d="M16 16l4.5 4.5" />
     </>
   ),
+  note: (
+    <>
+      <path d="M6 4h9l3 3v13H6z" />
+      <path d="M9 11h6M9 15h4" />
+    </>
+  ),
+  trace: <path d="M3 12h4l3-7 4 14 3-7h4" />,
+  raise: <path d="M12 18V8M7 12l5-5 5 5M6 4h12" />,
+  person: (
+    <>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5 20a7 7 0 0 1 14 0" />
+    </>
+  ),
+  sparkle: <path d="M12 4l1.8 5.2L19 11l-5.2 1.8L12 18l-1.8-5.2L5 11l5.2-1.8z" />,
   outline: <path d="M4 6h16M4 12h16M4 18h10" />,
   settings: (
     <>
@@ -125,6 +159,8 @@ interface IconButtonProps {
   className?: string;
   size?: number;
   expanded?: boolean;
+  /** A toggle that is on (read by screen readers and styled as active). */
+  pressed?: boolean;
 }
 
 /** A quiet button that is only an icon: the name lives in aria-label and title. */
@@ -136,6 +172,7 @@ export function IconButton({
   className,
   size,
   expanded,
+  pressed,
 }: IconButtonProps) {
   return (
     <button
@@ -145,6 +182,7 @@ export function IconButton({
       title={label}
       disabled={disabled}
       aria-expanded={expanded}
+      aria-pressed={pressed}
       onClick={onClick}
     >
       <Icon name={icon} size={size} />
