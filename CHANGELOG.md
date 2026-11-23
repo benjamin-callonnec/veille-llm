@@ -5,6 +5,11 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-23
+
+### Added
+- Reader (#45): the placeholder of the empty composer is now alive. With next questions recommended by the tutor, it shows them one after the other (6 s, short fade; Tab fills the one shown). Without any, it goes through a static list of tips (`web/src/reader/lib/tips.ts`, one line per tip: shortcuts, the `/` menu, images, reports, citations, highlights, dictation, session memory, quiz, export...) and the invitation "Ask about the paper…", in a random order drawn again for each round, never twice the same text in a row. A tip about a feature that is not there (no skill, no report, no microphone) is never shown. Nothing rotates while you type, while the tutor answers, with `prefers-reduced-motion` (the invitation stays) or with a single recommendation.
+
 ## [0.18.0] - 2026-11-23
 
 ### Added
