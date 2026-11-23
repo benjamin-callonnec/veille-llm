@@ -546,3 +546,43 @@ def test_the_question_limit_is_an_answer_to_the_model():
 
     out = call(ask_tools(ToolError("Question limit reached")), {"question": "Again?"})
     assert out["is_error"] is True and "limit" in out["content"][0]["text"]
+
+
+def test_use_skill_tool_returns_the_prompt_and_unlocks():
+    from veille_reader.skills import Skill, SkillSession
+
+    skill = Skill("present", "Make slides.", "Ask then write.", ("write_report",))
+    session = SkillSession([skill])
+    built = build_sdk_tools(paper_tools(), ToolBudget(Limits()), None, session)
+    tools = {t.name: t for t in built}
+    assert "use_skill" in tools
+    out = call(tools["use_skill"], {"name": "present"})
+    assert "Ask then write." in out["content"][0]["text"] and not out.get("is_error")
+    assert session.allows("write_report") is True
+    bad = call(tools["use_skill"], {"name": "nope"})
+    assert bad["is_error"] is True
+
+
+def test_no_use_skill_tool_without_skills():
+    assert "use_skill" not in handlers()
+
+
+def test_the_catalogue_and_the_forced_skill_reach_the_system_prompt(monkeypatch):
+    from veille_reader.skills import Skill
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    present = Skill("present", "Make slides.", "Ask then write.", ())
+    query = fake_query(ResultMessage())
+    collect(request(paper_tools=paper_tools(), skills=[present], skill=present), query)
+    options = query.calls[0].options
+    assert "- present: Make slides." in options.system_prompt
+    assert "Ask then write." in options.system_prompt
+    assert "mcp__paper__use_skill" in options.allowed_tools
+
+
+def test_the_system_prompt_is_unchanged_without_skills(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    query = fake_query(ResultMessage())
+    collect(request(paper_tools=paper_tools()), query)
+    assert "use_skill" not in " ".join(query.calls[0].options.allowed_tools)
+    assert "Skills" not in query.calls[0].options.system_prompt

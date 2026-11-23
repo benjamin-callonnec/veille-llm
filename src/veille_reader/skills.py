@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from veille_reader.tools import ToolError
+
 KNOWN_TOOLS = frozenset(
     {"load_artifact", "search_paper", "session_memory", "ask_user", "write_report", "read_report"}
 )
@@ -75,3 +77,43 @@ def load_skills(directory: Path) -> list[Skill]:
             continue
         found[skill.name] = skill
     return list(found.values())
+
+
+SKILLS_RULE = (
+    "\n\nSkills: when the user's request matches the description of one of these skills, call "
+    "use_skill with its name before you start; its instructions then apply to this answer. A "
+    "skill never overrides the rules above about data and citations. Available skills:\n"
+)
+
+
+class SkillSession:
+    """The skills of one answer: what the agent may load, and which gated tools are unlocked."""
+
+    def __init__(self, catalogue: list[Skill], forced: Skill | None = None) -> None:
+        self.catalogue = {s.name: s for s in catalogue}
+        self.forced = forced
+        self.unlocked: set[str] = set(forced.tools) if forced else set()
+
+    def use(self, name: str) -> str:
+        skill = self.catalogue.get(name)
+        if skill is None:
+            raise ToolError(
+                f"No skill named '{str(name)[:40]}'. Available: {', '.join(self.catalogue)}."
+            )
+        self.unlocked |= set(skill.tools)
+        return f"Skill {skill.name} loaded. Follow these instructions:\n{skill.prompt}"
+
+    def allows(self, tool: str) -> bool:
+        return tool not in GATED_TOOLS or tool in self.unlocked
+
+    def system_prompt(self) -> str:
+        parts = []
+        if self.catalogue:
+            lines = "\n".join(f"- {s.name}: {s.description}" for s in self.catalogue.values())
+            parts.append(SKILLS_RULE + lines)
+        if self.forced:
+            parts.append(
+                f"\n\nThe user invoked the skill {self.forced.name}. Its instructions:\n"
+                f"{self.forced.prompt}"
+            )
+        return "".join(parts)

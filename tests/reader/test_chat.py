@@ -313,3 +313,52 @@ def test_the_cache_tokens_of_an_answer_reach_its_trace(tmp_path):
     client.post(f"/api/items/a1/conversations/{cid}/messages", json={"kind": "text", "text": "Hi"})
     trace = client.get(f"/api/items/a1/conversations/{cid}/trace").json()[0]
     assert (trace["cache_read_tokens"], trace["cache_write_tokens"]) == (30, 0)
+
+
+def _skill_client(tmp_path, runner):
+    import json as _json
+
+    cat = tmp_path / "c.json"
+    cat.write_text(_json.dumps({"items": ITEMS}), encoding="utf-8")
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    (skills / "present.md").write_text(
+        "---\nname: present\ndescription: Make slides.\ntools: [ask_user]\n---\nAsk then write."
+    )
+    app = create_app(tmp_path / "data", cat, runner=runner, skills_dir=skills)
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_message_with_known_skill_forces_it(tmp_path):
+    runner = script(events.done(1))
+    client = _skill_client(tmp_path, runner)
+    cid = new_conversation(client)
+    client.post(
+        f"/api/items/a1/conversations/{cid}/messages",
+        json={"kind": "text", "text": "go", "skill": "present"},
+    )
+    request = runner.seen[0]
+    assert request.skill.name == "present"
+    assert [s.name for s in request.skills] == ["present"]
+
+
+def test_message_with_unknown_skill_is_plain_text(tmp_path):
+    runner = script(events.done(1))
+    client = _skill_client(tmp_path, runner)
+    cid = new_conversation(client)
+    response = client.post(
+        f"/api/items/a1/conversations/{cid}/messages",
+        json={"kind": "text", "text": "go", "skill": "nope"},
+    )
+    assert response.status_code == 200
+    assert runner.seen[0].skill is None
+
+
+def test_message_with_malformed_skill_name_is_rejected(tmp_path):
+    client = _skill_client(tmp_path, script(events.done(1)))
+    cid = new_conversation(client)
+    response = client.post(
+        f"/api/items/a1/conversations/{cid}/messages",
+        json={"kind": "text", "text": "go", "skill": "../x"},
+    )
+    assert response.status_code == 422

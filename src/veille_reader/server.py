@@ -80,6 +80,7 @@ class MessageIn(BaseModel):
     quote: QuoteIn | None = None
     question: str | None = Field(default=None, max_length=8000)
     images: list[ImageIn] = Field(default_factory=list, max_length=20)
+    skill: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9-]{0,39}$")
 
     @model_validator(mode="after")
     def complete(self) -> Self:
@@ -206,6 +207,7 @@ def create_app(
         return loaded["items"]
 
     store = ReaderStore(data_dir)
+    skills_cache = skills_dir or data_dir / "skills"
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.state.streaming = set()
     app.state.store = store
@@ -396,12 +398,18 @@ def create_app(
         return PaperTools(paper, store.highlights(item_id), StoreMemory(store, item_id)), notes
 
     async def run_turn(  # noqa: ANN202
-        item_id: str, cid: int, kind: str | None, content: dict | None, raise_limit: bool = False
+        item_id: str,
+        cid: int,
+        kind: str | None,
+        content: dict | None,
+        raise_limit: bool = False,
+        skill_name: str | None = None,
     ):
         streaming: set[int] = app.state.streaming
         streaming.add(cid)
 
         item = current_items()[item_id]
+        catalogue_skills = load_skills(skills_cache)
 
         async def body():  # noqa: ANN202
             try:
@@ -438,6 +446,8 @@ def create_app(
                     after_turn=after_turn,
                     asks=app.state.asks,
                     ask_timeout=ask_timeout,
+                    skills=catalogue_skills,
+                    skill=next((s for s in catalogue_skills if s.name == skill_name), None),
                 ):
                     yield line
             finally:
@@ -469,7 +479,7 @@ def create_app(
                     {"id": i.id, "mime": i.mime, **({"name": i.name} if i.name else {})}
                     for i in images
                 ]
-        return await run_turn(item_id, cid, body.kind, content, body.raise_limit)
+        return await run_turn(item_id, cid, body.kind, content, body.raise_limit, body.skill)
 
     @app.post("/api/items/{item_id}/conversations/{cid}/regenerate")
     async def regenerate(item_id: str, cid: int, body: RegenerateIn | None = None):  # noqa: ANN202
@@ -584,8 +594,6 @@ def create_app(
         if not store.delete_memory_note(item_id, note_id):
             return unknown("unknown_note")
         return Response(status_code=204)
-
-    skills_cache = skills_dir or data_dir / "skills"
 
     @app.get("/api/skills")
     def list_skills() -> list[dict]:

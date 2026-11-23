@@ -86,3 +86,45 @@ def test_load_skills_skips_invalid_and_non_md(tmp_path):
 
 def test_load_skills_missing_directory_is_empty(tmp_path):
     assert load_skills(tmp_path / "nope") == []
+
+
+# --- SkillSession ---------------------------------------------------------------------
+
+from veille_reader.skills import SkillSession  # noqa: E402
+from veille_reader.tools import ToolError  # noqa: E402
+
+PRESENT = Skill("present", "Make slides.", "Ask then write.", ("ask_user", "write_report"))
+OTHER = Skill("other", "Another one.", "Other prompt.", ())
+
+
+def test_skill_session_use_unlocks_tools():
+    session = SkillSession([PRESENT, OTHER])
+    assert session.allows("write_report") is False
+    assert "Ask then write." in session.use("present")
+    assert session.allows("write_report") is True
+    assert session.allows("read_report") is False  # not listed by the skill
+
+
+def test_skill_session_unknown_name_is_tool_error():
+    with pytest.raises(ToolError):
+        SkillSession([PRESENT]).use("nope")
+
+
+def test_ungated_tools_are_always_allowed():
+    assert SkillSession([]).allows("load_artifact") is True
+
+
+def test_forced_skill_is_unlocked_from_start():
+    session = SkillSession([PRESENT], forced=PRESENT)
+    assert session.allows("write_report") is True
+    assert "Ask then write." in session.system_prompt()
+
+
+def test_catalogue_prompt_lists_name_and_description_only():
+    text = SkillSession([PRESENT, OTHER]).system_prompt()
+    assert "- present: Make slides." in text and "- other: Another one." in text
+    assert "Ask then write." not in text
+
+
+def test_empty_session_adds_nothing_to_the_system_prompt():
+    assert SkillSession([]).system_prompt() == ""
