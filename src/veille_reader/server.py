@@ -40,6 +40,7 @@ from veille_reader.quiz import (
     with_results,
 )
 from veille_reader.storage import ReaderStore
+from veille_reader.structure import load_structure
 from veille_reader.tools import PaperTools
 from veille_reader.voice import CLOSE_POLICY, VoiceEngine, serve
 
@@ -260,6 +261,21 @@ def create_app(
             status = 404 if exc.reason == "no_pdf" else 502
             return JSONResponse({"reason": exc.reason}, status_code=status)
         return FileResponse(path, media_type="application/pdf")
+
+    @app.get("/api/items/{item_id}/structure")
+    def item_structure(item_id: str):  # noqa: ANN202
+        found = current_items().get(item_id)
+        if found is None:
+            return unknown()
+        try:
+            path = ensure_pdf(store, item_id, str(found.get("url", "")), fetch)
+        except PdfError as exc:
+            status = 404 if exc.reason == "no_pdf" else 502
+            return JSONResponse({"reason": exc.reason}, status_code=status)
+        result = load_structure(store, item_id, path)
+        if result is None:
+            return JSONResponse({"reason": "no_structure"}, status_code=404)
+        return result.to_dict()
 
     @app.get("/api/items/{item_id}/images/{image_id}")
     def item_image(item_id: str, image_id: str):  # noqa: ANN202

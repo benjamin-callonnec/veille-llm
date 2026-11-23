@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 
 from veille_reader.server import create_app
 
+from .pdf_factory import make_pdf
+
 PDF = b"%PDF-1.7\nbody"
 ITEMS = [
     {
@@ -292,3 +294,37 @@ def test_health_names_the_model_only_when_the_server_was_given_one(tmp_path, cat
         base_url="http://127.0.0.1:8765",
     )
     assert named.get("/api/health").json() == {"status": "ok", "model": "claude-sonnet-5-5"}
+
+
+def structure_client(tmp_path, catalogue, body):
+    app = create_app(tmp_path / "data", catalogue, fetch=lambda url: body)
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_structure_of_a_paper(tmp_path, catalogue):
+    client = structure_client(tmp_path, catalogue, make_pdf(["Figure 1: A figure"]))
+    response = client.get("/api/items/a1/structure")
+    assert response.status_code == 200
+    body = response.json()
+    assert [(c["kind"], c["number"], c["page"]) for c in body["captions"]] == [("figure", 1, 1)]
+    assert len(body["captions"][0]["rect"]) == 4
+
+
+def test_structure_of_an_unknown_item_is_404(client):
+    response = client.get("/api/items/nope/structure")
+    assert response.status_code == 404
+    assert response.json() == {"reason": "unknown_item"}
+
+
+def test_structure_of_an_unreadable_pdf_is_404_and_the_reader_still_works(tmp_path, catalogue):
+    client = structure_client(tmp_path, catalogue, b"%PDF-1.7\nnot a real pdf")
+    response = client.get("/api/items/a1/structure")
+    assert response.status_code == 404
+    assert response.json() == {"reason": "no_structure"}
+    assert client.get("/api/items/a1").status_code == 200
+
+
+def test_structure_of_a_paper_without_pdf_is_404(client):
+    response = client.get("/api/items/b1/structure")
+    assert response.status_code == 404
+    assert response.json() == {"reason": "no_pdf"}
