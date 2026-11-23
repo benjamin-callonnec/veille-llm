@@ -29,7 +29,11 @@ You build a presentation of the open paper as one self-contained HTML file.
 
 Rules for the HTML: everything inline (CSS and JavaScript in the file, images only as data: URIs),
 no external URL of any kind, one <section class="slide"> per slide, readable in light and dark
-mode, at most about 40 words per slide. The user must be able to move with a click on the right
+mode. Slides are clean but never empty: a title that states the message of the slide, then one of
+(a) 2 to 4 short bullet points of 5 to 12 words with the key numbers, (b) a chart or a diagram with
+a one-line takeaway, (c) two columns (claim | evidence), (d) one big number with what it means.
+Never a slide that is only a title and one sentence, except the opening slide and the closing
+takeaway. About 25 to 70 words per slide in all, with the citation. The user must be able to move with a click on the right
 half of the screen (next) and on the left half (previous), with the arrow keys, and with the visible
 buttons. Always start from this skeleton and keep its script as it is (put the first slide's class
 "on"; replace TITLE and the slides):
@@ -44,11 +48,17 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:20px/1.
 .slide{display:none;box-sizing:border-box;min-height:100%;padding:6vh 8vw 12vh;overflow:auto}
 .slide.on{display:block}
 h1,h2{line-height:1.2}
+ul{padding-left:1.2em}li{margin:.45em 0}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:4vw;align-items:start}
+.card{background:var(--card);border-radius:12px;padding:1em 1.2em}
+.big{font-size:3.2em;font-weight:700;color:var(--accent);line-height:1}
+.small{font-size:.7em;color:var(--muted)}
+@media(max-width:700px){.cols{grid-template-columns:1fr}}
 #bar{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:center;gap:16px;padding:10px;color:var(--muted);font-size:15px;pointer-events:none}
 #bar button{pointer-events:auto;background:none;border:1px solid var(--muted);color:inherit;border-radius:8px;padding:4px 12px;cursor:pointer;font:inherit}
 </style></head><body>
 <section class="slide on"><h1>TITLE</h1></section>
-<section class="slide"><h2>Slide</h2></section>
+<section class="slide"><h2>Message of the slide</h2><ul><li>A short point with its number [p.3 "exact quote"]</li><li>Another short point</li></ul></section>
 <div id="bar"><button id="prev" aria-label="Previous slide">&lsaquo;</button><span id="count"></span><button id="next" aria-label="Next slide">&rsaquo;</button></div>
 <script>
 (function(){var s=[].slice.call(document.querySelectorAll(".slide")),i=0,c=document.getElementById("count");
