@@ -866,7 +866,7 @@
   bottom: calc(100% + 8px);
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: flex-end; /* a short list sits at the bottom, next to the input, not at the top */
   gap: 6px;
   z-index: 5;
   pointer-events: none;
