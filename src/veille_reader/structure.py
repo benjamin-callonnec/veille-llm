@@ -227,12 +227,12 @@ def extract_structure(pdf_path: Path) -> Structure:
 
 def load_structure(store: ReaderStore, item_id: str, pdf_path: Path) -> Structure | None:
     """The structure of a paper: stored, else extracted once and stored; None if unreadable."""
-    cached = store.paper_structure(item_id, EXTRACTOR)
-    if cached is not None:
-        try:
+    try:
+        cached = store.paper_structure(item_id, EXTRACTOR)
+        if cached is not None:
             return Structure.from_dict(cached)
-        except (KeyError, TypeError, ValueError):
-            pass  # a stored copy that does not fit: extract again
+    except (KeyError, TypeError, ValueError):
+        pass  # a stored copy that is not JSON or does not fit: extract again
     try:
         result = extract_structure(pdf_path)
     except PaperError:

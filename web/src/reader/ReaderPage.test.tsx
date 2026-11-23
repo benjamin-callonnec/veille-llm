@@ -106,6 +106,7 @@ const setup = (
     reply?: string;
     highlights?: Highlight[];
     captions?: Caption[];
+    captionsApi?: (item: string) => Promise<Caption[]>;
   } = {},
 ) => {
   const { api, rows } = fakeApi();
@@ -119,7 +120,7 @@ const setup = (
       open={open}
       api={api}
       chatApi={opts.chat ?? chat.api}
-      captionsApi={async () => opts.captions ?? []}
+      captionsApi={opts.captionsApi ?? (async () => opts.captions ?? [])}
     />,
   );
   return { api, rows, open, chatSent: chat.sent, ...utils };
@@ -536,4 +537,39 @@ test("a cited figure the structure does not know stays on the cited page without
   await waitFor(() => expect(field.value).toBe("2"));
   await new Promise((r) => setTimeout(r, 50));
   expect(document.querySelector("[data-flash]")).toBeNull();
+});
+
+test("a figure found late does not override a later click", async () => {
+  let release: (c: Caption[]) => void = () => {};
+  const late = new Promise<Caption[]>((r) => {
+    release = r;
+  });
+  setup({ reply: "See [p.2 Figure 1] and [p.4]", captionsApi: () => late });
+  await ask();
+  await userEvent.click(await screen.findByRole("button", { name: "p.2" }));
+  await userEvent.click(screen.getByRole("button", { name: "p.4" }));
+  const field = (await screen.findByRole("spinbutton", { name: "Page" })) as HTMLInputElement;
+  await waitFor(() => expect(field.value).toBe("4"));
+  release([{ kind: "figure", number: "1", page: 3, rect: [0.1, 0.5, 0.3, 0.02] }]);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(field.value).toBe("4");
+  expect(document.querySelector("[data-flash]")).toBeNull();
+});
+
+test("a figure found late does not override the page typed meanwhile", async () => {
+  let release: (c: Caption[]) => void = () => {};
+  const late = new Promise<Caption[]>((r) => {
+    release = r;
+  });
+  setup({ reply: "See [p.2 Figure 1]", captionsApi: () => late });
+  await ask();
+  await userEvent.click(await screen.findByRole("button", { name: "p.2" }));
+  const field = (await screen.findByRole("spinbutton", { name: "Page" })) as HTMLInputElement;
+  await waitFor(() => expect(field.value).toBe("2"));
+  await userEvent.clear(field);
+  await userEvent.type(field, "5{Enter}");
+  await waitFor(() => expect(field.value).toBe("5"));
+  release([{ kind: "figure", number: "1", page: 3, rect: [0.1, 0.5, 0.3, 0.02] }]);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(field.value).toBe("5");
 });

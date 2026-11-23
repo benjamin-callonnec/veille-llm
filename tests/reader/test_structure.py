@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 import pytest
 
@@ -178,3 +179,19 @@ def test_whatever_pdfminer_raises_is_an_unreadable_pdf(tmp_path, monkeypatch, er
     monkeypatch.setattr(structure, "extract_pages", broken)
     with pytest.raises(PaperError):
         extract_pages_structure(write(tmp_path, ["Hello"]))
+
+
+@pytest.mark.parametrize(
+    "stored",
+    ["not json at all", json.dumps({"extractor": EXTRACTOR, "pages": [[1]]}), "[]"],
+)
+def test_a_corrupt_stored_row_is_extracted_again_and_replaced(tmp_path, stored):
+    data = tmp_path / "data"
+    store = ReaderStore(data)
+    pdf = write(tmp_path, ["Figure 1: A figure"])
+    store.save_paper_structure("a1", EXTRACTOR, {"extractor": EXTRACTOR})
+    with sqlite3.connect(data / "reader.db") as con:
+        con.execute("UPDATE paper_structure SET data = ?", (stored,))
+    result = load_structure(store, "a1", pdf)
+    assert result is not None and [c.number for c in result.captions] == ["1"]
+    assert store.paper_structure("a1", EXTRACTOR) == result.to_dict()
