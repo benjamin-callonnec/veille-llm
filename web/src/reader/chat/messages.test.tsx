@@ -415,22 +415,32 @@ test("a timer runs under the whole answer, even when thinking is folded and the 
   vi.useRealTimers();
 });
 
-test("the dots move while thinking tokens arrive, and stand still during a tool call or the text", () => {
+test("the dots move while the agent works (thinking or a tool call) and stand still once the text starts", () => {
   const t0 = 1_000;
   const moving = () => document.querySelector(".thinking-dots")?.classList.contains("moving");
   let state = initialAssistant(t0);
-  state = applyEvent(state, { type: "thinking_delta", text: "hm" }, t0);
   const { rerender } = render(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(moving()).toBe(true); // just sent: already working
+  state = applyEvent(state, { type: "thinking_delta", text: "hm" }, t0);
+  rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
   expect(moving()).toBe(true);
   state = applyEvent(state, { type: "tool_use", id: "t", name: "search_paper", input: {} }, t0);
   rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
-  expect(moving()).toBe(false);
-  state = applyEvent(state, { type: "thinking_delta", text: "more" }, t0);
-  rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
-  expect(moving()).toBe(true);
+  expect(moving()).toBe(true); // waiting for a tool is still work, never a frozen dot
   state = applyEvent(state, { type: "text_delta", text: "Answer" }, t0);
   rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
   expect(moving()).toBe(false);
+});
+
+test("the dots come before the label and the timer sits on the same line as the label", () => {
+  render(<AssistantMessage state={initialAssistant(Date.now())} onToggleThinking={() => {}} />);
+  const head = document.querySelector(".thinking-head") as HTMLElement;
+  expect(head).not.toBeNull();
+  const toggle = head.querySelector(".thinking-toggle") as HTMLElement;
+  const dots = toggle.querySelector(".thinking-dots") as HTMLElement;
+  expect(toggle.firstElementChild).toBe(dots); // before the word
+  expect(head.querySelector('[aria-label="Elapsed time"]')).not.toBeNull();
+  expect(document.querySelector(".answer-status")).toBeNull();
 });
 
 test("a stored answer shows how long it took, with the quiet actions, and no timer ticks", () => {

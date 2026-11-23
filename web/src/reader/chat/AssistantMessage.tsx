@@ -17,7 +17,7 @@ interface BodyProps {
   answer: string;
   open: boolean;
   working: boolean;
-  /** Thinking tokens are the last thing that arrived (the dots move). */
+  /** The agent is working and no text has come yet (the dots move). */
   thinking?: boolean;
   /** When the question was sent: with `working`, the timer counts from there. */
   startedAt?: number;
@@ -48,6 +48,7 @@ function Body(p: BodyProps) {
           open={p.open}
           working={p.working}
           active={p.thinking}
+          startedAt={p.startedAt}
           durationMs={p.durationMs}
           onToggle={p.onToggle}
         />
@@ -70,11 +71,6 @@ function Body(p: BodyProps) {
         ))}
         {p.answer && (
           <Markdown text={stripQuizMarker(p.answer)} citations={p.citations} onCite={p.onCite} />
-        )}
-        {p.working && (
-          <p className="answer-status">
-            <Elapsed startedAt={p.startedAt} durationMs={null} running />
-          </p>
         )}
         {p.stopped && <p className="muted">Stopped.</p>}
         {p.error && (
@@ -126,11 +122,7 @@ export function AssistantMessage({
       answer={state.answer}
       open={state.thinkingOpen}
       working={state.status === "streaming"}
-      thinking={
-        state.status === "streaming" &&
-        state.answer === "" &&
-        state.blocks.at(-1)?.type === "thinking"
-      }
+      thinking={state.status === "streaming" && state.answer === ""}
       startedAt={state.startedAt}
       durationMs={state.durationMs}
       error={state.error}

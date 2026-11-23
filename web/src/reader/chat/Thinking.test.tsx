@@ -122,3 +122,11 @@ test("the dots are decoration: not read by screen readers", () => {
   setup({ active: true });
   expect(document.querySelector(".thinking-dots")?.getAttribute("aria-hidden")).toBe("true");
 });
+
+test("the timer is next to the label while working, even folded, and gone when done", () => {
+  setup({ open: false, startedAt: Date.now() });
+  expect(document.querySelector('.thinking-head [aria-label="Elapsed time"]')).not.toBeNull();
+  cleanup();
+  setup({ working: false, durationMs: 4000 });
+  expect(document.querySelector('[aria-label="Elapsed time"]')).toBeNull();
+});
