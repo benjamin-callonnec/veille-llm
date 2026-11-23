@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { formatModel } from "../lib/time";
 import { type ChatApi, httpChatApi } from "./chat/api";
 import { ChatPane } from "./chat/ChatPane";
+import type { Label } from "./chat/events";
 import { useChat } from "./chat/useChat";
 import { HighlightsStrip } from "./HighlightsStrip";
 import { parseHash, writeHash } from "./lib/anchor";
+import type { Rect } from "./lib/quote";
 import { PaneLayout } from "./PaneLayout";
-import { type Flash, PdfViewer, type Selection } from "./PdfViewer";
+import { PdfViewer, type Selection, type Target } from "./PdfViewer";
 import { openPdf } from "./pdf/pdfjsSource";
 import { PdfOpenError, type PdfSource } from "./pdf/source";
 import { SelectionBox } from "./SelectionBox";
+import { type Caption, fetchCaptions, findCaption } from "./structureApi";
 import { type HighlightsApi, httpApi, useHighlights } from "./useHighlights";
 
 export interface ReaderItem {
@@ -52,6 +55,8 @@ interface Props {
   open?: (url: string) => Promise<PdfSource>;
   api?: HighlightsApi;
   chatApi?: ChatApi;
+  /** Where the captions of figures and tables come from (the structure of the paper). */
+  captionsApi?(item: string): Promise<Caption[]>;
   /** Where the model that answers is read from (the API health route by default). */
   health?: () => Promise<{ model?: string }>;
 }
@@ -62,6 +67,7 @@ export function ReaderPage({
   open = openPdf,
   api = httpApi,
   chatApi = httpChatApi,
+  captionsApi = fetchCaptions,
   health = fetchHealth,
 }: Props) {
   const [item, setItem] = useState<ReaderItem | null>(null);
@@ -71,7 +77,7 @@ export function ReaderPage({
   const [source, setSource] = useState<PdfSource | null>(null);
   const [page, setPage] = useState(() => parseHash(window.location.hash).page ?? 1);
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [flash, setFlash] = useState<Flash | null>(null);
+  const [target, setTarget] = useState<Target | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const { highlights, add, remove, error: saveError } = useHighlights(itemId, api);
   const chat = useChat(itemId, chatApi);
@@ -130,13 +136,35 @@ export function ReaderPage({
     [itemId],
   );
 
-  const cite = useCallback(
-    (p: number, quote?: string) => {
+  // Every way back to the PDF: the page, and the exact place when we know it.
+  const goTo = useCallback(
+    (p: number, spec?: { rects?: Rect[]; quote?: string }) => {
       changePage(p);
-      if (quote) setFlash({ page: p, quote, nonce: Date.now() });
+      if (spec?.rects?.length || spec?.quote) setTarget({ page: p, ...spec, nonce: Date.now() });
     },
     [changePage],
   );
+  // A figure or a table is placed from the structure of the paper, asked for on the first need.
+  const captions = useRef<Promise<Caption[]> | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new paper has its own captions
+  useEffect(() => {
+    captions.current = null;
+  }, [itemId]);
+  const cite = useCallback(
+    (p: number, quote?: string, label?: Label) => {
+      goTo(p, { quote });
+      if (!label) return;
+      captions.current ??= captionsApi(itemId);
+      const asked = captions.current;
+      void asked.then((all) => {
+        if (!all.length) captions.current = null; // not available now: ask again next time
+        const found = findCaption(all, label, p);
+        if (found) goTo(found.page, { rects: [found.rect] });
+      });
+    },
+    [goTo, itemId, captionsApi],
+  );
+  const goToRects = useCallback((p: number, rects?: Rect[]) => goTo(p, { rects }), [goTo]);
 
   const closeBox = () => {
     setSelection(null);
@@ -168,10 +196,10 @@ export function ReaderPage({
         onPageChange={changePage}
         onSelection={setSelection}
         highlights={highlights}
-        flash={flash ?? undefined}
-        onFlashDone={() => setFlash(null)}
+        target={target ?? undefined}
+        onTargetDone={() => setTarget(null)}
       />
-      <HighlightsStrip highlights={highlights} onGo={changePage} onRemove={remove} />
+      <HighlightsStrip highlights={highlights} onGo={goToRects} onRemove={remove} />
     </>
   ) : (
     <p className="muted">{item.has_pdf ? "Loading the PDF…" : "No PDF for this item"}</p>
@@ -197,9 +225,7 @@ export function ReaderPage({
       )}
       <PaneLayout
         pdf={pdfPane}
-        chat={
-          <ChatPane chat={chat} onGo={changePage} onCite={cite} model={model} itemId={itemId} />
-        }
+        chat={<ChatPane chat={chat} onGo={goToRects} onCite={cite} model={model} itemId={itemId} />}
       />
       {selection && (
         <SelectionBox

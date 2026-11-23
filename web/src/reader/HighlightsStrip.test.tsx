@@ -34,7 +34,7 @@ test("lists highlights, filters by colour, jumps and deletes", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Show green" }));
   expect(screen.queryByText("first")).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: /p\.3/ }));
-  expect(onGo).toHaveBeenCalledWith(3);
+  expect(onGo).toHaveBeenCalledWith(3, []);
   await userEvent.click(screen.getByRole("button", { name: "Delete highlight" }));
   expect(onRemove).toHaveBeenCalledWith(2);
 });
@@ -87,4 +87,19 @@ test("a long list stays in a scrollable region and long text is only clipped by 
   await userEvent.click(toggle(40));
   expect(screen.getAllByRole("listitem")).toHaveLength(40);
   expect(screen.getByText("passage 39")).toBeTruthy();
+});
+
+test("a row goes back to the exact place: the page and the stored rects", async () => {
+  const onGo = vi.fn();
+  const rects: [number, number, number, number][] = [[0.1, 0.2, 0.3, 0.04]];
+  render(
+    <HighlightsStrip
+      highlights={[{ ...hl(1, 2, "yellow", "placed"), rects }]}
+      onGo={onGo}
+      onRemove={() => {}}
+    />,
+  );
+  await userEvent.click(toggle(1));
+  await userEvent.click(screen.getByRole("button", { name: /placed/ }));
+  expect(onGo).toHaveBeenCalledWith(2, rects);
 });

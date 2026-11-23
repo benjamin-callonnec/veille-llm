@@ -15,7 +15,9 @@ from dataclasses import dataclass
 MIN_QUOTE_CHARS = 8
 MAX_QUOTE_CHARS = 300
 
-_CITE = re.compile(r'\[p\.(\d+)(?:\s*[:,]?\s*["“«]([^"”»\]]*)["”»])?\s*\]')
+_CITE = re.compile(
+    r'\[p\.(\d+)(?:\s*[:,]?\s*(?:["“«]([^"”»\]]*)["”»]|((?i:figure|fig\.?|table))\s*(\d{1,3}(?:\.\d{1,3})?)))?\s*\]',
+)
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,13 @@ class Citation:
     quote: str | None
     start: int
     end: int
+    label: str | None = None  # "figure 2" or "table 1": a place named instead of quoted
+
+
+def _label(kind: str | None, number: str | None) -> str | None:
+    if not kind or not number:
+        return None
+    return f"{'table' if kind.lower() == 'table' else 'figure'} {number}"
 
 
 def parse_citations(text: str) -> list[Citation]:
@@ -36,6 +45,7 @@ def parse_citations(text: str) -> list[Citation]:
                 quote=quote if 0 < len(quote) <= MAX_QUOTE_CHARS else None,
                 start=match.start(),
                 end=match.end(),
+                label=_label(match.group(3), match.group(4)),
             )
         )
     return found
@@ -127,17 +137,19 @@ def verify_citations(
         return []
     if flat is None:
         flat = [normalise(p) for p in pages]
-    seen: set[tuple[int, str | None]] = set()
+    seen: set[tuple[int, str | None, str | None]] = set()
     verdicts: list[dict] = []
     for citation in citations:
         # the model reads escaped text (&amp; &lt; &gt;): its quote may carry the entities
         quote = html.unescape(citation.quote) if citation.quote else None
         needle = normalise(quote) if quote else ""
-        key = (citation.page, needle or None)
+        key = (citation.page, needle or None, citation.label)
         if key in seen:
             continue
         seen.add(key)
         verdict: dict = {"page": citation.page, "quote": quote}
+        if citation.label:
+            verdict["label"] = citation.label
         target = citation.page
         if not 1 <= citation.page <= len(pages):
             verdict["status"] = "invalid_page"

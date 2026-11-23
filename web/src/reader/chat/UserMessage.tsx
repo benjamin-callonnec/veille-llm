@@ -1,5 +1,6 @@
 import { IconButton } from "../../components/Icon";
 import { formatDay } from "../../lib/time";
+import type { Rect } from "../lib/quote";
 import type { ImageRef, StoredMessage } from "./api";
 import { CopyButton } from "./CopyButton";
 
@@ -7,7 +8,8 @@ interface Props {
   message: StoredMessage;
   /** The paper, to find the images of the message. */
   itemId?: string;
-  onGo(page: number): void;
+  /** Back to the page, and to the exact rects of the quote when it has them. */
+  onGo(page: number, rects?: Rect[]): void;
   /** Ask for another answer to this question (only offered on the last one). */
   onRetry?(): void;
 }
@@ -31,7 +33,7 @@ export function UserMessage({ message, itemId = "", onGo, onRetry }: Props) {
   const content = message.content as {
     text?: string;
     question?: string;
-    quote?: { text: string; page: number };
+    quote?: { text: string; page: number; rects?: Rect[] };
     images?: ImageRef[];
   };
   const images = (content.images ?? []).filter(isImage);
@@ -46,7 +48,7 @@ export function UserMessage({ message, itemId = "", onGo, onRetry }: Props) {
             <button
               type="button"
               aria-label={`Go to page ${content.quote.page}`}
-              onClick={() => onGo(content.quote?.page ?? 1)}
+              onClick={() => onGo(content.quote?.page ?? 1, content.quote?.rects)}
             >
               p.{content.quote.page} ↗
             </button>

@@ -6,30 +6,37 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { IconButton } from "../../components/Icon";
 import { normalise } from "../lib/locate";
-import type { Citation } from "./events";
+import type { Citation, Label, OnCite } from "./events";
 
 interface Props {
   text: string;
   citations?: Citation[];
-  onCite?(page: number, quote?: string): void;
+  onCite?: OnCite;
 }
 
 // same pattern as the server (src/veille_reader/citations.py)
-const CITE = /\[p\.(\d+)(?:\s*[:,]?\s*["“«]([^"”»\]]*)["”»])?\s*\]/g;
+const CITE =
+  /\[p\.(\d+)(?:\s*[:,]?\s*(?:["“«]([^"”»\]]*)["”»]|([Ff][Ii][Gg][Uu][Rr][Ee]|[Ff][Ii][Gg]\.?|[Tt][Aa][Bb][Ll][Ee])\s*(\d{1,3}(?:\.\d{1,3})?)))?\s*\]/g;
 const MAX_QUOTE = 300;
 const MIN_QUOTE_CHARS = 8;
 
 interface Cite {
   page: number;
   quote?: string;
+  label?: Label;
 }
+
+const labelText = (label?: Label) => (label ? `${label.kind} ${label.number}` : "");
 
 /** The server's verdict on a written citation: same page, same quote once normalised. */
 function verdictOf(cite: Cite, citations: Citation[]): Citation | undefined {
   const wanted = normalise(cite.quote ?? "");
   const usable = wanted.length >= MIN_QUOTE_CHARS;
   return citations.find(
-    (v) => v.page === cite.page && normalise(v.quote ?? "") === (usable ? wanted : ""),
+    (v) =>
+      v.page === cite.page &&
+      normalise(v.quote ?? "") === (usable ? wanted : "") &&
+      (v.label ?? "") === labelText(cite.label),
   );
 }
 
@@ -55,9 +62,17 @@ function codeText(node: unknown): string {
 /** Safe Markdown: raw HTML is text, only http(s) links, no remote images, [p.N] becomes a chip. */
 export function Markdown({ text, citations = [], onCite }: Props) {
   const cites: Cite[] = [];
-  const source = text.replace(CITE, (_m, n: string, q?: string) => {
+  const source = text.replace(CITE, (_m, n: string, q?: string, kind?: string, num?: string) => {
     const quote = (q ?? "").trim();
-    cites.push({ page: Number(n), quote: quote && quote.length <= MAX_QUOTE ? quote : undefined });
+    const label: Label | undefined =
+      kind && num
+        ? { kind: kind.toLowerCase() === "table" ? "table" : "figure", number: num }
+        : undefined;
+    cites.push({
+      page: Number(n),
+      quote: quote && quote.length <= MAX_QUOTE ? quote : undefined,
+      label,
+    });
     return `[p.${n}](cite:${cites.length - 1})`;
   });
   const components: Components = {
@@ -77,7 +92,11 @@ export function Markdown({ text, citations = [], onCite }: Props) {
             type="button"
             className={doubt ? "cite cite-doubt" : "cite"}
             title={tooltip(cite, verdict)}
-            onClick={() => (cite.quote ? onCite?.(page, cite.quote) : onCite?.(page))}
+            onClick={() => {
+              if (cite.quote) onCite?.(page, cite.quote);
+              else if (cite.label) onCite?.(page, undefined, cite.label);
+              else onCite?.(page);
+            }}
           >
             {children}
           </button>

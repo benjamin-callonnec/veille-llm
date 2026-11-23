@@ -261,56 +261,89 @@ test("scrolled to the very bottom the last page is reported", async () => {
 const flashes = () => Array.from(document.querySelectorAll("[data-flash]"));
 
 test("a flash draws the located quote on its page, then ends and tells the parent", async () => {
-  const onFlashDone = vi.fn();
+  const onTargetDone = vi.fn();
   setup({
     page: 2,
-    flash: { page: 2, quote: "Text of page 2", nonce: 1 },
+    target: { page: 2, quote: "Text of page 2", nonce: 1 },
     flashMs: 250,
-    onFlashDone,
+    onTargetDone,
   });
   await waitFor(() => expect(flashes().length).toBe(1));
   const el = flashes()[0] as HTMLElement;
   expect(el.className).toContain("hl-flash");
   expect(el.closest('[data-page="2"]')).not.toBeNull();
   expect(Number.parseFloat(el.style.left)).toBeCloseTo((50 / 600) * 100, 2);
-  expect(onFlashDone).not.toHaveBeenCalled();
-  await waitFor(() => expect(onFlashDone).toHaveBeenCalledTimes(1));
+  expect(onTargetDone).not.toHaveBeenCalled();
+  await waitFor(() => expect(onTargetDone).toHaveBeenCalledTimes(1));
   expect(flashes()).toHaveLength(0);
 });
 
 test("a quote that is not on the page flashes nothing", async () => {
-  const onFlashDone = vi.fn();
+  const onTargetDone = vi.fn();
   setup({
-    flash: { page: 1, quote: "words that are nowhere to be seen", nonce: 1 },
+    target: { page: 1, quote: "words that are nowhere to be seen", nonce: 1 },
     flashMs: 250,
-    onFlashDone,
+    onTargetDone,
   });
   await waitFor(() => expect(document.querySelector(".pdf-text-layer span")).not.toBeNull());
   expect(flashes()).toHaveLength(0);
 });
 
 test("a new nonce restarts the flash", async () => {
-  const onFlashDone = vi.fn();
+  const onTargetDone = vi.fn();
   const source = new FakeSource();
   const base = { source, page: 1, onPageChange: vi.fn(), onSelection: vi.fn(), highlights: [] };
-  const flash = { page: 1, quote: "Text of page 1", nonce: 1 };
+  const target = { page: 1, quote: "Text of page 1", nonce: 1 };
   const { rerender } = render(
-    <PdfViewer {...base} flash={flash} flashMs={400} onFlashDone={onFlashDone} />,
+    <PdfViewer {...base} target={target} flashMs={400} onTargetDone={onTargetDone} />,
   );
   await waitFor(() => expect(flashes().length).toBe(1));
   await new Promise((r) => setTimeout(r, 250));
   rerender(
-    <PdfViewer {...base} flash={{ ...flash, nonce: 2 }} flashMs={400} onFlashDone={onFlashDone} />,
+    <PdfViewer
+      {...base}
+      target={{ ...target, nonce: 2 }}
+      flashMs={400}
+      onTargetDone={onTargetDone}
+    />,
   );
   await new Promise((r) => setTimeout(r, 250));
   // 500 ms after the first flash started, yet the restarted one is still showing
-  expect(onFlashDone).not.toHaveBeenCalled();
+  expect(onTargetDone).not.toHaveBeenCalled();
   expect(flashes()).toHaveLength(1);
-  await waitFor(() => expect(onFlashDone).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(onTargetDone).toHaveBeenCalledTimes(1));
 });
 
 test("without a flash nothing is drawn", async () => {
   setup();
   await waitFor(() => expect(document.querySelector(".pdf-text-layer span")).not.toBeNull());
+  expect(flashes()).toHaveLength(0);
+});
+
+test("a target with rects scrolls the page so the box sits a third from the top", async () => {
+  setup({ page: 2, target: { page: 2, rects: [[0.1, 0.5, 0.3, 0.02]], nonce: 1 } });
+  // page 2 starts at 800 + 12 (gap); its box is 400 px down; the viewport is 800 px high
+  await waitFor(() => expect(scroller().scrollTop).toBeCloseTo(812 + 400 - 800 / 3, 0));
+});
+
+test("a target near the top of its page never scrolls above the page", async () => {
+  setup({ page: 2, target: { page: 2, rects: [[0.1, 0.01, 0.3, 0.02]], nonce: 1 } });
+  await waitFor(() => expect(flashes().length).toBe(1));
+  expect(scroller().scrollTop).toBe(812);
+});
+
+test("a target with rects flashes them without needing the text layer", async () => {
+  setup(
+    { page: 2, target: { page: 2, rects: [[0.1, 0.5, 0.3, 0.02]], nonce: 1 } },
+    new FakeSource({ failTextOn: [2] }),
+  );
+  await waitFor(() => expect(flashes().length).toBe(1));
+  expect(flashes()[0]?.closest('[data-page="2"]')).not.toBeNull();
+});
+
+test("a target with empty rects flashes nothing and tells the parent", async () => {
+  const onTargetDone = vi.fn();
+  setup({ target: { page: 1, rects: [], nonce: 1 }, onTargetDone });
+  await waitFor(() => expect(onTargetDone).toHaveBeenCalledTimes(1));
   expect(flashes()).toHaveLength(0);
 });

@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { IconButton } from "../components/Icon";
+import { firstRectTop, scrollTargetTop } from "./lib/goto";
 import { locateQuote } from "./lib/locate";
 import { pageOffsets, visibleWindow } from "./lib/pages";
 import { type Quote, type Rect, toQuote } from "./lib/quote";
@@ -33,16 +34,18 @@ interface Props {
   onPageChange(page: number): void;
   onSelection(selection: Selection | null): void;
   highlights: ViewerHighlight[];
-  /** A cited quote to flash on its page for a moment; a new nonce restarts it. */
-  flash?: Flash;
-  onFlashDone?(): void;
+  /** Where to go precisely: scroll to it and flash it for a moment; a new nonce restarts it. */
+  target?: Target;
+  onTargetDone?(): void;
   /** How long the flash stays, in ms. */
   flashMs?: number;
 }
 
-export interface Flash {
+/** A place in the PDF: stored rects, or a quote to locate in the text of the page. */
+export interface Target {
   page: number;
-  quote: string;
+  rects?: Rect[];
+  quote?: string;
   nonce: number;
 }
 
@@ -72,9 +75,10 @@ function PageView({
   size,
   highlights,
   query,
-  flash,
+  target,
   flashMs,
-  onFlashDone,
+  onTargetDone,
+  onResolved,
 }: {
   source: PdfSource;
   page: number;
@@ -82,13 +86,16 @@ function PageView({
   size: PageInfo;
   highlights: ViewerHighlight[];
   query: string;
-  flash?: Flash;
+  target?: Target;
   flashMs: number;
-  onFlashDone?(): void;
+  onTargetDone?(): void;
+  onResolved?(rects: Rect[]): void;
 }) {
   const [flashRects, setFlashRects] = useState<Rect[]>([]);
-  const done = useRef(onFlashDone);
-  done.current = onFlashDone;
+  const done = useRef(onTargetDone);
+  done.current = onTargetDone;
+  const resolved = useRef(onResolved);
+  resolved.current = onResolved;
   const canvas = useRef<HTMLCanvasElement>(null);
   const [boxes, setBoxes] = useState<TextBox[]>([]);
   const needle = query.trim().toLowerCase();
@@ -133,17 +140,25 @@ function PageView({
     };
   }, [source, page]);
 
-  // Once the text of the cited page is known, show where the quote is for a moment.
-  const quote = flash?.quote;
-  const nonce = flash?.nonce;
+  // Stored rects are shown at once; a quote waits for the text of the page, then is located.
+  const quote = target?.quote;
+  const stored = target?.rects;
+  const nonce = target?.nonce;
+  const wanted = target !== undefined;
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new nonce restarts the flash
   useEffect(() => {
-    if (quote === undefined || !boxes.length) return;
-    const rects = locateQuote(boxes, quote, size);
+    if (!wanted) return;
+    let rects: Rect[] | null = null;
+    if (stored?.length) rects = stored;
+    else if (quote !== undefined) {
+      if (!boxes.length) return;
+      rects = locateQuote(boxes, quote, size);
+    }
     if (!rects) {
       done.current?.();
       return;
     }
+    resolved.current?.(rects);
     setFlashRects(rects);
     const timer = setTimeout(() => {
       setFlashRects([]);
@@ -153,7 +168,7 @@ function PageView({
       clearTimeout(timer);
       setFlashRects([]);
     };
-  }, [boxes, quote, nonce, size, flashMs]);
+  }, [boxes, wanted, quote, nonce, size, flashMs]);
 
   return (
     <div className="pdf-text" style={{ width: size.width * scale, height: size.height * scale }}>
@@ -216,8 +231,8 @@ export function PdfViewer({
   onPageChange,
   onSelection,
   highlights,
-  flash,
-  onFlashDone,
+  target,
+  onTargetDone,
   flashMs = 3500,
 }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -295,6 +310,17 @@ export function PdfViewer({
     refreshWindow();
   }, [page]);
 
+  // A target was located on its page: bring its box a third from the top of the view.
+  const scrollToRects = (p: number, rects: Rect[]) => {
+    const el = scroller.current;
+    if (!el) return;
+    el.scrollTop = scrollTargetTop(
+      offsets[p - 1] ?? 0,
+      firstRectTop(rects) * (heights[p - 1] ?? 0),
+      el.clientHeight || 800,
+    );
+  };
+
   const zoom = (delta: number) =>
     setScale((s) => {
       const next = clampZoom(Math.round((s + delta) * 100) / 100);
@@ -362,9 +388,10 @@ export function PdfViewer({
           size={size}
           highlights={highlights.filter((h) => h.page === p)}
           query={query}
-          flash={flash?.page === p ? flash : undefined}
+          target={target?.page === p ? target : undefined}
           flashMs={flashMs}
-          onFlashDone={onFlashDone}
+          onTargetDone={onTargetDone}
+          onResolved={(rects) => scrollToRects(p, rects)}
         />
       </div>,
     );
