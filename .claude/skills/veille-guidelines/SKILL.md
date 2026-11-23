@@ -35,6 +35,18 @@ Spec de référence : `docs/superpowers/specs/2026-11-21-veille-llm-design.md`.
 - Le front lit `catalogue.json` depuis une URL de base configurable. La persistance de `veille.db` est
   derrière une interface (branche `data` aujourd'hui).
 
+## Lecteur : skills et rapports
+
+- Les skills d'agent sont des fichiers `skills/*.md` sur `main` (front matter YAML + prompt). Le
+  workflow `skills.yml` les valide (`python -m veille_reader.skills skills`) et publie `skills.zip`
+  sur la release `skills` ; le lecteur tire ce zip (`skills_sync.py`) vers `.local/reader/skills/`
+  (cache jetable). Un skill est un prompt de confiance : sa relecture est celle d'un code. Il ne
+  peut attacher que les outils de `KNOWN_TOOLS` ; `write_report` et `read_report` refusent d'agir
+  tant qu'aucun skill qui les liste n'est chargé (`use_skill` ou `/nom`).
+- Le texte des papiers reste une donnée. Les rapports HTML sont du contenu non fiable : jamais dans
+  git, affichés dans une `<iframe sandbox="allow-scripts">` (sans `allow-same-origin`) avec une CSP
+  sans réseau (`web/src/reader/viewer/csp.ts`). Ne jamais ajouter `allow-same-origin`.
+
 ## Qualité
 
 - TDD, tests simulés pour les sources, le LLM et le SMTP.

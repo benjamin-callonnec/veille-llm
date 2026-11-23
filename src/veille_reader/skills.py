@@ -117,3 +117,25 @@ class SkillSession:
                 f"{self.forced.prompt}"
             )
         return "".join(parts)
+
+
+def check_directory(directory: Path) -> list[str]:
+    """Every problem of a skills folder, one line each (empty when it can be published)."""
+    problems = []
+    paths = sorted(directory.glob("*.md")) if directory.is_dir() else []
+    if not paths:
+        problems.append(f"{directory}: no skill (*.md) found")
+    for path in paths:
+        try:
+            parse_skill(path.read_text(encoding="utf-8"), path.name)
+        except (SkillError, OSError, UnicodeDecodeError) as exc:
+            problems.append(f"{path.name}: {exc}")
+    return problems
+
+
+if __name__ == "__main__":  # `python -m veille_reader.skills skills/`: the workflow's gate
+    import sys
+
+    errors = check_directory(Path(sys.argv[1] if len(sys.argv) > 1 else "skills"))
+    print("\n".join(errors) or "all skills are valid")
+    sys.exit(1 if errors else 0)

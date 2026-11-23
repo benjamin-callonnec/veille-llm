@@ -22,6 +22,8 @@ Si `graphify-out/` existe (graphe local, ignoré par git, à régénérer avec `
 - `web/` : catalogue React (Vite, TypeScript) en lecture seule, `components/`, `hooks/`, `lib/`, `styles/`.
 - `src/veille_reader` : module local du lecteur de papiers (#17, serveur FastAPI sur 127.0.0.1, données dans
   `.local/reader/`) ; front `web/reader.html`, construit seulement par `make reader`, jamais par la CI.
+  Skills d'agent dans `skills/*.md` (publiés en zip par `.github/workflows/skills.yml`, tirés par
+  `skills_sync.py`), rapports HTML en SQLite local affichés dans `web/src/reader/viewer/` (#43).
 - `.github/workflows/daily.yml` : pipeline, persistance, build web et déploiement Pages. Newsletter à venir.
 - `scheduler/` : Worker Cloudflare qui déclenche `daily.yml` et `weekly.yml` à l'heure (`workflow_dispatch`
   sur `main`), car les crons GitHub partent en retard ; le code est déployé par `wrangler`

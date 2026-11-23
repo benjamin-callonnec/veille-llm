@@ -10,6 +10,13 @@
 
 **Spec :** pas de document de design séparé, la spec est l'issue #43 (décisions validées dans son corps).
 
+> **Changement décidé en cours d'exécution (23 nov.)** : la source des skills n'est plus la branche `skills`
+> mais un zip `skills.zip` publié sur la release GitHub `skills`. Les skills vivent dans `skills/*.md` sur
+> `main` ; `.github/workflows/skills.yml` les valide (`python -m veille_reader.skills skills`) puis publie ;
+> `skills_sync.py` tire ce zip (extraction à plat, tailles limitées, redirections GitHub seulement). Les
+> mentions « branche `skills` » et « ruleset » plus bas (tâche 2, tâche 9, contraintes, Review Focus) sont
+> remplacées par cela : plus de branche orpheline ni de ruleset, `main` est déjà protégée.
+
 ## Global Constraints
 
 - Les skills vivent sur la branche `skills`, dans `skills/*.md`, jamais sur `main` ni sur `data` ; aucune UI de création/édition ; tous les skills du dossier sont actifs.

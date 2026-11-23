@@ -1,8 +1,8 @@
 name: release
 
 # Tags vX.Y.Z (version from pyproject.toml) and publishes a GitHub release whose
-# description is the matching CHANGELOG.md section. Only workflow with write access;
-# it uses no secret other than the automatic GITHUB_TOKEN.
+# description is the matching CHANGELOG.md section. With skills.yml (its publish job) the only
+# workflows with write access; they use no secret other than the automatic GITHUB_TOKEN.
 on:
   push:
     branches: [main]
