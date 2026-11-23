@@ -87,12 +87,11 @@
   overflow: hidden; /* the hidden toolbar waits just above the top edge */
 }
 /*
- * The page toolbar and the viewer bar stay out of the way: slid above the pane, they come down when
+ * The page toolbar stays out of the way: slid above the pane, they come down when
  * the mouse reaches the top edge (the ::before strip is part of the bar for :hover) or when a
  * control inside has the focus. Without a mouse (touch) they stay in place.
  */
-.pdf-toolbar,
-.viewer-bar {
+.pdf-toolbar {
   position: absolute;
   top: 0;
   left: 0;
@@ -104,8 +103,7 @@
     transform 0.15s ease,
     opacity 0.15s ease;
 }
-.pdf-toolbar::before,
-.viewer-bar::before {
+.pdf-toolbar::before {
   content: "";
   position: absolute;
   left: 0;
@@ -114,15 +112,12 @@
   height: 14px;
 }
 .pdf-toolbar:hover,
-.pdf-toolbar:focus-within,
-.viewer-bar:hover,
-.viewer-bar:focus-within {
+.pdf-toolbar:focus-within {
   transform: none;
   opacity: 1;
 }
 @media (hover: none) {
-  .pdf-toolbar,
-  .viewer-bar {
+  .pdf-toolbar {
     position: static;
     transform: none;
     opacity: 1;
@@ -504,7 +499,6 @@
   gap: 8px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
-  background: var(--composer);
 }
 .viewer-title {
   flex: 1;
