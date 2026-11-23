@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { IconButton } from "../../components/Icon";
 import type { Synth } from "./tts";
 import { defaultSynth, useReadAloud } from "./useReadAloud";
@@ -7,12 +8,19 @@ export function ReadAloudButton({
   text,
   streaming,
   synth,
+  auto = false,
 }: {
   text: string;
   streaming: boolean;
   synth?: Synth | null;
+  /** Start reading as soon as this appears (the answer to a message that was dictated). */
+  auto?: boolean;
 }) {
   const voice = useReadAloud(text, streaming, synth === undefined ? defaultSynth() : synth);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only once, when the answer appears
+  useEffect(() => {
+    if (auto && voice.supported) voice.toggle();
+  }, []);
   if (!voice.supported) return null;
   return (
     <>

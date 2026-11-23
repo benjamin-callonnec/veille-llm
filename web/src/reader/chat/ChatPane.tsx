@@ -79,7 +79,10 @@ export function ChatPane({
 
   const [dirty, setDirty] = useState(false);
   const [fill, setFill] = useState<{ text: string; n: number } | null>(null);
-  const send = async (text: string, files: File[] = []) => {
+  // the answer to a dictated message is read aloud, the answer to a typed one is not
+  const [voiceReply, setVoiceReply] = useState(false);
+  const send = async (text: string, files: File[] = [], voice = false) => {
+    setVoiceReply(voice);
     setAttachError(null);
     let images: Awaited<ReturnType<typeof toPayload>>[];
     try {
@@ -207,6 +210,7 @@ export function ChatPane({
             onToggleThinking={chat.toggleThinking}
             onCite={onCite}
             onAnswerAsk={answerAsk}
+            autoRead={voiceReply}
           />
         )}
         {suggestions.length > 1 && (
@@ -245,7 +249,7 @@ export function ChatPane({
         fill={fill}
         tabFill={suggestions[0]}
         onDirty={setDirty}
-        onSend={(text, files) => void send(text, files)}
+        onSend={(text, files, voice) => void send(text, files, voice)}
       />
     </div>
   );

@@ -24,6 +24,8 @@ interface BodyProps {
   asks?: AskCardData[];
   notes?: NoteLine[];
   onAnswerAsk?(id: string, text: string): Promise<void>;
+  /** Read the answer aloud as it comes (the question was dictated). */
+  autoRead?: boolean;
   /** Continue with the raised limit (only offered when the refusal says it can be raised). */
   onRaise?(): void;
   onToggle(): void;
@@ -83,7 +85,7 @@ function Body(p: BodyProps) {
       {(p.actions || (p.answer && defaultSynth())) && (
         <div className="msg-actions">
           {p.actions && <CopyButton text={p.actions.text} />}
-          {p.answer && <ReadAloudButton text={p.answer} streaming={p.working} />}
+          {p.answer && <ReadAloudButton text={p.answer} streaming={p.working} auto={p.autoRead} />}
           {p.actions?.time && <span className="msg-time">{p.actions.time}</span>}
         </div>
       )}
@@ -97,14 +99,17 @@ export function AssistantMessage({
   onToggleThinking,
   onCite,
   onAnswerAsk,
+  autoRead,
 }: {
   state: AssistantState;
   onToggleThinking(): void;
   onCite?(page: number, quote?: string): void;
   onAnswerAsk?(id: string, text: string): Promise<void>;
+  autoRead?: boolean;
 }) {
   return (
     <Body
+      autoRead={autoRead}
       blocks={state.blocks}
       answer={state.answer}
       open={state.thinkingOpen}

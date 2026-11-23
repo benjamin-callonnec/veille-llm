@@ -7,7 +7,8 @@ import { imagesOf, pickImages } from "./attachments";
 import { loadDraft, saveDraft } from "./drafts";
 
 interface Props {
-  onSend(text: string, images?: File[]): void;
+  /** `voice` is true when the message was (at least partly) dictated: the answer is then read aloud. */
+  onSend(text: string, images?: File[], voice?: boolean): void;
   onStop(): void;
   streaming: boolean;
   /** The model that answers, shown quietly under the input. */
@@ -56,6 +57,7 @@ export function Composer({
   const imagesRef = useRef<Attached[]>([]);
   imagesRef.current = images;
 
+  const dictated = useRef(false);
   const textRef = useRef(text);
   textRef.current = text;
   const [browser] = useState(() => (speech === undefined ? browserStt() : null));
@@ -63,6 +65,7 @@ export function Composer({
   const dictation = useDictation(
     engine,
     (words) => {
+      dictated.current = true;
       const next = joinText(textRef.current, words);
       textRef.current = next;
       setText(next);
@@ -145,12 +148,12 @@ export function Composer({
   const submit = () => {
     const value = shown.trim();
     if ((!value && images.length === 0) || streaming) return;
-    if (images.length) {
-      onSend(
-        value,
-        images.map((i) => i.file),
-      );
-    } else onSend(value);
+    const voice = dictated.current;
+    dictated.current = false;
+    const files = images.map((i) => i.file);
+    if (voice) onSend(value, files.length ? files : undefined, true);
+    else if (files.length) onSend(value, files);
+    else onSend(value);
     dictation.abandon();
     for (const i of images) URL.revokeObjectURL(i.url);
     setImages([]);

@@ -86,7 +86,7 @@ test("sending is possible once words were dictated, and it stops the microphone"
   await userEvent.click(screen.getByRole("button", { name: "Dictate" }));
   act(() => h().onFinal("what is attention"));
   await userEvent.click(screen.getByRole("button", { name: "Send" }));
-  expect(onSend).toHaveBeenCalledWith("what is attention");
+  expect(onSend).toHaveBeenCalledWith("what is attention", undefined, true);
   expect(engine.stop).toHaveBeenCalled();
   expect(box().value).toBe("");
 });
@@ -124,4 +124,15 @@ test("leaving the page turns the microphone off", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Dictate" }));
   view.unmount();
   expect(engine.stop).toHaveBeenCalled();
+});
+
+test("a message that was dictated is sent as a voice message, a typed one is not", async () => {
+  const { engine, h } = fakeEngine();
+  const { onSend } = setup(engine);
+  await userEvent.click(screen.getByRole("button", { name: "Dictate" }));
+  act(() => h().onFinal("what is a head"));
+  await userEvent.click(screen.getByRole("button", { name: "Send" }));
+  expect(onSend).toHaveBeenLastCalledWith("what is a head", undefined, true);
+  await userEvent.type(box(), "and a layer?{Enter}");
+  expect(onSend).toHaveBeenLastCalledWith("and a layer?");
 });

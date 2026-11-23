@@ -36,3 +36,16 @@ test("the button goes back to read aloud once the voice is done", async () => {
   act(() => spoken[0]?.done());
   expect(screen.getByRole("button", { name: "Read aloud" })).toBeTruthy();
 });
+
+test("with auto, the answer is read as soon as it appears, without a click", () => {
+  const { synth, spoken } = fake();
+  render(<ReadAloudButton text="Spoken at once." streaming={false} synth={synth} auto />);
+  expect(spoken.map((s) => s.text)).toEqual(["Spoken at once."]);
+  expect(screen.getByRole("button", { name: "Stop reading" })).toBeTruthy();
+});
+
+test("without auto, nothing is read until the button is clicked", () => {
+  const { synth, spoken } = fake();
+  render(<ReadAloudButton text="Quiet." streaming={false} synth={synth} />);
+  expect(spoken).toEqual([]);
+});
