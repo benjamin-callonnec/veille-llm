@@ -5,6 +5,8 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-23
+
 ### Added
 - The tutor can read the paper (#23, part of #17): three local read-only tools, `load_artifact` (pages, a section, the references, a figure or a table, your highlights), `search_paper` and `session_memory`, served through the Agent SDK with the built-in tools off. The PDF text is extracted with `pypdf` and cached; everything a tool returns is an escaped data block.
 - Session memory per paper: short notes (30 at most, 500 characters each) the tutor writes and always sees, which you can list, add, edit and delete through the API.
@@ -25,6 +27,18 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 - The highlights list is redone in the chat's quiet style (#35): a discreet highlighter icon with the count, then plain rows (colour dot, page, passage in the normal text colour, readable in both themes) with copy and delete icons on hover. Clicking a row still goes to the top of its page; going to the exact place waits for the bounding-box work (#30).
 - Suggested prompts: the first one is the composer's placeholder (Tab fills it in, Enter sends), the others stay buttons in the chat. A quiz card always answers for the paper of the chat.
 - Quiz formats: single choice and true/false answer on click, multiple choice has checkboxes and a right-arrow icon that appears once something is ticked, fill-in-the-blank and put-in-order are graded on the server without the model, and the free answer stays graded by the model. "Quiz me" mixes the formats. Answer failures now say why (already answered shows the result).
+
+### Changed
+- Icons instead of text for the PDF search, the outline, the pane controls and the settings gear (#27). On narrow screens (under 640 px) the PDF and the chat stack and long words wrap. The colour dots are darker in the Papier theme (contrast of at least 3:1).
+- A budget refusal (per answer or per conversation) shows its own message instead of the subscription-limit text. A failed quiz start leaves a quiet note, not a tutor message.
+- Images over 5 MB are accepted when scaling brings them under the limit; the cap applies to what is sent.
+- The search index of a paper is built once and reused across turns; citations are checked once per answer, off the event loop.
+
+### Fixed
+- Retry works after a quiz card or a failed quiz; two quiz starts at once make one quiz.
+- Quotes from pages with `&`, `<` or `>` are verified (the text the tutor sees is escaped, the quote is unescaped before the check).
+- Dropping a non-image file on the composer no longer opens the file over the app.
+- Suggested prompts are hidden while a quiz starts; the quiz maker avoids every earlier question of the paper, answered or not; `load_artifact` for a figure or a table without a number says a number is needed.
 
 ## [0.11.0] - 2026-11-22
 
