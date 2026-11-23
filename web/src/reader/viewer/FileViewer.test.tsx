@@ -1,6 +1,7 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { FakeSource } from "../pdf/fakeSource";
 import { FileViewer } from "./FileViewer";
 import * as api from "./reportsApi";
 
@@ -107,4 +108,157 @@ test("Esc that something else already handled does not close the viewer", async 
   await userEvent.keyboard("{Escape}");
   document.body.removeEventListener("keydown", other);
   expect(h.onClose).not.toHaveBeenCalled();
+});
+
+test("V or Escape typed inside the page (it has the focus) close the viewer", async () => {
+  const h = setup();
+  const frame = await screen.findByTitle("Deck");
+  fireEvent(
+    window,
+    new MessageEvent("message", {
+      data: { veilleKey: "v" },
+      source: (frame as HTMLIFrameElement).contentWindow,
+    }),
+  );
+  expect(h.onClose).toHaveBeenCalledTimes(1);
+});
+
+test("closed (open=false) it is hidden but still mounted, and Esc does nothing", async () => {
+  const h = setup({ open: false });
+  await waitFor(() => expect(document.querySelector("iframe")).not.toBeNull());
+  expect(document.querySelector(".viewer")?.hasAttribute("hidden")).toBe(true);
+  expect(screen.queryByRole("region", { name: "Viewer" })).toBeNull();
+  await userEvent.keyboard("{Escape}");
+  expect(h.onClose).not.toHaveBeenCalled();
+});
+
+// --- the preview of a citation ----------------------------------------------------------
+
+const say = (data: unknown) =>
+  fireEvent(
+    window,
+    new MessageEvent("message", {
+      data,
+      source: (screen.getByTitle("Deck") as HTMLIFrameElement).contentWindow,
+    }),
+  );
+const preview = () => screen.queryByLabelText("Preview of the paper");
+
+const withSource = (over: Partial<Parameters<typeof FileViewer>[0]> = {}) => {
+  const onOpenPdf = vi.fn();
+  const h = setup({ source: new FakeSource({ numPages: 5 }), onOpenPdf, ...over });
+  return { ...h, onOpenPdf };
+};
+// the page in the viewer has the focus: a key of the app's window is simulated on the body
+const pressEscape = () => fireEvent.keyDown(document.body, { key: "Escape" });
+
+test("a citation clicked in the page opens the preview, a click elsewhere closes it", async () => {
+  withSource();
+  await screen.findByTitle("Deck");
+  expect(preview()).toBeNull();
+  say({ veilleCite: { page: 4 } });
+  expect(preview()).not.toBeNull();
+  say({ veilleCite: null });
+  expect(preview()).toBeNull();
+});
+
+test("a malformed or out of range citation is ignored", async () => {
+  withSource();
+  await screen.findByTitle("Deck");
+  say({ veilleCite: { page: 99999 } });
+  say({ veilleCite: { page: 6 } }); // the paper has 5 pages
+  say({ veilleCite: { page: 2, quote: "x" } });
+  say({ veilleCite: 3 });
+  expect(preview()).toBeNull();
+});
+
+test("without a PDF the page bound is wide and the card says there is no PDF", async () => {
+  setup({ source: null });
+  await screen.findByTitle("Deck");
+  say({ veilleCite: { page: 40 } });
+  expect(preview()).not.toBeNull();
+  expect(screen.getByRole("status").textContent).toBe("No PDF for this paper");
+});
+
+test("Esc closes the preview first and the viewer next", async () => {
+  const h = withSource();
+  await screen.findByTitle("Deck");
+  say({ veilleCite: { page: 4 } });
+  pressEscape();
+  expect(preview()).toBeNull();
+  expect(h.onClose).not.toHaveBeenCalled();
+  pressEscape();
+  expect(h.onClose).toHaveBeenCalledTimes(1);
+});
+
+test("Esc typed inside the page does the same, V closes the viewer at once", async () => {
+  const h = withSource();
+  await screen.findByTitle("Deck");
+  say({ veilleCite: { page: 4 } });
+  say({ veilleKey: "Escape" });
+  expect(preview()).toBeNull();
+  expect(h.onClose).not.toHaveBeenCalled();
+  say({ veilleKey: "v" });
+  expect(h.onClose).toHaveBeenCalledTimes(1);
+});
+
+test("closing the viewer drops the preview", async () => {
+  const props = {
+    itemId: "a",
+    reports: metas,
+    selectedId: 1,
+    onSelect: vi.fn(),
+    onClose: vi.fn(),
+    onChanged: vi.fn(),
+  };
+  const source = new FakeSource({ numPages: 5 });
+  const { rerender } = render(<FileViewer {...props} source={source} open />);
+  await screen.findByTitle("Deck");
+  say({ veilleCite: { page: 4 } });
+  expect(preview()).not.toBeNull();
+  rerender(<FileViewer {...props} source={source} open={false} />);
+  rerender(<FileViewer {...props} source={source} open />);
+  expect(preview()).toBeNull();
+});
+
+test("choosing another version drops the preview", async () => {
+  withSource();
+  await screen.findByTitle("Deck");
+  say({ veilleCite: { page: 4 } });
+  await userEvent.selectOptions(screen.getByLabelText("Version"), "1");
+  await waitFor(() => expect(preview()).toBeNull());
+});
+
+test("Open in the PDF hands the citation over and drops the card", async () => {
+  const h = withSource();
+  await screen.findByTitle("Deck");
+  say({ veilleCite: { page: 4, quote: "an exact quote" } });
+  await userEvent.click(screen.getByRole("button", { name: "Open in the PDF" }));
+  expect(h.onOpenPdf).toHaveBeenCalledWith({ page: 4, quote: "an exact quote" });
+  expect(preview()).toBeNull();
+});
+
+test("a hidden viewer ignores what its page says: no preview, no key", async () => {
+  const props = {
+    itemId: "a",
+    reports: metas,
+    selectedId: 1,
+    onSelect: vi.fn(),
+    onClose: vi.fn(),
+    onChanged: vi.fn(),
+  };
+  const source = new FakeSource({ numPages: 5 });
+  const { rerender } = render(<FileViewer {...props} source={source} open />);
+  const frame = (await screen.findByTitle("Deck")) as HTMLIFrameElement;
+  rerender(<FileViewer {...props} source={source} open={false} />);
+  const tell = (data: unknown) =>
+    fireEvent(window, new MessageEvent("message", { data, source: frame.contentWindow }));
+  tell({ veilleCite: { page: 4 } });
+  tell({ veilleKey: "v" });
+  tell({ veilleKey: "Escape" });
+  expect(document.querySelector(".citation-peek")).toBeNull();
+  expect(props.onClose).not.toHaveBeenCalled();
+  rerender(<FileViewer {...props} source={source} open />); // shown again: the page is heard again
+  tell({ veilleCite: { page: 4 } });
+  expect(preview()).not.toBeNull();
 });

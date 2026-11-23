@@ -89,6 +89,11 @@ export function ReaderPage({
   const { highlights, add, remove, error: saveError } = useHighlights(itemId, api);
   const { reports, reload } = useReports(itemId, reportsApi);
   const [viewerOpen, setViewerOpen] = useState(false);
+  // once opened, the viewer stays mounted (hidden when closed): the slide is kept
+  const [viewerSeen, setViewerSeen] = useState(false);
+  useEffect(() => {
+    if (viewerOpen) setViewerSeen(true);
+  }, [viewerOpen]);
   const [reportId, setReportId] = useState<number | null>(null);
   const onReport = useCallback(async () => {
     const found = await reload();
@@ -196,6 +201,16 @@ export function ReaderPage({
     },
     [goTo, itemId, captionsApi],
   );
+  const getCaptions = useCallback(() => {
+    if (captions.current) return captions.current;
+    const asked = captionsApi(itemId);
+    captions.current = asked;
+    // a failed request is not kept: the next figure citation asks again
+    asked.catch(() => {
+      if (captions.current === asked) captions.current = null;
+    });
+    return asked;
+  }, [captionsApi, itemId]);
   const goToRects = useCallback((p: number, rects?: Rect[]) => goTo(p, { rects }), [goTo]);
 
   const closeBox = () => {
@@ -257,10 +272,30 @@ export function ReaderPage({
       )}
       <PaneLayout
         pdf={pdfPane}
-        chat={<ChatPane chat={chat} onGo={goToRects} onCite={cite} model={model} itemId={itemId} />}
+        chat={
+          <ChatPane
+            chat={chat}
+            onGo={goToRects}
+            onCite={cite}
+            model={model}
+            itemId={itemId}
+            viewer={{
+              available: reports.length > 0,
+              open: viewerOpen,
+              onToggle: () => setViewerOpen((open) => !open),
+            }}
+          />
+        }
       />
-      {viewerOpen && (
+      {viewerSeen && (
         <FileViewer
+          open={viewerOpen}
+          source={source}
+          captions={getCaptions}
+          onOpenPdf={(c) => {
+            cite(c.page, c.quote, c.label);
+            setViewerOpen(false);
+          }}
           itemId={itemId}
           reports={reports}
           selectedId={reportId ?? reports[0]?.id ?? null}

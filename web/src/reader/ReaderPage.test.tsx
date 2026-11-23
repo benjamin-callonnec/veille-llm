@@ -129,6 +129,17 @@ const setup = (
   return { api, rows, open, chatSent: chat.sent, ...utils };
 };
 
+// The page in the viewer has the keyboard focus: V and Escape typed in it reach the app through
+// its key bridge (a message), never as a key event of the app's window.
+const fromFrame = (key: string) =>
+  fireEvent(
+    window,
+    new MessageEvent("message", {
+      data: { veilleKey: key },
+      source: (screen.getByTitle("Deck") as HTMLIFrameElement).contentWindow,
+    }),
+  );
+
 const select = async () => {
   Range.prototype.getClientRects = () =>
     [{ x: 160, y: 130, width: 100, height: 20 }] as unknown as DOMRectList;
@@ -625,4 +636,108 @@ test("the viewer opens by itself when the tutor saved a report", async () => {
   await userEvent.type(await screen.findByRole("textbox"), "go{Enter}");
   expect(await screen.findByRole("region", { name: "Viewer" })).toBeTruthy();
   expect(await screen.findByText("Deck")).toBeTruthy();
+});
+
+test("a closed viewer comes back with the reports icon of the chat", async () => {
+  const meta: ReportMeta = { id: 7, title: "Deck", version: 1, updated_at: "" };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: 7, title: "Deck", version: 1, versions: [], html: "<p>x</p>" }),
+    })),
+  );
+  setup({ reports: async () => [meta] });
+  await screen.findByText("Text of page 1");
+  const icon = await screen.findByRole("button", { name: "Reports (V)" });
+  await userEvent.click(icon);
+  expect(screen.getByRole("region", { name: "Viewer" })).toBeTruthy();
+  await screen.findByTitle("Deck");
+  fromFrame("Escape");
+  expect(screen.queryByRole("region", { name: "Viewer" })).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "Reports (V)" }));
+  expect(screen.getByRole("region", { name: "Viewer" })).toBeTruthy();
+});
+
+test("with no report there is no reports icon", async () => {
+  setup();
+  await screen.findByText("Text of page 1");
+  expect(screen.queryByRole("button", { name: "Reports (V)" })).toBeNull();
+});
+
+test("closing the viewer with V and opening it again keeps the page where it was", async () => {
+  const meta: ReportMeta = { id: 7, title: "Deck", version: 1, updated_at: "" };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: 7, title: "Deck", version: 1, versions: [], html: "<p>x</p>" }),
+    })),
+  );
+  setup({ reports: async () => [meta] });
+  await screen.findByText("Text of page 1");
+  await userEvent.keyboard("v");
+  const frame = await screen.findByTitle("Deck");
+  fromFrame("v");
+  expect(screen.queryByRole("region", { name: "Viewer" })).toBeNull();
+  fireEvent.keyDown(document.body, { key: "v" }); // a hidden frame gives the focus back to the page
+  expect(await screen.findByTitle("Deck")).toBe(frame); // the same frame, not a new one
+});
+
+test("a citation of the report previews the paper, and Open in the PDF goes there", async () => {
+  const meta: ReportMeta = { id: 7, title: "Deck", version: 1, updated_at: "" };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: 7, title: "Deck", version: 1, versions: [], html: "<p>x</p>" }),
+    })),
+  );
+  setup({ reports: async () => [meta] });
+  await screen.findByText("Text of page 1");
+  await userEvent.keyboard("v");
+  await screen.findByTitle("Deck");
+  fireEvent(
+    window,
+    new MessageEvent("message", {
+      data: { veilleCite: { page: 3, quote: "Text of page 3" } },
+      source: (screen.getByTitle("Deck") as HTMLIFrameElement).contentWindow,
+    }),
+  );
+  expect(screen.getByLabelText("Preview of the paper")).toBeTruthy();
+  await userEvent.click(screen.getByRole("button", { name: "Open in the PDF" }));
+  expect(screen.queryByRole("region", { name: "Viewer" })).toBeNull();
+  await waitFor(() => expect((screen.getByLabelText("Page") as HTMLInputElement).value).toBe("3"));
+});
+
+test("a figure citation still works after the captions failed once", async () => {
+  const meta: ReportMeta = { id: 7, title: "Deck", version: 1, updated_at: "" };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: 7, title: "Deck", version: 1, versions: [], html: "<p>x</p>" }),
+    })),
+  );
+  const captionsApi = vi
+    .fn<(item: string) => Promise<Caption[]>>()
+    .mockRejectedValueOnce(new Error("hiccup"))
+    .mockResolvedValue([{ kind: "figure", number: "3", page: 2, rect: [0.1, 0.4, 0.5, 0.03] }]);
+  setup({ reports: async () => [meta], captionsApi });
+  await screen.findByText("Text of page 1");
+  await userEvent.keyboard("v");
+  await screen.findByTitle("Deck");
+  const cite = (number: string) =>
+    fireEvent(
+      window,
+      new MessageEvent("message", {
+        data: { veilleCite: { page: 2, kind: "figure", number } },
+        source: (screen.getByTitle("Deck") as HTMLIFrameElement).contentWindow,
+      }),
+    );
+  cite("2"); // the captions fail: the card says it could not be drawn
+  await screen.findByText("The preview could not be drawn");
+  cite("3"); // asked again, not stuck on the failure
+  await waitFor(() => expect(captionsApi).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.queryByText("The preview could not be drawn")).toBeNull());
 });

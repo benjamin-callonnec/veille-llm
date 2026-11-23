@@ -32,6 +32,7 @@ export function ChatPane({
   onCite = (page) => onGo(page),
   model,
   itemId: itemProp = "",
+  viewer,
   quizApi = httpQuizApi,
   askApi = httpAskApi,
 }: {
@@ -44,6 +45,8 @@ export function ChatPane({
   model?: string;
   /** The paper, for the quiz routes. */
   itemId?: string;
+  /** The viewer of the reports: an icon next to the chat tools, only when there is a report. */
+  viewer?: { available: boolean; open: boolean; onToggle(): void };
   quizApi?: QuizApi;
   askApi?: AskApi;
 }) {
@@ -144,6 +147,7 @@ export function ChatPane({
           itemId={itemId}
           conversation={chat.current?.id ?? null}
           version={chat.messages.length}
+          viewer={viewer}
         />
         <ConversationMenu
           disabled={chat.streaming}

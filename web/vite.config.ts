@@ -4,6 +4,8 @@ import { defineConfig } from "vite";
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  // a test reads skills/present.md as text: it is an asset, not JavaScript
+  assetsInclude: ["**/*.md"],
   base: "./",
   // dev server of `make reader`: the API and the catalogue come from the local reader server
   server: {

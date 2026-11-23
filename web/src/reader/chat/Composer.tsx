@@ -185,7 +185,9 @@ export function Composer({
 
   return (
     <div className="composer-wrap">
-      {menuOpen && <SkillMenu skills={matches} active={active} onPick={choose} />}
+      {menuOpen && (
+        <SkillMenu skills={matches} query={query ?? ""} active={active} onPick={choose} />
+      )}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: a drop zone, the textarea stays the control */}
       <div
         className="composer"

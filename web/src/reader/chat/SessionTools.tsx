@@ -15,12 +15,15 @@ export function SessionTools({
   conversation,
   version,
   api = httpSessionApi,
+  viewer,
 }: {
   itemId: string;
   conversation: number | null;
   /** Changes when a turn ends, so open panels read again. */
   version: number;
   api?: SessionApi;
+  /** The reports of this paper: the icon is there only when there is one to open. */
+  viewer?: { available: boolean; open: boolean; onToggle(): void };
 }) {
   const [open, setOpen] = useState<Panel>(null);
   const root = useRef<HTMLSpanElement>(null);
@@ -57,6 +60,15 @@ export function SessionTools({
         expanded={open === "trace"}
         onClick={() => toggle("trace")}
       />
+      {viewer?.available && (
+        <IconButton
+          icon="report"
+          label="Reports (V)"
+          size={18}
+          pressed={viewer.open}
+          onClick={viewer.onToggle}
+        />
+      )}
       {open === "memory" && <MemoryPanel itemId={itemId} api={api} version={version} />}
       {open === "trace" && (
         <TracePanel itemId={itemId} conversation={conversation} api={api} version={version} />

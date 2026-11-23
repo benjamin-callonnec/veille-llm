@@ -1,11 +1,11 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { AssistantMessage, StoredAssistantMessage } from "./AssistantMessage";
 import type { StoredMessage } from "./api";
 import { Composer } from "./Composer";
 import { resetDrafts } from "./drafts";
-import { initialAssistant } from "./reducer";
+import { applyEvent, initialAssistant } from "./reducer";
 import { UserMessage } from "./UserMessage";
 
 const writeText = vi.fn(async () => {});
@@ -392,4 +392,96 @@ test("Tab does nothing special when there is no suggestion", async () => {
   box().focus();
   await userEvent.tab();
   expect((box() as HTMLTextAreaElement).value).toBe("");
+});
+
+// --- the timer and the dots of an answer being produced ----------------------------------
+
+const timerText = () => screen.queryByLabelText("Elapsed time")?.textContent ?? null;
+
+test("a timer runs under the whole answer, even when thinking is folded and the text arrives", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-23T10:00:00Z"));
+  const start = Date.now();
+  let state = initialAssistant(start);
+  state = applyEvent(state, { type: "thinking_delta", text: "hm" }, start);
+  state = applyEvent(state, { type: "text_delta", text: "The answer starts" }, start); // folds thinking
+  expect(state.thinkingOpen).toBe(false);
+  render(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(timerText()).toBe("0:00");
+  act(() => {
+    vi.advanceTimersByTime(9000);
+  });
+  expect(timerText()).toBe("0:09");
+  vi.useRealTimers();
+});
+
+test("the dots keep moving for as long as the agent works: thinking, a tool call, text, more tools", () => {
+  const t0 = 1_000;
+  const moving = () => document.querySelector(".thinking-dots")?.classList.contains("moving");
+  let state = initialAssistant(t0);
+  const { rerender } = render(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(moving()).toBe(true); // just sent: already working
+  state = applyEvent(state, { type: "thinking_delta", text: "hm" }, t0);
+  rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(moving()).toBe(true);
+  state = applyEvent(state, { type: "text_delta", text: "Let me look at the paper." }, t0);
+  rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(moving()).toBe(true); // text came, but the agent is not done
+  state = applyEvent(state, { type: "tool_use", id: "t", name: "write_report", input: {} }, t0);
+  rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(moving()).toBe(true); // a long tool call is still work, never a frozen dot
+});
+
+test("the dots stand still while the agent waits for your answer, and stop when it is done", () => {
+  const t0 = 1_000;
+  const moving = () => document.querySelector(".thinking-dots")?.classList.contains("moving");
+  let state = initialAssistant(t0);
+  state = applyEvent(
+    state,
+    { type: "ask_user", id: "a", question: "Who is it for?", options: [], timeout_s: 120 },
+    t0,
+  );
+  const { rerender } = render(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(moving()).toBe(false); // waiting for you is not working
+  state = applyEvent(state, { type: "ask_resolved", id: "a", status: "answered", answer: "x" }, t0);
+  rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(moving()).toBe(true);
+  state = applyEvent(state, { type: "done", duration_ms: 5 }, t0);
+  rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(document.querySelector(".thinking-dots")).toBeNull();
+});
+
+test("the dots come before the label; the timer belongs to the whole message, not to Thinking", () => {
+  render(<AssistantMessage state={initialAssistant(Date.now())} onToggleThinking={() => {}} />);
+  const toggle = document.querySelector(".thinking-toggle") as HTMLElement;
+  expect(toggle.firstElementChild).toBe(document.querySelector(".thinking-dots")); // before the word
+  const clock = document.querySelector(".turn-assistant > .turn-clock") as HTMLElement;
+  expect(clock.querySelector('[aria-label="Elapsed time"]')).not.toBeNull();
+  expect(document.querySelector('.thinking [aria-label="Elapsed time"]')).toBeNull();
+  expect(document.querySelector(".answer-status")).toBeNull();
+});
+
+test("the timer stays on the message when thinking is folded, while the text arrives", () => {
+  let state = initialAssistant(Date.now());
+  state = applyEvent(state, { type: "text_delta", text: "The answer starts" }, Date.now());
+  render(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(document.querySelector(".turn-assistant > .turn-clock")).not.toBeNull();
+});
+
+test("a finished message has no running clock on its bubble", () => {
+  render(<StoredAssistantMessage content={{ answer: "Done.", blocks: [], duration_ms: 4000 }} />);
+  expect(document.querySelector(".turn-clock")).toBeNull();
+});
+
+test("a stored answer shows how long it took, with the quiet actions, and no timer ticks", () => {
+  vi.useFakeTimers();
+  render(<StoredAssistantMessage content={{ answer: "Done.", blocks: [], duration_ms: 65_000 }} />);
+  expect(timerText()).toBe("1:05");
+  expect(vi.getTimerCount()).toBe(0);
+  vi.useRealTimers();
+});
+
+test("a stored answer without a duration shows nothing", () => {
+  render(<StoredAssistantMessage content={{ answer: "Done.", blocks: [] }} />);
+  expect(timerText()).toBeNull();
 });

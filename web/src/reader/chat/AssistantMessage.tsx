@@ -6,6 +6,7 @@ import { ReadAloudButton } from "../voice/ReadAloudButton";
 import { defaultSynth } from "../voice/useReadAloud";
 import { AskCard, type AskCardData } from "./AskCard";
 import { CopyButton } from "./CopyButton";
+import { Elapsed } from "./Elapsed";
 import { type Citation, type OnCite, toCitations } from "./events";
 import { Markdown } from "./Markdown";
 import type { AssistantState, Block, NoteLine } from "./reducer";
@@ -16,6 +17,10 @@ interface BodyProps {
   answer: string;
   open: boolean;
   working: boolean;
+  /** The agent is working, not waiting for the user (the dots move). */
+  thinking?: boolean;
+  /** When the question was sent: with `working`, the timer counts from there. */
+  startedAt?: number;
   durationMs: number | null;
   error?: { kind: string; message: string; raisable?: boolean };
   stopped: boolean;
@@ -37,11 +42,17 @@ interface BodyProps {
 function Body(p: BodyProps) {
   return (
     <div className="turn turn-assistant">
+      {p.working && (
+        <div className="turn-clock">
+          <Elapsed startedAt={p.startedAt} durationMs={null} running />
+        </div>
+      )}
       <div className="assistant">
         <Thinking
           blocks={p.blocks}
           open={p.open}
           working={p.working}
+          active={p.thinking}
           durationMs={p.durationMs}
           onToggle={p.onToggle}
         />
@@ -86,6 +97,7 @@ function Body(p: BodyProps) {
         <div className="msg-actions">
           {p.actions && <CopyButton text={p.actions.text} />}
           {p.answer && <ReadAloudButton text={p.answer} streaming={p.working} auto={p.autoRead} />}
+          {!p.working && <Elapsed durationMs={p.durationMs} running={false} />}
           {p.actions?.time && <span className="msg-time">{p.actions.time}</span>}
         </div>
       )}
@@ -114,6 +126,10 @@ export function AssistantMessage({
       answer={state.answer}
       open={state.thinkingOpen}
       working={state.status === "streaming"}
+      thinking={
+        state.status === "streaming" && !(state.asks ?? []).some((a) => a.status === "pending")
+      }
+      startedAt={state.startedAt}
       durationMs={state.durationMs}
       error={state.error}
       stopped={state.status === "stopped"}

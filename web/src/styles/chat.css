@@ -855,43 +855,134 @@
   overflow-wrap: anywhere;
 }
 
-/* The / menu of the composer: the skills, read only. */
+/* The / menu of the composer: a quiet list of names, and a small card for the highlighted one. */
 .composer-wrap {
   position: relative;
 }
-.skill-menu {
+.skill-pop {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(100% + 6px);
-  max-height: 260px;
-  overflow-y: auto;
-  margin: 0;
-  padding: 4px;
-  list-style: none;
+  left: 8px;
+  right: 8px;
+  bottom: calc(100% + 8px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end; /* a short list sits at the bottom, next to the input, not at the top */
+  gap: 6px;
+  z-index: 5;
+  pointer-events: none;
+}
+.skill-menu,
+.skill-detail {
+  pointer-events: auto;
   background: var(--composer);
   border: 1px solid var(--border);
-  border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  z-index: 5;
+}
+.skill-menu {
+  min-width: 200px;
+  max-width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 14px;
 }
 .skill-menu [role="option"] {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 2px 10px;
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
 }
 .skill-menu [role="option"].active,
 .skill-menu [role="option"]:hover {
-  background: var(--hover, rgba(127, 127, 127, 0.15));
+  background: var(--hover, rgba(127, 127, 127, 0.18));
 }
-.skill-desc {
-  min-width: 0;
+.skill-menu b {
+  font-weight: 650;
 }
-.skill-tools {
-  grid-column: 2;
-  font-size: 12px;
-  opacity: 0.7;
+.skill-detail {
+  flex: 1 1 180px;
+  max-width: 260px;
+  max-height: 200px;
+  overflow: hidden;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.skill-detail p {
+  margin: 0;
+}
+.skill-detail small {
+  display: block;
+  margin-top: 6px;
+  opacity: 0.65;
+}
+
+/* Thinking: three dots that make a wave while the agent works, before the label. */
+.thinking-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 10px;
+  color: var(--dots, #d98a6a);
+}
+.thinking-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+}
+.thinking-dots span:nth-child(2) {
+  width: 7px;
+  height: 7px;
+}
+.thinking-dots.moving span {
+  animation: thinking-wave 1.1s ease-in-out infinite;
+}
+.thinking-dots.moving span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.thinking-dots.moving span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes thinking-wave {
+  0%,
+  60%,
+  100% {
+    opacity: 0.55;
+    transform: translateY(0) scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-5px) scale(1.3);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinking-dots.moving span {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+/* The clock of the whole message, in the top right corner of its bubble. */
+.turn-assistant {
+  position: relative;
+}
+.turn-clock {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+/* The clock: under the answer while it is produced, then in the row of quiet actions. */
+.elapsed {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
 }

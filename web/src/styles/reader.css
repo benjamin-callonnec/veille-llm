@@ -83,6 +83,45 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative;
+  overflow: hidden; /* the hidden toolbar waits just above the top edge */
+}
+/*
+ * The page toolbar stays out of the way: slid above the pane, they come down when
+ * the mouse reaches the top edge (the ::before strip is part of the bar for :hover) or when a
+ * control inside has the focus. Without a mouse (touch) they stay in place.
+ */
+.pdf-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  transform: translateY(-100%);
+  opacity: 0;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+.pdf-toolbar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 14px;
+}
+.pdf-toolbar:hover,
+.pdf-toolbar:focus-within {
+  transform: none;
+  opacity: 1;
+}
+@media (hover: none) {
+  .pdf-toolbar {
+    position: static;
+    transform: none;
+    opacity: 1;
+  }
 }
 .pdf-toolbar,
 .pdf-search {
@@ -450,6 +489,9 @@
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
   overflow: hidden;
 }
+.viewer[hidden] {
+  display: none;
+}
 .viewer-fullscreen {
   inset: 0;
   border-radius: 0;
@@ -476,6 +518,7 @@
   flex: 1;
   min-height: 0;
   display: flex;
+  position: relative;
 }
 .viewer-frame {
   flex: 1;
@@ -486,4 +529,91 @@
 .viewer-empty {
   margin: auto;
   color: var(--muted, inherit);
+}
+
+/* The preview of a citation: a card on the right of the viewer; the page scrolls inside it. */
+.citation-peek {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow: hidden;
+  background: var(--composer);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+}
+.citation-peek header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 6px 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.citation-peek header strong {
+  margin: 0 2px;
+}
+.peek-total,
+.peek-zoom {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.peek-spacer {
+  flex: 1;
+}
+/* The page looks as it does in the PDF pane: the same backdrop, shadow and dark-theme inversion. */
+.peek-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  background: var(--bg);
+}
+.peek-scroll.peek-loading {
+  visibility: hidden;
+  min-height: 120px;
+}
+.peek-scroll.peek-empty {
+  /* nothing to show (no PDF, a failed draw): no height, but the width stays for the next page */
+  flex: 0 0 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+.peek-sheet {
+  position: relative;
+  width: fit-content;
+  margin: 0 auto;
+  line-height: 0;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+.peek-sheet canvas {
+  display: block;
+  filter: var(--pdf-filter);
+}
+.peek-highlight {
+  position: absolute;
+  border-radius: 2px;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.peek-highlight.approx {
+  /* only the closest passage, not an exact quote: dashed, and lighter */
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow: none;
+  outline: 2px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 1px;
+}
+.citation-peek [role="status"] {
+  margin: 8px 12px;
+  font-size: 13px;
+  opacity: 0.75;
 }

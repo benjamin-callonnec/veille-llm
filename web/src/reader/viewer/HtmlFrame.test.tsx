@@ -1,6 +1,6 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, expect, test } from "vitest";
-import { CSP } from "./csp";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, expect, test, vi } from "vitest";
+import { CSP, FRAME_BRIDGE } from "./csp";
 import { HtmlFrame } from "./HtmlFrame";
 
 afterEach(cleanup);
@@ -12,4 +12,70 @@ test("the frame is sandboxed with scripts only: never the same origin", () => {
   expect(frame.getAttribute("srcdoc")).toContain(CSP);
   expect(frame.getAttribute("srcdoc")).toContain("<p>hi</p>");
   expect(frame.getAttribute("referrerpolicy")).toBe("no-referrer");
+});
+
+test("the page gets the keyboard focus once loaded, so the arrow keys work at once", () => {
+  render(<HtmlFrame content="<p>hi</p>" title="Deck" />);
+  const frame = screen.getByTitle("Deck") as HTMLIFrameElement;
+  const focus = vi.spyOn(frame, "focus");
+  fireEvent.load(frame);
+  expect(focus).toHaveBeenCalledTimes(1);
+});
+
+const tell = (source: Window | null, data: unknown) =>
+  fireEvent(window, new MessageEvent("message", { data, source }));
+
+test("the page carries the key bridge, and V or Escape typed inside reach the parent", () => {
+  const onKey = vi.fn();
+  render(<HtmlFrame content="<p>hi</p>" title="Deck" onKey={onKey} />);
+  const frame = screen.getByTitle("Deck") as HTMLIFrameElement;
+  expect(frame.getAttribute("srcdoc")).toContain(FRAME_BRIDGE);
+  tell(frame.contentWindow, { veilleKey: "v" });
+  tell(frame.contentWindow, { veilleKey: "Escape" });
+  expect(onKey.mock.calls).toEqual([["v"], ["Escape"]]);
+});
+
+test("messages from elsewhere or with another shape are ignored", () => {
+  const onKey = vi.fn();
+  render(<HtmlFrame content="<p>hi</p>" title="Deck" onKey={onKey} />);
+  const frame = screen.getByTitle("Deck") as HTMLIFrameElement;
+  tell(window, { veilleKey: "v" }); // not from the frame
+  tell(frame.contentWindow, { veilleKey: "x" });
+  tell(frame.contentWindow, { veilleKey: 3 });
+  tell(frame.contentWindow, "v");
+  tell(frame.contentWindow, null);
+  expect(onKey).not.toHaveBeenCalled();
+});
+
+test("a citation message of the page reaches onCite, raw; other messages do not", () => {
+  const onCite = vi.fn();
+  render(<HtmlFrame content="<p>hi</p>" title="Deck" onCite={onCite} />);
+  const frame = screen.getByTitle("Deck") as HTMLIFrameElement;
+  tell(frame.contentWindow, { veilleCite: { page: 4 } });
+  tell(frame.contentWindow, { veilleCite: null });
+  tell(window, { veilleCite: { page: 4 } }); // not from the frame
+  tell(frame.contentWindow, { other: 1 });
+  tell(frame.contentWindow, "x");
+  expect(onCite.mock.calls).toEqual([[{ veilleCite: { page: 4 } }], [{ veilleCite: null }]]);
+});
+
+test("a page that reloads while the viewer is not shown does not take the keyboard", () => {
+  render(<HtmlFrame content="<p>hi</p>" title="Deck" active={false} />);
+  const frame = screen.getByTitle("Deck") as HTMLIFrameElement;
+  const focus = vi.spyOn(frame, "focus");
+  fireEvent.load(frame);
+  expect(focus).not.toHaveBeenCalled();
+});
+
+test("a page that reloads while you type elsewhere does not take the keyboard", () => {
+  render(<HtmlFrame content="<p>hi</p>" title="Deck" />);
+  const frame = screen.getByTitle("Deck") as HTMLIFrameElement;
+  const field = document.body.appendChild(document.createElement("textarea"));
+  field.focus(); // the viewer opened, then you went back to type in the chat
+  const focus = vi.spyOn(frame, "focus");
+  fireEvent.load(frame);
+  expect(focus).not.toHaveBeenCalled();
+  field.remove();
+  fireEvent.load(frame); // nothing is being typed any more: the page may take the keys
+  expect(focus).toHaveBeenCalledTimes(1);
 });

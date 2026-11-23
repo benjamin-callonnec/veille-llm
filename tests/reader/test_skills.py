@@ -163,3 +163,20 @@ def test_check_directory_reports_each_problem(tmp_path):
 def test_check_directory_refuses_an_empty_or_missing_folder(tmp_path):
     assert check_directory(tmp_path)
     assert check_directory(tmp_path / "nope")
+
+
+def test_present_skill_asks_for_quoted_citations():
+    text = (REPO_SKILLS / "present.md").read_text(encoding="utf-8")
+    assert '[p.N "exact quote"]' in text
+    assert "Figure K" in text and "Table K" in text
+    assert check_directory(REPO_SKILLS) == []
+
+
+def test_present_skill_asks_for_clean_but_never_empty_slides():
+    text = (REPO_SKILLS / "present.md").read_text(encoding="utf-8")
+    assert "at most about 40 words" not in text  # that rule produced a title and one sentence
+    assert "2 to 4 short bullet points" in text
+    assert "never a slide that is only a title and one sentence" in text.lower()
+    for utility in (".cols", ".card", ".big"):  # the skeleton offers the layouts the rule names
+        assert utility in text
+    assert len(text) < 7500  # the prompt limit is 8000 characters

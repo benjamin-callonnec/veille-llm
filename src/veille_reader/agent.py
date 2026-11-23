@@ -6,6 +6,7 @@ import os
 import re
 import time
 from collections.abc import AsyncIterator, Callable
+from dataclasses import replace
 
 from veille_llm.llm import (
     LlmAuthError,
@@ -73,6 +74,11 @@ SYSTEM_PROMPT_TOOLS = (
 )
 
 TOOL_PREFIX = "mcp__paper__"
+
+# A skill the user invoked (/present) asks several questions, reads, then writes: it gets room for
+# that. A plain answer, or a skill the agent picks by itself, keeps the normal limits.
+SKILL_LIMITS = AgentLimits(max_turns=20, max_message_usd=1.00)
+SKILL_TOOL_LIMITS = Limits(max_calls=30, max_per_tool=10)
 
 
 def _clean(text: object) -> str:
@@ -425,11 +431,20 @@ async def sdk_runner(request: RunRequest, query: Callable | None = None) -> Asyn
     from claude_agent_sdk import ClaudeAgentOptions
 
     limits = request.agent_limits or AgentLimits()
+    # only the defaults are raised: a limit someone configured is theirs, a skill never overrides it
+    if request.skill is not None and limits == AgentLimits():
+        limits = replace(
+            limits,
+            max_turns=SKILL_LIMITS.max_turns,
+            max_message_usd=SKILL_LIMITS.max_message_usd,
+        )
     extra: dict = {}
     if request.paper_tools is not None:
         from claude_agent_sdk import create_sdk_mcp_server
 
-        budget = ToolBudget(request.tool_limits or Limits())
+        budget = ToolBudget(
+            request.tool_limits or (SKILL_TOOL_LIMITS if request.skill is not None else Limits())
+        )
         session = SkillSession(request.skills, request.skill)
         sdk_tools = build_sdk_tools(
             request.paper_tools, budget, request.ask, session, request.reports

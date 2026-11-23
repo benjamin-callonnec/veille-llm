@@ -4,7 +4,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from veille_reader.agent import build_sdk_tools
-from veille_reader.reports import ReportTools, check_html, export_name, with_csp
+from veille_reader.reports import (
+    ReportTools,
+    check_html,
+    export_name,
+    lint_html,
+    plain_citations,
+    with_csp,
+)
 from veille_reader.server import create_app
 from veille_reader.skills import Skill, SkillSession
 from veille_reader.storage import ReaderStore
@@ -193,3 +200,80 @@ def test_regenerate_keeps_the_skill_the_user_invoked(tmp_path):
     )
     c.post(f"/api/items/a1/conversations/{cid}/regenerate")
     assert [s.name for s in seen] == ["present", "present"]
+
+
+GOOD_SVG = (
+    '<svg viewBox="0 0 10 10" role="img"><title>Accuracy by size</title><desc>d</desc><rect/></svg>'
+)
+
+
+def test_lint_accepts_a_titled_svg_with_a_viewbox_and_alt_text():
+    assert lint_html(f'<body>{GOOD_SVG}<img src="data:image/png;base64,AA" alt="a"></body>') == []
+
+
+def test_lint_flags_an_svg_without_title_or_viewbox():
+    warnings = lint_html("<svg><rect/></svg>" + GOOD_SVG + '<svg viewBox="0 0 1 1"><g/></svg>')
+    assert len(warnings) == 3
+    assert any("svg 1" in w and "<title>" in w for w in warnings)
+    assert any("svg 1" in w and "viewBox" in w for w in warnings)
+    assert any("svg 3" in w and "<title>" in w for w in warnings)
+    assert not any("svg 2" in w for w in warnings)
+
+
+def test_lint_flags_an_image_without_alt_and_caps_the_list():
+    assert any("alt" in w for w in lint_html('<img src="data:image/png;base64,AA">'))
+    many = "<svg><g/></svg>" * 20
+    assert len(lint_html(many)) <= 5
+
+
+def test_write_report_saves_and_tells_the_model_what_to_fix(tmp_path):
+    store = ReaderStore(tmp_path)
+    tools = tools_with(store, SkillSession([PRESENT], forced=PRESENT))
+    out = call(tools["write_report"], {"title": "T", "html": "<svg><rect/></svg>"})
+    text = out["content"][0]["text"]
+    assert not out.get("is_error") and store.report("a1", 1) is not None
+    assert "Saved report 1, version 1." in text and "<title>" in text and "report_id" in text
+    clean = call(tools["write_report"], {"title": "T", "html": f"<body>{GOOD_SVG}</body>"})
+    assert clean["content"][0]["text"] == "Saved report 2, version 1."
+
+
+def test_lint_skips_decorative_svgs():
+    sprite = '<svg style="display:none"><symbol id="i"><path/></symbol></svg>'
+    hidden = '<svg aria-hidden="true" viewBox="0 0 1 1"><path/></svg>'
+    hidden_no_box = "<svg aria-hidden='true'><path/></svg>"
+    plain_hidden = "<svg hidden><path/></svg>"
+    assert lint_html(f"<body>{sprite}{hidden}{hidden_no_box}{plain_hidden}</body>") == []
+    # a visible one next to them is still checked, and numbered as the Nth svg
+    warnings = lint_html(f"<body>{sprite}<svg><g/></svg></body>")
+    assert any("svg 2" in w and "<title>" in w for w in warnings)
+
+
+def test_lint_does_not_mistake_overflow_hidden_for_a_hidden_svg():
+    # `hidden` inside a style value is not the attribute: these still need a title and a viewBox
+    assert lint_html('<svg style="overflow:hidden" width="400"><g/></svg>')
+    assert lint_html('<svg style="background:url(x) hidden"><g/></svg>')
+    # visibility:hidden and the bare attribute are decorative
+    assert lint_html('<svg style="visibility:hidden"><g/></svg>') == []
+    assert lint_html("<svg hidden><g/></svg>") == []
+    assert lint_html('<svg hidden="hidden"><g/></svg>') == []
+
+
+def test_plain_citations_keep_only_the_page():
+    html = (
+        'A [p.4 "an exact quote here"] B [p.5 \u201ccurly quote\u201d] C [p.6 Figure 2] '
+        "D [p.7 Table 1.2] E [p.8 Fig. 3] F [p.9]"
+    )
+    assert plain_citations(html) == "A [p.4] B [p.5] C [p.6] D [p.7] E [p.8] F [p.9]"
+
+
+def test_plain_citations_leave_everything_else_alone():
+    html = '[p.1, p.8] [see p.4 "x"] [p.x] [p.4 "ab"] <i>[p.4]</i> [other "quote here"]'
+    assert plain_citations(html) == html
+
+
+def test_the_export_shows_page_only_citations(client):
+    r = client.store.save_report("a1", "Deck", '<p>It rises [p.4 "an exact quote here"].</p>')
+    text = client.get(f"/api/items/a1/reports/{r['id']}/export").text
+    assert "It rises [p.4]." in text and "an exact quote here" not in text
+    # the stored report keeps the quote: the preview needs it
+    assert "an exact quote here" in client.get(f"/api/items/a1/reports/{r['id']}").json()["html"]
