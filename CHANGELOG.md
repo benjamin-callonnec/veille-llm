@@ -5,7 +5,7 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
-## [0.13.1] - 2026-11-24
+## [0.13.1] - 2026-11-23
 
 ### Fixed
 - Read aloud while streaming: text is held back while a link, image, inline math or inline code is still open, so stripping the markdown when it closes can no longer shift the reading position (no repeated or skipped sentences).
