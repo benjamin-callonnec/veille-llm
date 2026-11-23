@@ -1,8 +1,17 @@
+import json
+
 import pytest
 
 from veille_reader import structure
 from veille_reader.paper import PaperError
-from veille_reader.structure import extract_pages_structure, extract_structure
+from veille_reader.storage import ReaderStore
+from veille_reader.structure import (
+    EXTRACTOR,
+    Structure,
+    extract_pages_structure,
+    extract_structure,
+    load_structure,
+)
 
 from .pdf_factory import make_pdf
 
@@ -94,3 +103,48 @@ def test_a_scanned_pdf_gives_an_empty_structure(tmp_path):
     assert result.sections == []
     assert result.captions == []
     assert result.pages[0].blocks == []
+
+
+def test_a_structure_survives_a_round_trip_through_json(tmp_path):
+    page = f"1 Introduction\n{BODY}\nFigure 1: A figure"
+    original = extract_structure(write(tmp_path, [page], sizes={"1 Introduction": 16}))
+    restored = Structure.from_dict(json.loads(json.dumps(original.to_dict())))
+    assert restored == original
+    assert original.to_dict()["captions"][0]["rect"] == list(original.captions[0].rect)
+
+
+def test_the_structure_is_extracted_once_per_paper(tmp_path, monkeypatch):
+    store = ReaderStore(tmp_path / "data")
+    pdf = write(tmp_path, ["Figure 1: A figure"])
+    calls = []
+    real = structure.extract_structure
+    monkeypatch.setattr(structure, "extract_structure", lambda p: calls.append(p) or real(p))
+    first = load_structure(store, "a1", pdf)
+    second = load_structure(store, "a1", pdf)
+    assert first is not None and second == first
+    assert len(calls) == 1
+
+
+def test_a_structure_of_another_extractor_version_is_recomputed(tmp_path):
+    store = ReaderStore(tmp_path / "data")
+    pdf = write(tmp_path, ["Figure 1: A figure"])
+    store.save_paper_structure("a1", "old-0", {"extractor": "old-0"})
+    result = load_structure(store, "a1", pdf)
+    assert result is not None and result.extractor == EXTRACTOR
+    assert store.paper_structure("a1", EXTRACTOR) is not None
+
+
+def test_an_unreadable_pdf_gives_none_and_stores_nothing(tmp_path):
+    store = ReaderStore(tmp_path / "data")
+    bad = tmp_path / "bad.pdf"
+    bad.write_bytes(b"not a pdf")
+    assert load_structure(store, "a1", bad) is None
+    assert store.paper_structure("a1", EXTRACTOR) is None
+
+
+def test_a_stored_copy_that_does_not_fit_is_extracted_again(tmp_path):
+    store = ReaderStore(tmp_path / "data")
+    pdf = write(tmp_path, ["Figure 1: A figure"])
+    store.save_paper_structure("a1", EXTRACTOR, {"extractor": EXTRACTOR, "pages": "garbage"})
+    result = load_structure(store, "a1", pdf)
+    assert result is not None and [c.number for c in result.captions] == [1]

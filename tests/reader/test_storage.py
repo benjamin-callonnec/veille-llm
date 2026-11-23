@@ -222,3 +222,14 @@ def test_a_message_can_be_updated_and_messages_deleted(tmp_path):
     assert store.messages(cid)[1]["content"] == {"status": "answered"}
     store.delete_messages(cid, [first["id"], second["id"]])
     assert store.messages(cid) == []
+
+
+def test_a_stored_structure_is_only_given_back_to_the_same_extractor(tmp_path):
+    store = ReaderStore(tmp_path)
+    assert store.paper_structure("a1", "x-1") is None
+    store.save_paper_structure("a1", "x-1", {"pages": [], "sections": []})
+    assert store.paper_structure("a1", "x-1") == {"pages": [], "sections": []}
+    assert store.paper_structure("a1", "x-2") is None
+    store.save_paper_structure("a1", "x-2", {"pages": [1]})
+    assert store.paper_structure("a1", "x-2") == {"pages": [1]}
+    assert store.paper_structure("a1", "x-1") is None

@@ -18,6 +18,7 @@ from pdfminer.psexceptions import PSException
 
 from veille_reader.citations import normalise
 from veille_reader.paper import MAX_PAGES, PaperError, extract_outline
+from veille_reader.storage import ReaderStore
 
 Rect = tuple[float, float, float, float]
 
@@ -68,6 +69,67 @@ class Structure:
     pages: list[PageStructure]
     sections: list[Heading]
     captions: list[Caption]
+
+    def to_dict(self) -> dict:
+        """The JSON form (rects are lists), what is stored and what the API sends."""
+        return {
+            "extractor": self.extractor,
+            "pages": [
+                {
+                    "width": p.width,
+                    "height": p.height,
+                    "blocks": [
+                        {"text": b.text, "rect": list(b.rect), "size": b.size} for b in p.blocks
+                    ],
+                }
+                for p in self.pages
+            ],
+            "sections": [
+                {
+                    "title": h.title,
+                    "page": h.page,
+                    "rect": list(h.rect) if h.rect else None,
+                    "level": h.level,
+                }
+                for h in self.sections
+            ],
+            "captions": [
+                {
+                    "kind": c.kind,
+                    "number": c.number,
+                    "text": c.text,
+                    "page": c.page,
+                    "rect": list(c.rect),
+                }
+                for c in self.captions
+            ],
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Structure":
+        def rect(r: list[float]) -> Rect:
+            x, y, w, h = r
+            return (x, y, w, h)
+
+        return cls(
+            extractor=d["extractor"],
+            pages=[
+                PageStructure(
+                    p["width"],
+                    p["height"],
+                    [Block(b["text"], rect(b["rect"]), b["size"]) for b in p["blocks"]],
+                )
+                for p in d["pages"]
+            ],
+            sections=[
+                Heading(h["title"], h["page"], rect(h["rect"]) if h["rect"] else None, h["level"])
+                for h in d["sections"]
+            ],
+            captions=[
+                Caption(c["kind"], c["number"], c["text"], c["page"], rect(c["rect"]))
+                for c in d["captions"]
+            ],
+        )
 
 
 def _clamp(value: float) -> float:
@@ -159,3 +221,19 @@ def extract_structure(pdf_path: Path) -> Structure:
                 if level is not None:
                     sections.append(Heading(block.text, number, block.rect, level))
     return Structure(EXTRACTOR, pages, sections, captions)
+
+
+def load_structure(store: ReaderStore, item_id: str, pdf_path: Path) -> Structure | None:
+    """The structure of a paper: stored, else extracted once and stored; None if unreadable."""
+    cached = store.paper_structure(item_id, EXTRACTOR)
+    if cached is not None:
+        try:
+            return Structure.from_dict(cached)
+        except (KeyError, TypeError, ValueError):
+            pass  # a stored copy that does not fit: extract again
+    try:
+        result = extract_structure(pdf_path)
+    except PaperError:
+        return None
+    store.save_paper_structure(item_id, EXTRACTOR, result.to_dict())
+    return result

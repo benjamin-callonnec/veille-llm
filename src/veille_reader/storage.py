@@ -110,6 +110,14 @@ MIGRATIONS: list[str] = [
     ALTER TABLE traces ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE traces ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
     """,
+    """
+    CREATE TABLE paper_structure (
+        item_id TEXT PRIMARY KEY,
+        extractor TEXT NOT NULL,
+        data TEXT NOT NULL,
+        extracted_at TEXT NOT NULL
+    );
+    """,
 ]
 
 
@@ -520,6 +528,22 @@ class ReaderStore:
             "SELECT pages, outline FROM paper_text WHERE item_id = ?", (item_id,)
         ).fetchone()
         return {"pages": json.loads(row[0]), "outline": json.loads(row[1])} if row else None
+
+    def paper_structure(self, item_id: str, extractor: str) -> dict | None:
+        """The stored structure of a paper, only if the same version of the extractor made it."""
+        row = self._con.execute(
+            "SELECT data FROM paper_structure WHERE item_id = ? AND extractor = ?",
+            (item_id, extractor),
+        ).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def save_paper_structure(self, item_id: str, extractor: str, data: dict) -> None:
+        with self._con:
+            self._con.execute(
+                "INSERT OR REPLACE INTO paper_structure (item_id, extractor, data, extracted_at)"
+                " VALUES (?, ?, ?, ?)",
+                (item_id, extractor, json.dumps(data), self._now()),
+            )
 
     def save_paper_text(
         self, item_id: str, pages: list[str], outline: list[tuple[str, int]]
