@@ -48,9 +48,11 @@ catalogue:
 # calls to another provider) are removed for these processes only.
 READER_NO_BILLING = -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL \
 	-u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_VERTEX
-READER_FRONT_URL ?= http://127.0.0.1:5173
+READER_PORT ?= 8765
+FRONT_PORT ?= 5173
+READER_FRONT_URL ?= http://127.0.0.1:$(FRONT_PORT)
 reader:
-	@for port in 8765 5173; do \
+	@for port in $(READER_PORT) $(FRONT_PORT); do \
 	  pid=$$(lsof -nP -tiTCP:$$port -sTCP:LISTEN 2>/dev/null | head -1); \
 	  if [ -n "$$pid" ]; then \
 	    echo "Port $$port is already used by PID $$pid ($$(ps -o command= -p $$pid | cut -c1-80))."; \
@@ -59,14 +61,14 @@ reader:
 	  fi; \
 	done
 	@test -f build/catalogue.json || $(MAKE) catalogue
-	@# Port 8765 serves web/dist: rebuild it so it is never an older version than the dev server.
+	@# Port $(READER_PORT) serves web/dist: rebuild it so it is never an older version than the dev server.
 	@cd web && VITE_READER_URL=$(READER_FRONT_URL) npx vite build --mode reader --logLevel warn
 	@echo ""
-	@echo "Reader: open $(READER_FRONT_URL)  (hot reload; http://127.0.0.1:8765 sends you there too)."
+	@echo "Reader: open $(READER_FRONT_URL)  (hot reload; http://127.0.0.1:$(READER_PORT) sends you there too)."
 	@echo "Ctrl+C stops both."
 	@trap 'kill 0' INT TERM EXIT; \
-	(cd web && VITE_READER_URL=$(READER_FRONT_URL) npx vite --mode reader --host 127.0.0.1 --port 5173 --strictPort) & \
-	env $(READER_NO_BILLING) uv run veille-reader serve --reload --dev-front $(READER_FRONT_URL) & \
+	(cd web && VITE_READER_URL=$(READER_FRONT_URL) npx vite --mode reader --host 127.0.0.1 --port $(FRONT_PORT) --strictPort) & \
+	env $(READER_NO_BILLING) uv run veille-reader serve --port $(READER_PORT) --reload --dev-front $(READER_FRONT_URL) & \
 	wait
 
 # The reader needs a long-lived Claude token (the interactive login session expires and then the chat
