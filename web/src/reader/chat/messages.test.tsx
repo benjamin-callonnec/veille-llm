@@ -1,6 +1,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { TIPS } from "../lib/tips";
 import { AssistantMessage, StoredAssistantMessage } from "./AssistantMessage";
 import type { StoredMessage } from "./api";
 import { Composer } from "./Composer";
@@ -273,7 +274,9 @@ const box = () => screen.getByRole("textbox", { name: "Message" });
 
 test("an empty composer shows only its placeholder: no send icon", () => {
   composer();
-  expect(box().getAttribute("placeholder")).toBe("Ask about the paper…");
+  // the placeholder is the invitation or a tip, drawn at random: any of them is fine
+  const known = ["Ask about the paper…", ...TIPS.map((t) => t.text)];
+  expect(known).toContain(box().getAttribute("placeholder"));
   expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
 });
@@ -363,7 +366,7 @@ test("a live answer uses the citations event of the stream", async () => {
 });
 
 test("Tab on an empty composer fills it with the suggested prompt, and Enter sends it", async () => {
-  const props = composer({ tabFill: "Why divide by the square root of d_k?" });
+  const props = composer({ recommendations: ["Why divide by the square root of d_k?"] });
   box().focus();
   await userEvent.tab();
   expect((box() as HTMLTextAreaElement).value).toBe("Why divide by the square root of d_k?");
@@ -373,7 +376,7 @@ test("Tab on an empty composer fills it with the suggested prompt, and Enter sen
 });
 
 test("Tab selects the first [placeholder] of a suggestion it fills", async () => {
-  composer({ tabFill: "Explain the intuition behind [equation]" });
+  composer({ recommendations: ["Explain the intuition behind [equation]"] });
   box().focus();
   await userEvent.tab();
   const area = box() as HTMLTextAreaElement;
@@ -381,7 +384,7 @@ test("Tab selects the first [placeholder] of a suggestion it fills", async () =>
 });
 
 test("Tab does nothing special once something is typed", async () => {
-  composer({ tabFill: "A suggestion" });
+  composer({ recommendations: ["A suggestion"] });
   await userEvent.type(box(), "my own");
   await userEvent.tab();
   expect((box() as HTMLTextAreaElement).value).toBe("my own");

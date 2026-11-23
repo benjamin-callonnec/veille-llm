@@ -266,10 +266,11 @@ export function ChatPane({
         onStop={chat.stop}
         draftKey={chat.current ? `c${chat.current.id}` : "new"}
         fill={fill}
-        tabFill={suggestions[0]}
+        recommendations={suggestions}
         onDirty={setDirty}
         onSend={(text, files, voice, skill) => void send(text, files, voice, skill)}
         skills={skills}
+        hasReports={viewer?.available}
       />
     </div>
   );

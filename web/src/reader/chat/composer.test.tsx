@@ -406,3 +406,231 @@ test("Enter on an exact skill name sends it at once", async () => {
   await userEvent.type(box(), "/present{Enter}");
   expect(onSend).toHaveBeenCalledWith("/present", undefined, false, "present");
 });
+
+// --- the rotating placeholder ----------------------------------------------------------------
+
+import { act } from "@testing-library/react";
+import { FIRST_HINT, idleHint } from "../lib/hints";
+import { TIPS } from "../lib/tips";
+import { HINT_FADE_MS, HINT_INTERVAL_MS } from "./useHint";
+
+const placeholder = () => box().getAttribute("placeholder");
+const tick = (ms: number) =>
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
+const next = () => tick(HINT_INTERVAL_MS + HINT_FADE_MS);
+const stubMotion = (reduce: boolean) =>
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: reduce && query.includes("reduce"),
+    media: query,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+const have = { skills: true, reports: false, dictation: false };
+// Math.random at 0.99 never swaps in the shuffle: the tips keep their written order
+const writtenOrder = () => vi.spyOn(Math, "random").mockReturnValue(0.99);
+
+test("with no recommendation the composer opens on the invitation, then shows the tips", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  writtenOrder();
+  setup({ skills: SKILLS, speech: null });
+  expect(placeholder()).toBe(FIRST_HINT);
+  next();
+  expect(placeholder()).toBe(idleHint(1, have));
+  expect(placeholder()).not.toBe(FIRST_HINT);
+  vi.useRealTimers();
+});
+
+test("a recommendation replaces the tips: they rotate between the recommendations only", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  setup({ recommendations: ["Why does it work?", "What are the limits?"], skills: SKILLS });
+  const seen = [placeholder()];
+  for (let i = 0; i < 3; i++) {
+    next();
+    seen.push(placeholder());
+  }
+  expect(seen).toEqual([
+    "Why does it work?",
+    "What are the limits?",
+    "Why does it work?",
+    "What are the limits?",
+  ]);
+  vi.useRealTimers();
+});
+
+test("Tab fills the recommendation that is shown, and the Tab key badge is only there for one", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  stubMotion(false);
+  const { view, props } = setup({ recommendations: ["First?", "Second?"] });
+  expect(screen.getByText("Tab")).toBeTruthy();
+  next();
+  expect(placeholder()).toBe("Second?");
+  box().focus();
+  await userEvent.keyboard("{Tab}");
+  expect(box().value).toBe("Second?");
+  view.rerender(<Composer {...props} recommendations={[]} />);
+  fireEvent.change(box(), { target: { value: "" } });
+  expect(screen.queryByText("Tab")).toBeNull();
+  vi.useRealTimers();
+});
+
+test("a single recommendation stays: nothing rotates", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  setup({ recommendations: ["Only one?"] });
+  expect(vi.getTimerCount()).toBe(0);
+  tick(3 * (HINT_INTERVAL_MS + HINT_FADE_MS));
+  expect(placeholder()).toBe("Only one?");
+  vi.useRealTimers();
+});
+
+test("new recommendations start again from the first one", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  const { view, props } = setup({ recommendations: ["A?", "B?"] });
+  next();
+  expect(placeholder()).toBe("B?");
+  view.rerender(<Composer {...props} recommendations={["C?", "D?"]} />);
+  expect(placeholder()).toBe("C?");
+  vi.useRealTimers();
+});
+
+test("nothing rotates while you type, while it answers, or with reduced motion", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  const { view, props } = setup({ skills: SKILLS });
+  fireEvent.change(box(), { target: { value: "hello" } });
+  expect(vi.getTimerCount()).toBe(0);
+  fireEvent.change(box(), { target: { value: "" } });
+  expect(vi.getTimerCount()).toBeGreaterThan(0);
+  view.rerender(<Composer {...props} streaming />);
+  expect(vi.getTimerCount()).toBe(0);
+  expect(placeholder()).toBe("Answering…");
+  cleanup();
+  stubMotion(true);
+  setup({ skills: SKILLS });
+  expect(vi.getTimerCount()).toBe(0);
+  expect(placeholder()).toBe(FIRST_HINT);
+  vi.useRealTimers();
+});
+
+test("tips about reports and dictation show only when they exist", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  writtenOrder();
+  setup({ hasReports: true, speech: null });
+  const seen: string[] = [];
+  for (let i = 0; i < 15; i++) {
+    next();
+    seen.push(placeholder() ?? "");
+  }
+  expect(seen.some((t) => t.includes("reports"))).toBe(true);
+  expect(seen.some((t) => t.includes("microphone"))).toBe(false); // no speech engine here
+  expect(seen.some((t) => t.includes("Type / for commands"))).toBe(false); // no skills here
+  vi.useRealTimers();
+});
+
+test("the composer does not always open on the same text: each opening is drawn again", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  const random = vi.spyOn(Math, "random").mockReturnValue(0.99); // written order: the invitation
+  const first = setup({ speech: null });
+  expect(placeholder()).toBe(FIRST_HINT);
+  first.view.unmount();
+  random.mockReturnValue(0); // another draw: another order, so another first text
+  const second = setup({ speech: null });
+  expect(placeholder()).not.toBe(FIRST_HINT);
+  second.view.unmount();
+  vi.useRealTimers();
+});
+
+test("a new round is drawn again, and never starts with the text that ended the last one", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  const random = vi.spyOn(Math, "random").mockReturnValue(0.99); // the first round: written order
+  setup({ speech: null });
+  const roundLength = 1 + TIPS.filter((t) => !t.needs).length;
+  const round = () => {
+    const seen = [placeholder()];
+    for (let i = 1; i < roundLength; i++) {
+      next();
+      seen.push(placeholder());
+    }
+    return seen;
+  };
+  const one = round();
+  random.mockReturnValue(0); // the next round is drawn with another draw
+  next(); // the first text of the second round
+  const two = [placeholder(), ...round().slice(1)];
+  expect(one).toHaveLength(roundLength);
+  expect(two).not.toEqual(one);
+  expect(two[0]).not.toBe(one.at(-1));
+  expect(new Set(two).size).toBe(roundLength); // still every text once in the round
+  vi.useRealTimers();
+});
+
+test("typing during a fade does not leave the placeholder invisible afterwards", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  setup({ skills: SKILLS });
+  tick(HINT_INTERVAL_MS); // the fade has started
+  expect(box().className).toContain("hint-fading");
+  fireEvent.change(box(), { target: { value: "x" } });
+  fireEvent.change(box(), { target: { value: "" } });
+  expect(box().className).not.toContain("hint-fading");
+  vi.useRealTimers();
+});
+
+test("new recommendations during a fade start again from the first, for a full interval", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  const { view, props } = setup({ recommendations: ["A?", "B?"] });
+  tick(HINT_INTERVAL_MS); // a change to B is pending
+  view.rerender(<Composer {...props} recommendations={["C?", "D?"]} />);
+  expect(placeholder()).toBe("C?");
+  tick(HINT_FADE_MS + 50);
+  expect(placeholder()).toBe("C?"); // the old pending change did not skip the first new one
+  next();
+  expect(placeholder()).toBe("D?");
+  vi.useRealTimers();
+});
+
+test("a round is not thrown off when the available tips change in the middle of it", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  writtenOrder();
+  const { view, props } = setup({ speech: null });
+  const seen: string[] = [placeholder() ?? ""];
+  for (let i = 0; i < 40; i++) {
+    next();
+    seen.push(placeholder() ?? "");
+    if (i === 3) view.rerender(<Composer {...props} skills={SKILLS} hasReports />); // two more tips
+  }
+  for (let i = 1; i < seen.length; i++) expect(seen[i]).not.toBe(seen[i - 1]); // never twice in a row
+  expect(seen.every((t) => t.length > 5)).toBe(true);
+  vi.useRealTimers();
+});
+
+test("with recommendations on screen no new draw of tips is made", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
+  setup({ recommendations: ["A?", "B?"] });
+  const atMount = random.mock.calls.length; // the first draw, at mount
+  for (let i = 0; i < 12; i++) next();
+  expect(random.mock.calls.length).toBe(atMount);
+  vi.useRealTimers();
+});
+
+test("the timers are cleared when the composer goes away", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  const { view } = setup({ skills: SKILLS });
+  expect(vi.getTimerCount()).toBeGreaterThan(0);
+  view.unmount();
+  expect(vi.getTimerCount()).toBe(0);
+  vi.useRealTimers();
+});
