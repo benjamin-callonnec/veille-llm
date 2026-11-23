@@ -5,6 +5,18 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-23
+
+### Added
+- Scheduling (#38): a Cloudflare Worker (`scheduler/`) now starts `daily.yml` (every day 06:00 UTC) and `weekly.yml` (Monday 08:00 UTC) on time with `workflow_dispatch` on `main`, because GitHub's own crons started hours late. It retries transient errors, never retries a 401, 403, 404 or 422, fails visibly on an unknown cron or a missing token, and never logs the token. Local run: `make scheduler-dev`.
+- Infrastructure (#38): Terraform (`iac/`, state on R2) owns the cron triggers; `wrangler` deploys the code. One-time setup, the repo-specific tokens, their rotation and the `.env.cloudflare` file are in `setup/README.md`; `make tf-*`, `make scheduler-deploy` and `make scheduler-secret` load that file and name any missing variable.
+- CI (#38): the Worker is checked by `make check`, Terraform is validated without credentials, and a deploy job (Worker, then crons) runs on `main` only after every other gate, never cancelled half way.
+- Alert (#38): `freshness.yml` fails, so GitHub emails you, when no `daily` run succeeded in the last 30 hours (Worker stopped, token expired).
+
+### Changed
+- `daily.yml` and `weekly.yml` no longer have a `schedule:`: they run only by `workflow_dispatch` (the Worker, or by hand). Do not put the schedules back: two schedulers would run the LLM twice.
+- `spike-llm.yml` runs only from `main` (the Worker's GitHub token can dispatch any workflow on any branch).
+
 ## [0.14.1] - 2026-11-23
 
 ### Fixed
