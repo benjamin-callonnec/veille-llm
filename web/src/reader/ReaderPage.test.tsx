@@ -103,9 +103,11 @@ const setup = (
     chat?: ChatApi;
     hold?: Promise<void>;
     reply?: string;
+    highlights?: Highlight[];
   } = {},
 ) => {
   const { api, rows } = fakeApi();
+  rows.push(...(opts.highlights ?? []));
   const chat = fakeChatApi(opts.reply ?? "Streamed answer [p.3]", opts.hold);
   const open = opts.open ?? (async () => new FakeSource({ numPages: 5 }));
   const utils = render(
@@ -454,4 +456,49 @@ test("a failing health check just leaves the model out", async () => {
   );
   expect(await screen.findByRole("textbox", { name: "Message" })).toBeTruthy();
   expect(document.querySelector(".composer-status")).toBeNull();
+});
+
+test("a highlight row goes back to its stored place and flashes it", async () => {
+  setup({
+    highlights: [
+      {
+        id: 7,
+        page: 3,
+        color: "yellow",
+        text: "placed",
+        rects: [[0.1, 0.5, 0.3, 0.02]],
+        created_at: "now",
+      },
+    ],
+  });
+  await userEvent.click(await screen.findByRole("button", { name: "Highlights (1)" }));
+  expect(document.querySelector("[data-flash]")).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: /p\.3/ }));
+  await waitFor(() =>
+    expect(document.querySelector('[data-page="3"] [data-flash]')).not.toBeNull(),
+  );
+});
+
+test("a highlight without stored rects goes to its page without error", async () => {
+  setup({
+    highlights: [{ id: 8, page: 2, color: "green", text: "old", rects: [], created_at: "now" }],
+  });
+  await userEvent.click(await screen.findByRole("button", { name: "Highlights (1)" }));
+  await userEvent.click(screen.getByRole("button", { name: /p\.2/ }));
+  const field = (await screen.findByRole("spinbutton", { name: "Page" })) as HTMLInputElement;
+  await waitFor(() => expect(field.value).toBe("2"));
+  expect(document.querySelector("[data-flash]")).toBeNull();
+});
+
+test("the quote of an ask-the-agent question flashes its place in the PDF", async () => {
+  setup();
+  await select();
+  await userEvent.type(
+    await screen.findByPlaceholderText("Ask about this passage…"),
+    "Where?{Enter}",
+  );
+  await userEvent.click(await screen.findByRole("button", { name: "Go to page 1" }));
+  await waitFor(() =>
+    expect(document.querySelector('[data-page="1"] [data-flash]')).not.toBeNull(),
+  );
 });

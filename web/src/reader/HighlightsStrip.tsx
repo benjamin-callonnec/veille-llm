@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Icon, IconButton } from "../components/Icon";
+import type { Rect } from "./lib/quote";
 import type { Highlight } from "./useHighlights";
 
 interface Props {
   highlights: Highlight[];
-  onGo(page: number): void;
+  onGo(page: number, rects: Rect[]): void;
   onRemove(id: number): void;
 }
 
@@ -52,7 +53,7 @@ export function HighlightsStrip({ highlights, onGo, onRemove }: Props) {
             {shown.map((h) => (
               <li key={h.id}>
                 <span className={`hl-dot hl-${h.color}`} aria-hidden="true" />
-                <button type="button" className="hl-row-text" onClick={() => onGo(h.page)}>
+                <button type="button" className="hl-row-text" onClick={() => onGo(h.page, h.rects)}>
                   <span className="hl-page">p.{h.page}</span>
                   <span className="hl-quote">{h.text}</span>
                 </button>

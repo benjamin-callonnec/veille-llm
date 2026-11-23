@@ -5,6 +5,7 @@ import { ChatPane } from "./chat/ChatPane";
 import { useChat } from "./chat/useChat";
 import { HighlightsStrip } from "./HighlightsStrip";
 import { parseHash, writeHash } from "./lib/anchor";
+import type { Rect } from "./lib/quote";
 import { PaneLayout } from "./PaneLayout";
 import { PdfViewer, type Selection, type Target } from "./PdfViewer";
 import { openPdf } from "./pdf/pdfjsSource";
@@ -130,13 +131,16 @@ export function ReaderPage({
     [itemId],
   );
 
-  const cite = useCallback(
-    (p: number, quote?: string) => {
+  // Every way back to the PDF: the page, and the exact place when we know it.
+  const goTo = useCallback(
+    (p: number, spec?: { rects?: Rect[]; quote?: string }) => {
       changePage(p);
-      if (quote) setTarget({ page: p, quote, nonce: Date.now() });
+      if (spec?.rects?.length || spec?.quote) setTarget({ page: p, ...spec, nonce: Date.now() });
     },
     [changePage],
   );
+  const cite = useCallback((p: number, quote?: string) => goTo(p, { quote }), [goTo]);
+  const goToRects = useCallback((p: number, rects?: Rect[]) => goTo(p, { rects }), [goTo]);
 
   const closeBox = () => {
     setSelection(null);
@@ -171,7 +175,7 @@ export function ReaderPage({
         target={target ?? undefined}
         onTargetDone={() => setTarget(null)}
       />
-      <HighlightsStrip highlights={highlights} onGo={changePage} onRemove={remove} />
+      <HighlightsStrip highlights={highlights} onGo={goToRects} onRemove={remove} />
     </>
   ) : (
     <p className="muted">{item.has_pdf ? "Loading the PDF…" : "No PDF for this item"}</p>
@@ -197,9 +201,7 @@ export function ReaderPage({
       )}
       <PaneLayout
         pdf={pdfPane}
-        chat={
-          <ChatPane chat={chat} onGo={changePage} onCite={cite} model={model} itemId={itemId} />
-        }
+        chat={<ChatPane chat={chat} onGo={goToRects} onCite={cite} model={model} itemId={itemId} />}
       />
       {selection && (
         <SelectionBox

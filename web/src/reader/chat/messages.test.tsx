@@ -51,7 +51,23 @@ test("an ask_agent message shows the quote, its page and jumps back to the PDF",
   expect(screen.getByText("a passage")).toBeTruthy();
   expect(screen.getByText("why?")).toBeTruthy();
   await userEvent.click(screen.getByRole("button", { name: "Go to page 4" }));
-  expect(onGo).toHaveBeenCalledWith(4);
+  expect(onGo).toHaveBeenCalledWith(4, []);
+});
+
+test("the quote of a question goes back to its stored rects", async () => {
+  const onGo = vi.fn();
+  const rects = [[0.1, 0.2, 0.3, 0.04]];
+  render(
+    <UserMessage
+      message={msg({
+        kind: "ask_agent",
+        content: { quote: { text: "a passage", page: 4, rects }, question: "why?" },
+      })}
+      onGo={onGo}
+    />,
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Go to page 4" }));
+  expect(onGo).toHaveBeenCalledWith(4, rects);
 });
 
 test("a user message has its day, retry and copy as icons in a hover-revealed row", async () => {

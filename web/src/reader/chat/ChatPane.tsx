@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { IconButton } from "../../components/Icon";
 import { placeholders } from "../lib/placeholders";
+import type { Rect } from "../lib/quote";
 import { AskCard, toAsk } from "./AskCard";
 import { AssistantMessage, StoredAssistantMessage } from "./AssistantMessage";
 import { type AskApi, httpAskApi } from "./askApi";
@@ -34,8 +35,8 @@ export function ChatPane({
   askApi = httpAskApi,
 }: {
   chat: ReturnType<typeof useChat>;
-  /** The quote arrow of a user message. */
-  onGo(page: number): void;
+  /** The quote arrow of a user message (with the rects of the quote when it has them). */
+  onGo(page: number, rects?: Rect[]): void;
   /** A citation chip of an answer, with the quote it carries (default: just go to the page). */
   onCite?(page: number, quote?: string): void;
   /** The model that answers, shown quietly under the composer. */
