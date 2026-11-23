@@ -5,6 +5,16 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-23
+
+### Added
+- Trending (#42): the GitHub stars of the repo Hugging Face links to a paper are read with the upvotes (one call), kept in the database (never lowered), exported as `github_stars`, shown on the card and added to the trending sort on a log scale. The classification filter is unchanged.
+- Reader (#41): in the dark themes (forced or from the system) the PDF pages are inverted (`--pdf-filter`), with no re-render; the text layer and the highlights are untouched. Raster images are inverted too (keeping them intact was left out).
+- Shortcut: `H` goes back to the home page (the catalogue) from any page, not while typing and not with a modifier. It is listed in the settings panel.
+
+### Fixed
+- Counts read from Hugging Face (upvotes, stars) go through `int()` as before and are never negative.
+
 ## [0.15.0] - 2026-11-23
 
 ### Added
