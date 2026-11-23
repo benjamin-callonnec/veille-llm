@@ -21,7 +21,9 @@ export type IconName =
   | "arrow-down"
   | "search"
   | "outline"
-  | "settings";
+  | "settings"
+  | "mic"
+  | "speaker";
 
 /** One line style for every icon of the app: 24px grid, round caps, drawn in the current colour. */
 const SHAPES: Record<IconName, ReactNode> = {
@@ -60,6 +62,18 @@ const SHAPES: Record<IconName, ReactNode> = {
     <>
       <rect x="9" y="9" width="11" height="11" rx="2.5" />
       <path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15" />
+    </>
+  ),
+  mic: (
+    <>
+      <rect x="9" y="3.5" width="6" height="11" rx="3" />
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5" />
+    </>
+  ),
+  speaker: (
+    <>
+      <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+      <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />
     </>
   ),
   close: <path d="M6 6l12 12M18 6L6 18" />,
@@ -125,6 +139,8 @@ interface IconButtonProps {
   className?: string;
   size?: number;
   expanded?: boolean;
+  /** A toggle that is on (read by screen readers and styled as active). */
+  pressed?: boolean;
 }
 
 /** A quiet button that is only an icon: the name lives in aria-label and title. */
@@ -136,6 +152,7 @@ export function IconButton({
   className,
   size,
   expanded,
+  pressed,
 }: IconButtonProps) {
   return (
     <button
@@ -145,6 +162,7 @@ export function IconButton({
       title={label}
       disabled={disabled}
       aria-expanded={expanded}
+      aria-pressed={pressed}
       onClick={onClick}
     >
       <Icon name={icon} size={size} />

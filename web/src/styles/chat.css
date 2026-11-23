@@ -621,3 +621,32 @@
   flex: 1;
   min-width: 0;
 }
+
+/* voice: the microphone is quiet until it listens, the speaker stays visible while it reads */
+.composer-mic {
+  width: 32px;
+  height: 32px;
+}
+.icon-btn.composer-mic.listening {
+  color: var(--dot-red);
+  background: var(--bubble);
+}
+.composer-mic.listening .icon {
+  animation: voice-pulse 1.4s ease-in-out infinite;
+}
+@keyframes voice-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-mic.listening .icon {
+    animation: none;
+  }
+}
+.msg-actions:has(.reading) {
+  opacity: 1;
+}
+.icon-btn[aria-pressed="true"] {
+  color: var(--fg);
+}

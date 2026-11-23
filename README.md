@@ -137,7 +137,12 @@ the explanation with its citation chip and your score on the paper. Free answers
 paper with the reasoning shown. A wrong answer writes a short note in the session memory. Routes for
 the history and score exist (`/api/items/<id>/quizzes`); there is no history screen yet. Design and
 rulings: `docs/superpowers/specs/2026-11-22-reader-quiz-design.md`.
-Remaining piece: #26 (voice) (parent: #17).
+Voice (#26) is below (parent: #17).
+
+Voice: with a browser that supports it (Chrome, Edge, Safari), a microphone icon in the composer dictates
+your question and a speaker icon under each answer reads it aloud. Chrome and Edge send the dictated audio to
+their own speech service, so it is not local; nothing is recorded by the reader. See
+`docs/superpowers/specs/2026-11-23-reader-voice-design.md`.
 
 ## Deploy on GitHub Pages
 
