@@ -66,3 +66,16 @@ test("a page that reloads while the viewer is not shown does not take the keyboa
   fireEvent.load(frame);
   expect(focus).not.toHaveBeenCalled();
 });
+
+test("a page that reloads while you type elsewhere does not take the keyboard", () => {
+  render(<HtmlFrame content="<p>hi</p>" title="Deck" />);
+  const frame = screen.getByTitle("Deck") as HTMLIFrameElement;
+  const field = document.body.appendChild(document.createElement("textarea"));
+  field.focus(); // the viewer opened, then you went back to type in the chat
+  const focus = vi.spyOn(frame, "focus");
+  fireEvent.load(frame);
+  expect(focus).not.toHaveBeenCalled();
+  field.remove();
+  fireEvent.load(frame); // nothing is being typed any more: the page may take the keys
+  expect(focus).toHaveBeenCalledTimes(1);
+});

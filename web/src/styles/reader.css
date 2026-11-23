@@ -578,6 +578,14 @@
   visibility: hidden;
   min-height: 120px;
 }
+.peek-scroll.peek-empty {
+  /* nothing to show (no PDF, a failed draw): no height, but the width stays for the next page */
+  flex: 0 0 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
 .peek-sheet {
   position: relative;
   width: fit-content;

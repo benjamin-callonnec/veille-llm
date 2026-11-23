@@ -239,3 +239,13 @@ def test_lint_skips_decorative_svgs():
     # a visible one next to them is still checked, and numbered as the Nth svg
     warnings = lint_html(f"<body>{sprite}<svg><g/></svg></body>")
     assert any("svg 2" in w and "<title>" in w for w in warnings)
+
+
+def test_lint_does_not_mistake_overflow_hidden_for_a_hidden_svg():
+    # `hidden` inside a style value is not the attribute: these still need a title and a viewBox
+    assert lint_html('<svg style="overflow:hidden" width="400"><g/></svg>')
+    assert lint_html('<svg style="background:url(x) hidden"><g/></svg>')
+    # visibility:hidden and the bare attribute are decorative
+    assert lint_html('<svg style="visibility:hidden"><g/></svg>') == []
+    assert lint_html("<svg hidden><g/></svg>") == []
+    assert lint_html('<svg hidden="hidden"><g/></svg>') == []

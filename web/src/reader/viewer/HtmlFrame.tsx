@@ -57,7 +57,11 @@ export function HtmlFrame({
       // the arrow keys work at once, but a page that reloads behind a hidden viewer or while you
       // type elsewhere must not take the keyboard
       onLoad={(e) => {
-        if (active) e.currentTarget.focus();
+        const typing = document.activeElement;
+        const inField =
+          typing instanceof HTMLElement &&
+          (["INPUT", "TEXTAREA", "SELECT"].includes(typing.tagName) || typing.isContentEditable);
+        if (active && !inField) e.currentTarget.focus();
       }}
     />
   );

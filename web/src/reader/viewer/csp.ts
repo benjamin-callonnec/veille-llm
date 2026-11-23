@@ -30,13 +30,15 @@ if(window.__veilleBridge)return;window.__veilleBridge=1;
 function post(m){parent.postMessage(m,"*")}
 var RE=/\[p\.(\d{1,4})(?:\s+(?:["\u201c]([^"\u201d]{3,300})["\u201d]|(Figure|Table|Fig\.?)\s+(\d+(?:\.\d+)?)))?\s*\]/g;
 function around(s){var b=s.closest("li,p,td,th,figcaption,blockquote,h1,h2,h3,h4")||s.closest("section")||s.parentNode;
-var t=((b&&b.textContent)||"").replace(/\[p\.[^\]]*\]/g,"").replace(/\s+/g," ").trim();return t.slice(0,400)}
+var c=b&&b.cloneNode?b.cloneNode(true):null;
+if(c)c.querySelectorAll("style,script,noscript,title,desc").forEach(function(e){e.remove()});
+var t=((c&&c.textContent)||"").replace(/\[p\.[^\]]*\]/g,"").replace(/\s+/g," ").trim();return t.slice(0,400)}
 function cite(s){var m={page:+s.getAttribute("data-p")},q=s.getAttribute("data-q"),k=s.getAttribute("data-k"),c=around(s);
 if(q)m.quote=q;if(k){m.kind=k;m.number=s.getAttribute("data-n")}if(c.length>=12)m.context=c;post({veilleCite:m})}
 function wrapText(){
 var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT),nodes=[],n;
-while((n=w.nextNode())){var par=n.parentNode,p=par&&par.nodeName;
-if(p==="SCRIPT"||p==="STYLE"||p==="TEXTAREA"||(par.classList&&par.classList.contains("veille-cite")))continue;
+while((n=w.nextNode())){var par=n.parentNode;
+if(!par||!par.closest||par.closest("script,style,textarea,svg,title,option,select,button,noscript,template,.veille-cite"))continue;
 if(n.nodeValue.indexOf("[p.")>-1)nodes.push(n)}
 nodes.forEach(function(t){var text=t.nodeValue,last=0,frag=document.createDocumentFragment(),m;RE.lastIndex=0;
 while((m=RE.exec(text))){frag.appendChild(document.createTextNode(text.slice(last,m.index)));

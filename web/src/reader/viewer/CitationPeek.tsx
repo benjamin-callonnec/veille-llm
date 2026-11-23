@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconButton } from "../../components/Icon";
 import { locateClosest, locateQuote } from "../lib/locate";
 import type { Rect } from "../lib/quote";
@@ -43,6 +43,8 @@ export function CitationPeek({ cite, source, captions, onOpen, onClose }: Props)
   const [browse, setBrowse] = useState<number | null>(null); // a page other than the cited one
   const [zoom, setZoom] = useState(1);
   const [phase, setPhase] = useState<Phase>("loading");
+  const [drawn, setDrawn] = useState(0); // counts the pages drawn: each one is then scrolled to
+  const pending = useRef<{ rects: Rect[] | null } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const latestCaptions = useRef(captions);
@@ -108,16 +110,27 @@ export function CitationPeek({ cite, source, captions, onOpen, onClose }: Props)
         const width = room * zoom;
         await source.render(shown, target, width / info.width, ctrl.signal);
         if (ctrl.signal.aborted) return;
-        const rects = shown === located.page ? located.rects : null;
-        box.scrollTop = peekScrollTop(rects, target.offsetHeight, box.clientHeight);
-        box.scrollLeft = peekScrollLeft(rects, target.offsetWidth, box.clientWidth);
+        // scrolled once the area is on screen with its real size (after an error it was empty)
+        pending.current = { rects: shown === located.page ? located.rects : null };
         setPhase("ready");
+        setDrawn((n) => n + 1);
       } catch {
         if (!ctrl.signal.aborted) setPhase("error");
       }
     })();
     return () => ctrl.abort();
   }, [source, located, shown, zoom]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs after each page drawn
+  useLayoutEffect(() => {
+    const box = scroller.current;
+    const target = canvas.current;
+    const todo = pending.current;
+    if (!box || !target || !todo) return;
+    pending.current = null;
+    box.scrollTop = peekScrollTop(todo.rects, target.offsetHeight, box.clientHeight);
+    box.scrollLeft = peekScrollLeft(todo.rects, target.offsetWidth, box.clientWidth);
+  }, [drawn]);
 
   const lastPage = source?.numPages ?? 0;
   const approx = phase === "ready" && onCitedPage && located.approx;
@@ -181,9 +194,14 @@ export function CitationPeek({ cite, source, captions, onOpen, onClose }: Props)
       </header>
       {message && <p role="status">{message}</p>}
       <div
-        className={phase === "loading" ? "peek-scroll peek-loading" : "peek-scroll"}
+        className={
+          phase === "loading"
+            ? "peek-scroll peek-loading"
+            : phase === "nopdf" || phase === "error"
+              ? "peek-scroll peek-empty"
+              : "peek-scroll"
+        }
         ref={scroller}
-        hidden={phase === "nopdf" || phase === "error"}
       >
         <div className="peek-sheet">
           <canvas ref={canvas} />

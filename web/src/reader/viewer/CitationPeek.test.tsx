@@ -379,3 +379,40 @@ test("nothing close enough: the usual notes, never a wrong passage", async () =>
   await waitFor(() => expect(status()).toBe("Passage not located"));
   expect(highlights()).toHaveLength(0);
 });
+
+test("after a failed draw, going to another page and back still scrolls to the passage", async () => {
+  const scrolls: number[] = [];
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(300);
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(800);
+  Object.defineProperty(HTMLElement.prototype, "scrollTop", {
+    configurable: true,
+    get: () => 0,
+    set: (v: number) => {
+      scrolls.push(v);
+    },
+  });
+  const source = new FakeSource({ numPages: 5 });
+  source.textLayer = async () => ({
+    text: "Text of page 2",
+    boxes: [{ text: "Text of page 2", x: 50, y: 400, width: 200, height: 12 }],
+  });
+  const real = source.render.bind(source);
+  let failOnce = true;
+  source.render = async (page, canvas, scale, signal) => {
+    if (failOnce) {
+      failOnce = false;
+      throw new Error("boom");
+    }
+    await real(page, canvas, scale, signal);
+  };
+  setup({ page: 2, quote: "Text of page 2" }, { source });
+  await waitFor(() => expect(status()).toBe("The preview could not be drawn"));
+  // the area is not removed from the page while it is empty: it keeps its size
+  expect(document.querySelector(".peek-scroll")?.hasAttribute("hidden")).toBe(false);
+  await userEvent.click(screen.getByRole("button", { name: "Next page" }));
+  await waitFor(() => expect(status()).toBeNull());
+  await userEvent.click(screen.getByRole("button", { name: "Previous page" }));
+  await waitFor(() => expect(highlights()).toHaveLength(1));
+  expect(scrolls.at(-1)).toBe(300);
+  Reflect.deleteProperty(HTMLElement.prototype, "scrollTop");
+});
