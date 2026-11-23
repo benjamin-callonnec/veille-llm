@@ -106,9 +106,12 @@ export function FileViewer({ itemId, reports, selectedId, onSelect, onClose, onC
             <Icon name="download" />
           </a>
         )}
-        <button type="button" aria-pressed={fullscreen} onClick={() => setFullscreen((f) => !f)}>
-          Full screen
-        </button>
+        <IconButton
+          icon="expand"
+          label="Full screen"
+          pressed={fullscreen}
+          onClick={() => setFullscreen((f) => !f)}
+        />
         <IconButton icon="close" label="Close the viewer" onClick={onClose} />
       </header>
       <div className="viewer-body">
