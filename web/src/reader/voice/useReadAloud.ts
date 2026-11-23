@@ -43,12 +43,9 @@ export function useReadAloud(text: string, streaming: boolean, synth: Synth | nu
     [stop],
   );
 
-  const toggle = useCallback(() => {
-    if (!synth) return;
-    if (activeRef.current) {
-      stop();
-      return;
-    }
+  /** Start a reading from the top; does nothing when one is already on (safe to call twice). */
+  const start = useCallback(() => {
+    if (!synth || activeRef.current) return;
     claimVoice(stop);
     setError(null);
     queue.current = new TtsQueue(
@@ -68,6 +65,11 @@ export function useReadAloud(text: string, streaming: boolean, synth: Synth | nu
     feed(text, streaming);
   }, [synth, stop, feed, text, streaming]);
 
+  const toggle = useCallback(() => {
+    if (activeRef.current) stop();
+    else start();
+  }, [start, stop]);
+
   // the answer grows while a reading is on: speak what just became a full sentence
   // biome-ignore lint/correctness/useExhaustiveDependencies: only new text matters
   useEffect(() => {
@@ -85,5 +87,5 @@ export function useReadAloud(text: string, streaming: boolean, synth: Synth | nu
     [stop, feed],
   );
 
-  return { supported: synth !== null, active, error, toggle };
+  return { supported: synth !== null, active, error, toggle, start };
 }

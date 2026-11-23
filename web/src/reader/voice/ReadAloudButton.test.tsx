@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { ReadAloudButton } from "./ReadAloudButton";
 import type { Synth } from "./tts";
@@ -48,4 +49,26 @@ test("without auto, nothing is read until the button is clicked", () => {
   const { synth, spoken } = fake();
   render(<ReadAloudButton text="Quiet." streaming={false} synth={synth} />);
   expect(spoken).toEqual([]);
+});
+
+test("with auto, a strict double mount (dev) still ends up reading while the answer streams", () => {
+  const { synth, spoken } = fake();
+  render(
+    <StrictMode>
+      <ReadAloudButton text="First one. Second" streaming synth={synth} auto />
+    </StrictMode>,
+  );
+  expect(screen.getByRole("button", { name: "Stop reading" })).toBeTruthy();
+  expect(spoken[0]?.text).toBe("First one.");
+});
+
+test("with auto, a strict double mount of a finished answer is still reading", () => {
+  const { synth, spoken } = fake();
+  render(
+    <StrictMode>
+      <ReadAloudButton text="Done." streaming={false} synth={synth} auto />
+    </StrictMode>,
+  );
+  expect(screen.getByRole("button", { name: "Stop reading" })).toBeTruthy();
+  expect(spoken.at(-1)?.text).toBe("Done.");
 });

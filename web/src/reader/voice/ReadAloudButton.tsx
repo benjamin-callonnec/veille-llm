@@ -19,7 +19,7 @@ export function ReadAloudButton({
   const voice = useReadAloud(text, streaming, synth === undefined ? defaultSynth() : synth);
   // biome-ignore lint/correctness/useExhaustiveDependencies: only once, when the answer appears
   useEffect(() => {
-    if (auto && voice.supported) voice.toggle();
+    if (auto && voice.supported) voice.start();
   }, []);
   if (!voice.supported) return null;
   return (
