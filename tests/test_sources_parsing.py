@@ -28,6 +28,15 @@ def test_parse_signals_skips_entries_without_id():
     assert parse_signals(payload) == {"2611.01234": Signal(12, 0)}
 
 
+def test_parse_signals_keeps_reading_numbers_the_way_int_did():
+    payload = [
+        {"paper": {"id": "a", "upvotes": "12", "githubStars": 7.0}},
+        {"paper": {"id": "b", "upvotes": -3}},
+        {"paper": {"id": "c", "upvotes": float("inf")}},
+    ]
+    assert parse_signals(payload) == {"a": Signal(12, 7), "b": Signal(0, 0), "c": Signal(0, 0)}
+
+
 def test_parse_signals_reads_the_github_stars_of_the_linked_repo():
     payload = [
         {

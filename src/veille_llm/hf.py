@@ -15,8 +15,11 @@ class Signal(NamedTuple):
 
 
 def _count(value: object) -> int:
-    """A count from a payload we do not control: anything but a non-negative integer is 0."""
-    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+    """A count from a payload we do not control: what int() reads, never below 0, else 0."""
+    try:
+        return max(0, int(value))  # type: ignore[call-overload]
+    except (TypeError, ValueError, OverflowError):
+        return 0
 
 
 def parse_signals(payload: list[dict]) -> dict[str, Signal]:

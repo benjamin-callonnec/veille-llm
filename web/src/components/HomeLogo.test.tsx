@@ -46,5 +46,6 @@ test("H is left alone when typing or with a modifier", () => {
   fireEvent.keyDown(window, { key: "h", metaKey: true });
   fireEvent.keyDown(window, { key: "h", altKey: true });
   fireEvent.keyDown(window, { key: "x" });
+  fireEvent.keyDown(window, { key: "h", repeat: true }); // a held key is one press
   expect(count()).toBe(0);
 });

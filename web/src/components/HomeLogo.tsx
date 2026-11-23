@@ -10,9 +10,8 @@ export function HomeLogo() {
   const link = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== "h" || e.altKey || e.ctrlKey || e.metaKey || isTyping(e.target)) {
-        return;
-      }
+      const other = e.altKey || e.ctrlKey || e.metaKey || e.repeat || e.defaultPrevented;
+      if (e.key.toLowerCase() !== "h" || other || isTyping(e.target)) return;
       link.current?.click();
     };
     window.addEventListener("keydown", onKey);

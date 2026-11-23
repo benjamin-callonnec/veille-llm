@@ -66,7 +66,7 @@ function parseItem(raw: unknown): Item | null {
     authors: Array.isArray(r.authors) ? r.authors.filter(isStr) : [],
     published: r.published,
     upvotes: isNum(r.upvotes) ? r.upvotes : 0,
-    github_stars: isNum(r.github_stars) ? r.github_stars : 0,
+    github_stars: isNum(r.github_stars) ? Math.max(0, r.github_stars) : 0,
     score: Math.min(10, Math.max(0, r.score)),
     type: r.type as ItemType,
     category: r.category,

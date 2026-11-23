@@ -46,6 +46,15 @@ describe("parseCatalogue", () => {
     });
     expect(cat.items.map((i) => i.github_stars)).toEqual([0, 0, 12]);
   });
+  test("a negative github_stars is clamped to 0 so the trending sort stays consistent", () => {
+    const cat = parseCatalogue({
+      generated_at: "2026-11-22T00:00:00Z",
+      window_days: 30,
+      categories: [],
+      items: [{ ...item({ id: "neg" }), github_stars: -5 }],
+    });
+    expect(cat.items[0]?.github_stars).toBe(0);
+  });
 
   test("keeps well-formed items and defaults a missing brief to empty", () => {
     const { brief: _drop, ...old } = item({ id: "old" });
