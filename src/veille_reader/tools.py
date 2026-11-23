@@ -101,8 +101,10 @@ class PaperTools:
             return self._section(title or "")
         if kind == "references":
             return self._references()
+        if number is None:
+            raise ToolError(f"kind '{kind}' needs number (the figure or table number)")
         label = "Figure" if kind == "figure" else "Table"
-        return self._caption(label, _int(number, "number") if number is not None else 0)
+        return self._caption(label, _int(number, "number"))
 
     def _need_text(self) -> None:
         if not self.paper.has_text:

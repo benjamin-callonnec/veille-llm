@@ -124,6 +124,12 @@ def test_references_start_at_the_references_heading():
     assert "page 9" in out and "[2] Bahdanau" in out and "page 8" not in out
 
 
+@pytest.mark.parametrize("kind", ["figure", "table"])
+def test_a_figure_or_table_without_a_number_is_an_error_not_figure_0(kind):
+    with pytest.raises(ToolError, match=f"kind '{kind}' needs number"):
+        make().load_artifact(kind)
+
+
 def test_a_figure_and_a_table_are_found_by_their_caption():
     tools = make()
     fig = tools.load_artifact("figure", number=1)
