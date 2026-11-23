@@ -31,7 +31,8 @@ export type IconName =
   | "sparkle"
   | "report"
   | "expand"
-  | "external";
+  | "external"
+  | "minus";
 
 /** One line style for every icon of the app: 24px grid, round caps, drawn in the current colour. */
 const SHAPES: Record<IconName, ReactNode> = {
@@ -116,6 +117,7 @@ const SHAPES: Record<IconName, ReactNode> = {
     </>
   ),
   trace: <path d="M3 12h4l3-7 4 14 3-7h4" />,
+  minus: <path d="M5 12h14" />,
   external: (
     <>
       <path d="M14 4h6v6M20 4l-9 9" />

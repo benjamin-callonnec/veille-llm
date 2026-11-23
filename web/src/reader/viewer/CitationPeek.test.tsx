@@ -130,8 +130,8 @@ test("the whole page is drawn at the width of the card, not a cut of it", async 
   const { props } = setup({ page: 2, quote: "Text of page 2" });
   const source = props.source as FakeSource;
   await waitFor(() => expect(source.renders).toHaveLength(1));
-  // a 600pt wide page in a 420px card
-  expect(source.renders[0]?.scale).toBeCloseTo(0.7);
+  // a 600pt wide page in a 640px card: the text stays readable
+  expect(source.renders[0]?.scale).toBeCloseTo(640 / 600);
 });
 
 test("the passage is highlighted where it is on the page, in percent of the page", async () => {
@@ -194,4 +194,113 @@ test("Open in the PDF is an icon: no text in the button", () => {
   const button = screen.getByRole("button", { name: "Open in the PDF" });
   expect(button.textContent).toBe("");
   expect(button.querySelector("svg")).not.toBeNull();
+});
+
+// --- zoom -----------------------------------------------------------------------------------
+
+const scales = (source: FakeSource) => source.renders.map((r) => r.scale);
+
+test("zoom in and zoom out draw the page again, bigger or smaller", async () => {
+  const { props } = setup({ page: 2, quote: "Text of page 2" });
+  const source = props.source as FakeSource;
+  await waitFor(() => expect(source.renders).toHaveLength(1));
+  expect(screen.getByText("100%")).toBeTruthy();
+  await userEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+  await waitFor(() => expect(source.renders).toHaveLength(2));
+  expect(scales(source)[1]).toBeCloseTo((640 / 600) * 1.25);
+  expect(screen.getByText("125%")).toBeTruthy();
+  await userEvent.click(screen.getByRole("button", { name: "Zoom out" }));
+  await userEvent.click(screen.getByRole("button", { name: "Zoom out" }));
+  await waitFor(() => expect(source.renders).toHaveLength(4));
+  expect(scales(source)[3]).toBeCloseTo((640 / 600) * 0.75);
+});
+
+test("the zoom is bounded, and the buttons say so", async () => {
+  const { props } = setup({ page: 2 });
+  const source = props.source as FakeSource;
+  await waitFor(() => expect(source.renders).toHaveLength(1));
+  const out = screen.getByRole("button", { name: "Zoom out" }) as HTMLButtonElement;
+  const inn = screen.getByRole("button", { name: "Zoom in" }) as HTMLButtonElement;
+  for (let i = 0; i < 20; i++) if (!inn.disabled) await userEvent.click(inn);
+  expect(inn.disabled).toBe(true);
+  expect(screen.getByText("300%")).toBeTruthy();
+  for (let i = 0; i < 20; i++) if (!out.disabled) await userEvent.click(out);
+  expect(out.disabled).toBe(true);
+  expect(screen.getByText("50%")).toBeTruthy();
+});
+
+test("the zoom is kept for the next citation, and the passage is still highlighted after zooming", async () => {
+  const { view, props } = setup({ page: 2, quote: "Text of page 2" });
+  await waitFor(() => expect(highlights()).toHaveLength(1));
+  await userEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+  await waitFor(() => expect(screen.getByText("125%")).toBeTruthy());
+  await waitFor(() => expect(highlights()).toHaveLength(1));
+  view.rerender(<CitationPeek {...props} cite={{ page: 3 }} />);
+  await waitFor(() => expect((props.source as FakeSource).renders.at(-1)?.page).toBe(3));
+  expect(screen.getByText("125%")).toBeTruthy();
+});
+
+// --- page navigation ----------------------------------------------------------------------
+
+test("next and previous page draw the neighbour, without the highlight, and come back to it", async () => {
+  const { props } = setup({ page: 2, quote: "Text of page 2" });
+  const source = props.source as FakeSource;
+  await waitFor(() => expect(highlights()).toHaveLength(1));
+  expect(screen.getByText("p.2")).toBeTruthy();
+  expect(screen.getByText("/ 5")).toBeTruthy();
+  await userEvent.click(screen.getByRole("button", { name: "Next page" }));
+  await waitFor(() => expect(source.renders.at(-1)?.page).toBe(3));
+  expect(screen.getByText("p.3")).toBeTruthy();
+  expect(highlights()).toHaveLength(0);
+  expect(status()).toBeNull(); // the passage belongs to page 2, nothing to say here
+  await userEvent.click(screen.getByRole("button", { name: "Previous page" }));
+  await userEvent.click(screen.getByRole("button", { name: "Previous page" }));
+  await waitFor(() => expect(source.renders.at(-1)?.page).toBe(1));
+  await userEvent.click(screen.getByRole("button", { name: "Next page" }));
+  await waitFor(() => expect(highlights()).toHaveLength(1)); // back on page 2
+  expect(screen.getByText("p.2")).toBeTruthy();
+});
+
+test("the first and the last page stop the navigation", async () => {
+  const { props } = setup({ page: 1 });
+  await waitFor(() => expect((props.source as FakeSource).renders).toHaveLength(1));
+  expect(
+    (screen.getByRole("button", { name: "Previous page" }) as HTMLButtonElement).disabled,
+  ).toBe(true);
+  cleanup();
+  const last = setup({ page: 5 });
+  await waitFor(() => expect((last.props.source as FakeSource).renders).toHaveLength(1));
+  expect((screen.getByRole("button", { name: "Next page" }) as HTMLButtonElement).disabled).toBe(
+    true,
+  );
+});
+
+test("the passage-not-located note belongs to the cited page only", async () => {
+  setup({ page: 2, quote: "words that are nowhere on this page" });
+  await waitFor(() => expect(status()).toBe("Passage not located"));
+  await userEvent.click(screen.getByRole("button", { name: "Next page" }));
+  await waitFor(() => expect(status()).toBeNull());
+});
+
+test("a new citation starts again on its own page, keeping the zoom", async () => {
+  const { view, props } = setup({ page: 2, quote: "Text of page 2" });
+  const source = props.source as FakeSource;
+  await waitFor(() => expect(highlights()).toHaveLength(1));
+  await userEvent.click(screen.getByRole("button", { name: "Next page" }));
+  await userEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+  await waitFor(() => expect(screen.getByText("125%")).toBeTruthy());
+  view.rerender(<CitationPeek {...props} cite={{ page: 4 }} />);
+  await waitFor(() => expect(source.renders.at(-1)?.page).toBe(4));
+  expect(screen.getByText("p.4")).toBeTruthy();
+  expect(screen.getByText("125%")).toBeTruthy();
+});
+
+test("without a PDF there is no navigation to offer", () => {
+  setup({ page: 2 }, { source: null });
+  expect((screen.getByRole("button", { name: "Next page" }) as HTMLButtonElement).disabled).toBe(
+    true,
+  );
+  expect(
+    (screen.getByRole("button", { name: "Previous page" }) as HTMLButtonElement).disabled,
+  ).toBe(true);
 });

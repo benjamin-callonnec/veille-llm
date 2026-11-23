@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { parseCite, peekScrollTop } from "./peek";
+import { parseCite, peekScrollLeft, peekScrollTop } from "./peek";
 
 const cite = (veilleCite: unknown) => ({ veilleCite });
 
@@ -75,4 +75,13 @@ test("with several lines the first one counts", () => {
       300,
     ),
   ).toBe(300);
+});
+
+test("horizontally: nothing to scroll at 100%, the passage near the left edge when zoomed", () => {
+  expect(peekScrollLeft(null, 1200, 600)).toBe(0);
+  // a passage starting at 50% of a 1200px sheet, 600px visible: 600 - 60
+  expect(peekScrollLeft([[0.5, 0.2, 0.3, 0.02]], 1200, 600)).toBe(540);
+  expect(peekScrollLeft([[0.02, 0.2, 0.3, 0.02]], 1200, 600)).toBe(0);
+  // the sheet is as narrow as the view: never scroll
+  expect(peekScrollLeft([[0.5, 0.2, 0.3, 0.02]], 600, 600)).toBe(0);
 });

@@ -58,3 +58,17 @@ export function peekScrollTop(
   if (!rects || rects.length === 0) return 0;
   return scrollTargetTop(0, firstRectTop(rects) * sheetHeight, viewportHeight);
 }
+
+/**
+ * Where to scroll sideways when the page is zoomed wider than the card: the passage starts near the
+ * left edge of the visible area; 0 when nothing was located or the whole page fits.
+ */
+export function peekScrollLeft(
+  rects: Rect[] | null,
+  sheetWidth: number,
+  viewportWidth: number,
+): number {
+  if (!rects || rects.length === 0 || sheetWidth <= viewportWidth) return 0;
+  const left = Math.min(...rects.map((r) => r[0])) * sheetWidth;
+  return Math.max(0, left - viewportWidth * 0.1);
+}

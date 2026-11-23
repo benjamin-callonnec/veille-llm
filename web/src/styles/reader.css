@@ -539,7 +539,7 @@
   z-index: 4;
   display: flex;
   flex-direction: column;
-  width: min(420px, calc(100% - 24px));
+  width: min(640px, calc(100% - 24px));
   max-height: calc(100% - 24px);
   overflow: hidden;
   background: var(--composer);
@@ -555,6 +555,15 @@
   border-bottom: 1px solid var(--border);
 }
 .citation-peek header strong {
+  margin: 0 2px;
+}
+.peek-total,
+.peek-zoom {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.peek-spacer {
   flex: 1;
 }
 .peek-scroll {
