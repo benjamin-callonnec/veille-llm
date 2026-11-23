@@ -114,10 +114,19 @@ def _section_of(
 
 
 def verify_citations(
-    pages: list[str], outline: list[tuple[str, int]], citations: list[Citation]
+    pages: list[str],
+    outline: list[tuple[str, int]],
+    citations: list[Citation],
+    flat: list[str] | None = None,
 ) -> list[dict]:
-    """One verdict per distinct citation (verified, wrong_page, unverified, page_only, ...)."""
-    flat = [normalise(p) for p in pages]
+    """One verdict per distinct citation (verified, wrong_page, unverified, page_only, ...).
+
+    `flat` is the normalised text of each page when the caller already has it (PaperText caches it).
+    """
+    if not citations:
+        return []
+    if flat is None:
+        flat = [normalise(p) for p in pages]
     seen: set[tuple[int, str | None]] = set()
     verdicts: list[dict] = []
     for citation in citations:
