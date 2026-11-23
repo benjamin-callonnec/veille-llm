@@ -49,7 +49,7 @@ test("the quiz icon makes a quiz in the current conversation and shows its card"
   render(<Host chatApi={chatApi} quizApi={quizApi} />);
   await screen.findByRole("button", { name: "Quiz me" });
   await userEvent.click(screen.getByRole("button", { name: "Quiz me" }));
-  expect(quizApi.start).toHaveBeenCalledWith("a1", 1);
+  expect(quizApi.start).toHaveBeenCalledWith("a1", 1, "", "any");
   expect(await screen.findByText("Which one?")).toBeTruthy();
 });
 
@@ -57,7 +57,7 @@ test("without a conversation the quiz icon creates one first", async () => {
   const { chatApi, quizApi } = apis(false);
   render(<Host chatApi={chatApi} quizApi={quizApi} />);
   await userEvent.click(await screen.findByRole("button", { name: "Quiz me" }));
-  await waitFor(() => expect(quizApi.start).toHaveBeenCalledWith("a1", 1));
+  await waitFor(() => expect(quizApi.start).toHaveBeenCalledWith("a1", 1, "", "any"));
   expect(chatApi.createConversation).toHaveBeenCalledOnce();
   expect(await screen.findByText("Which one?")).toBeTruthy();
 });

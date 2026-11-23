@@ -49,7 +49,7 @@ export function ChatPane({
     try {
       const id = chat.current?.id ?? (await chat.create());
       if (id === null) return;
-      await quizApi.start(itemId, id);
+      await quizApi.start(itemId, id, "", "any");
       await chat.refresh();
     } catch {
       setQuizError(true);

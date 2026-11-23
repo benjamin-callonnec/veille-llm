@@ -283,6 +283,5 @@ test("a quiz card answers for the paper of the chat even when the pane got no it
   }));
   render(<QuizHost api={api} quizApi={{ start: vi.fn(), answer } as never} />);
   await userEvent.click(await screen.findByRole("button", { name: /a1x/ }));
-  await userEvent.click(screen.getByRole("button", { name: "Check answer" }));
   await waitFor(() => expect(answer).toHaveBeenCalledWith("a1", 9, { choice: 0 }));
 });

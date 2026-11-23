@@ -15,7 +15,10 @@ export type IconName =
   | "compose"
   | "close"
   | "quiz"
-  | "highlighter";
+  | "highlighter"
+  | "arrow-right"
+  | "arrow-up"
+  | "arrow-down";
 
 /** One line style for every icon of the app: 24px grid, round caps, drawn in the current colour. */
 const SHAPES: Record<IconName, ReactNode> = {
@@ -25,6 +28,9 @@ const SHAPES: Record<IconName, ReactNode> = {
       <path d="M9 10l-4 4 4 4" />
     </>
   ),
+  "arrow-right": <path d="M5 12h14M13 6l6 6-6 6" />,
+  "arrow-up": <path d="M12 19V5M6 11l6-6 6 6" />,
+  "arrow-down": <path d="M12 5v14M6 13l6 6 6-6" />,
   stop: <rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor" stroke="none" />,
   plus: <path d="M12 5v14M5 12h14" />,
   highlighter: (
