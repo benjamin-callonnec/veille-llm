@@ -42,12 +42,15 @@ def test_pyproject_version_matches_latest_changelog_entry():
     assert section(changelog, version).strip()
 
 
-def test_only_release_daily_and_weekly_have_write_access():
+def test_only_release_skills_daily_and_weekly_have_write_access():
     workflows = ROOT / ".github" / "workflows"
     release = (workflows / "release.yml").read_text()
     assert "contents: write" in release
     assert "branches: [main]" in release
     assert "secrets." not in release.replace("secrets.GITHUB_TOKEN", "")
     for other in workflows.glob("*.yml"):
-        if other.name not in ("release.yml", "daily.yml", "weekly.yml"):  # data branch writers
+        # data branch writers, and skills.yml (publishes the skills zip release, no secret)
+        if other.name not in ("release.yml", "skills.yml", "daily.yml", "weekly.yml"):
             assert "contents: write" not in other.read_text()
+    skills = (workflows / "skills.yml").read_text()
+    assert "secrets." not in skills and "pull_request" not in skills
