@@ -5,6 +5,8 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-23
+
 ### Added
 - Voice (#26): dictate into the composer with a quiet microphone icon (browser speech recognition, push to talk, live phrase, editable result, asked only on click, clear message if blocked) and read answers aloud with a speaker icon, sentence by sentence while they stream, with stop and replay; citations, markdown and code are not spoken.
 - Voice (#26): the answer to a dictated message is read aloud by default (a typed message keeps a silent answer); the speaker icon still stops and replays it.
@@ -21,6 +23,7 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 - Asking again a question that was just refused no longer stores it twice.
 - The 30-note limit is checked and the note inserted in one statement, so two writes cannot exceed it.
 - Cache read and write tokens are kept in the trace.
+- `make reader` checks ports 8765 and 5173 first and names the leftover process; pdf.js and katex are split into their own chunks (no more chunk-size warning).
 
 ## [0.12.0] - 2026-11-23
 
