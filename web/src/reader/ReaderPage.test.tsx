@@ -683,3 +683,29 @@ test("closing the viewer with V and opening it again keeps the page where it was
   fireEvent.keyDown(document.body, { key: "v" }); // a hidden frame gives the focus back to the page
   expect(await screen.findByTitle("Deck")).toBe(frame); // the same frame, not a new one
 });
+
+test("a citation of the report previews the paper, and Open in the PDF goes there", async () => {
+  const meta: ReportMeta = { id: 7, title: "Deck", version: 1, updated_at: "" };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: 7, title: "Deck", version: 1, versions: [], html: "<p>x</p>" }),
+    })),
+  );
+  setup({ reports: async () => [meta] });
+  await screen.findByText("Text of page 1");
+  await userEvent.keyboard("v");
+  await screen.findByTitle("Deck");
+  fireEvent(
+    window,
+    new MessageEvent("message", {
+      data: { veilleCite: { page: 3, quote: "Text of page 3" } },
+      source: (screen.getByTitle("Deck") as HTMLIFrameElement).contentWindow,
+    }),
+  );
+  expect(screen.getByLabelText("Preview of the paper")).toBeTruthy();
+  await userEvent.click(screen.getByRole("button", { name: "Open in the PDF" }));
+  expect(screen.queryByRole("region", { name: "Viewer" })).toBeNull();
+  await waitFor(() => expect((screen.getByLabelText("Page") as HTMLInputElement).value).toBe("3"));
+});

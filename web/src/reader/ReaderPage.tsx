@@ -201,6 +201,10 @@ export function ReaderPage({
     },
     [goTo, itemId, captionsApi],
   );
+  const getCaptions = useCallback(() => {
+    captions.current ??= captionsApi(itemId);
+    return captions.current;
+  }, [captionsApi, itemId]);
   const goToRects = useCallback((p: number, rects?: Rect[]) => goTo(p, { rects }), [goTo]);
 
   const closeBox = () => {
@@ -280,6 +284,12 @@ export function ReaderPage({
       {viewerSeen && (
         <FileViewer
           open={viewerOpen}
+          source={source}
+          captions={getCaptions}
+          onOpenPdf={(c) => {
+            cite(c.page, c.quote, c.label);
+            setViewerOpen(false);
+          }}
           itemId={itemId}
           reports={reports}
           selectedId={reportId ?? reports[0]?.id ?? null}

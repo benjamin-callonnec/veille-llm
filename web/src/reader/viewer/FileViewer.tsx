@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import { Icon, IconButton } from "../../components/Icon";
+import type { PdfSource } from "../pdf/source";
+import type { Caption } from "../structureApi";
+import { CitationPeek } from "./CitationPeek";
+import { type CiteRef, parseCite } from "./peek";
 import { rendererFor } from "./registry";
 import {
   exportUrl,
@@ -19,7 +23,17 @@ interface Props {
   onClose(): void;
   /** A version was restored: the list of reports must be read again. */
   onChanged(): void;
+  /** The paper, to show the passage a citation points at (no PDF: the card says so). */
+  source?: PdfSource | null;
+  /** The figures and tables of the paper, asked for when a citation names one. */
+  captions?: () => Promise<Caption[]>;
+  /** The user wants the real PDF at that citation. */
+  onOpenPdf?: (cite: CiteRef) => void;
 }
+
+const NO_CAPTIONS = async (): Promise<Caption[]> => [];
+// without a PDF the number of pages is unknown: only absurd pages are refused
+const UNKNOWN_PAGES = 9999;
 
 /** The viewer: one report at a time, its versions, export and full screen. HTML for now. */
 export function FileViewer({
@@ -30,10 +44,14 @@ export function FileViewer({
   onSelect,
   onClose,
   onChanged,
+  source = null,
+  captions = NO_CAPTIONS,
+  onOpenPdf,
 }: Props) {
   const [version, setVersion] = useState<number | undefined>(undefined);
   const [view, setView] = useState<ReportView | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [peek, setPeek] = useState<CiteRef | null>(null);
   const current = reports.find((r) => r.id === selectedId);
   const latest = current?.version;
 
@@ -54,12 +72,28 @@ export function FileViewer({
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset on purpose when these change
   useEffect(() => setVersion(undefined), [selectedId, latest]);
 
+  // the preview belongs to what is shown: closing the viewer or changing the version drops it
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on purpose when these change
+  useEffect(() => setPeek(null), [open, selectedId, view?.version]);
+
+  // Escape closes the preview first, then the viewer
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !e.defaultPrevented && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (peek) setPeek(null);
+      else onClose();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, peek]);
+
+  const onFrameKey = (key: string) => (key === "Escape" && peek ? setPeek(null) : onClose());
+  const onFrameCite = (raw: unknown) => {
+    const cite = parseCite(raw, source?.numPages ?? UNKNOWN_PAGES);
+    if (cite === "close") setPeek(null);
+    else if (cite) setPeek(cite);
+  };
 
   const Render = rendererFor("html");
   const shown = view?.version;
@@ -131,13 +165,31 @@ export function FileViewer({
       </header>
       <div className="viewer-body">
         {view && Render ? (
-          <Render content={view.html} title={view.title} active={open} onKey={() => onClose()} />
+          <Render
+            content={view.html}
+            title={view.title}
+            active={open}
+            onKey={onFrameKey}
+            onCite={onFrameCite}
+          />
         ) : (
           <p className="viewer-empty">
             {reports.length === 0
               ? "No report yet. Ask the tutor, for instance /present."
               : "Loading…"}
           </p>
+        )}
+        {peek && (
+          <CitationPeek
+            cite={peek}
+            source={source}
+            captions={captions}
+            onClose={() => setPeek(null)}
+            onOpen={(cite) => {
+              setPeek(null);
+              onOpenPdf?.(cite);
+            }}
+          />
         )}
       </div>
     </section>

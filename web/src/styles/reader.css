@@ -518,6 +518,7 @@
   flex: 1;
   min-height: 0;
   display: flex;
+  position: relative;
 }
 .viewer-frame {
   flex: 1;
@@ -533,11 +534,11 @@
 /* The preview of a citation: a card on the right of the viewer, over the page. */
 .citation-peek {
   position: absolute;
-  top: 56px;
+  top: 12px;
   right: 12px;
   z-index: 4;
   width: min(420px, calc(100% - 24px));
-  max-height: calc(100% - 72px);
+  max-height: calc(100% - 24px);
   overflow: auto;
   background: var(--composer);
   border: 1px solid var(--border);
