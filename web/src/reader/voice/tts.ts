@@ -1,3 +1,6 @@
+import { loadSpeed, RATES } from "../../lib/speechRate";
+import { defaultStorage } from "../../lib/theme";
+
 /** Something that can say one sentence: the browser voice, or later a local engine. */
 export interface Synth {
   /** Say `text`; `done` is called once it ended, with an error code if it failed. */
@@ -85,6 +88,7 @@ export function browserSynth(): Synth | null {
   return {
     speak(text, done) {
       const u = new SpeechSynthesisUtterance(text);
+      u.rate = RATES[loadSpeed(defaultStorage())]; // read at each sentence: a change applies at once
       u.onend = () => done();
       u.onerror = (e) => done(e.error || "synthesis-failed");
       synth.speak(u);
