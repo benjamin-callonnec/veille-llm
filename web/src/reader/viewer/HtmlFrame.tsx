@@ -54,8 +54,11 @@ export function HtmlFrame({
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
       srcDoc={withCsp(content, FRAME_BRIDGE)}
-      // the arrow keys work at once, without a first click into the page
-      onLoad={(e) => e.currentTarget.focus()}
+      // the arrow keys work at once, but a page that reloads behind a hidden viewer or while you
+      // type elsewhere must not take the keyboard
+      onLoad={(e) => {
+        if (active) e.currentTarget.focus();
+      }}
     />
   );
 }

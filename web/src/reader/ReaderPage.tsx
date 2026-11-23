@@ -202,8 +202,14 @@ export function ReaderPage({
     [goTo, itemId, captionsApi],
   );
   const getCaptions = useCallback(() => {
-    captions.current ??= captionsApi(itemId);
-    return captions.current;
+    if (captions.current) return captions.current;
+    const asked = captionsApi(itemId);
+    captions.current = asked;
+    // a failed request is not kept: the next figure citation asks again
+    asked.catch(() => {
+      if (captions.current === asked) captions.current = null;
+    });
+    return asked;
   }, [captionsApi, itemId]);
   const goToRects = useCallback((p: number, rects?: Rect[]) => goTo(p, { rects }), [goTo]);
 

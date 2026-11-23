@@ -431,11 +431,12 @@ async def sdk_runner(request: RunRequest, query: Callable | None = None) -> Asyn
     from claude_agent_sdk import ClaudeAgentOptions
 
     limits = request.agent_limits or AgentLimits()
-    if request.skill is not None:
+    # only the defaults are raised: a limit someone configured is theirs, a skill never overrides it
+    if request.skill is not None and limits == AgentLimits():
         limits = replace(
             limits,
-            max_turns=max(limits.max_turns, SKILL_LIMITS.max_turns),
-            max_message_usd=max(limits.max_message_usd, SKILL_LIMITS.max_message_usd),
+            max_turns=SKILL_LIMITS.max_turns,
+            max_message_usd=SKILL_LIMITS.max_message_usd,
         )
     extra: dict = {}
     if request.paper_tools is not None:

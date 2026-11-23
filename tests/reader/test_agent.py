@@ -613,7 +613,7 @@ def test_a_plain_answer_or_a_skill_the_agent_picks_keeps_the_normal_limits(monke
     assert query.calls[0].options.max_turns == AgentLimits().max_turns
 
 
-def test_a_larger_configured_limit_is_never_lowered_by_a_skill(monkeypatch):
+def test_a_larger_configured_limit_is_kept_by_a_skill(monkeypatch):
     from veille_reader.skills import Skill
 
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
@@ -623,3 +623,15 @@ def test_a_larger_configured_limit_is_never_lowered_by_a_skill(monkeypatch):
     collect(request(paper_tools=paper_tools(), skill=present, agent_limits=big), query)
     assert query.calls[0].options.max_turns == 99
     assert query.calls[0].options.max_budget_usd == 5.0
+
+
+def test_a_limit_configured_below_the_skill_allowance_is_respected(monkeypatch):
+    from veille_reader.skills import Skill
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    present = Skill("present", "Make slides.", "Ask then write.", ())
+    tight = AgentLimits(max_turns=5, max_message_usd=0.10)
+    query = fake_query(ResultMessage())
+    collect(request(paper_tools=paper_tools(), skill=present, agent_limits=tight), query)
+    assert query.calls[0].options.max_turns == 5
+    assert query.calls[0].options.max_budget_usd == 0.10

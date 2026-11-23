@@ -159,3 +159,31 @@ test("too little text around a citation sends none", async () => {
   await flush();
   expect(seen).toEqual([{ veilleCite: { page: 4 } }]);
 });
+
+test("citations added to the page after it loaded are wrapped too, without looping on the old ones", async () => {
+  const before = document.querySelectorAll(".veille-cite").length;
+  const late = document.createElement("p");
+  late.id = "late";
+  late.textContent = 'Built later by the report script [p.12 "a quote written after the load"]';
+  document.body.appendChild(late);
+  await new Promise((done) => setTimeout(done, 250));
+  expect(late.querySelectorAll(".veille-cite")).toHaveLength(1);
+  expect(chip('[p.12 "a quote written after the load"]')?.dataset.q).toBe(
+    "a quote written after the load",
+  );
+  // the earlier chips were not wrapped again (a chip inside a chip would loop for ever)
+  expect(document.querySelectorAll(".veille-cite")).toHaveLength(before + 1);
+  expect(document.querySelectorAll(".veille-cite .veille-cite")).toHaveLength(0);
+  seen.length = 0;
+  chip('[p.12 "a quote written after the load"]')?.click();
+  await flush();
+  expect(seen).toEqual([
+    {
+      veilleCite: {
+        page: 12,
+        quote: "a quote written after the load",
+        context: "Built later by the report script",
+      },
+    },
+  ]);
+});

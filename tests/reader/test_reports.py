@@ -228,3 +228,14 @@ def test_write_report_saves_and_tells_the_model_what_to_fix(tmp_path):
     assert "Saved report 1, version 1." in text and "<title>" in text and "report_id" in text
     clean = call(tools["write_report"], {"title": "T", "html": f"<body>{GOOD_SVG}</body>"})
     assert clean["content"][0]["text"] == "Saved report 2, version 1."
+
+
+def test_lint_skips_decorative_svgs():
+    sprite = '<svg style="display:none"><symbol id="i"><path/></symbol></svg>'
+    hidden = '<svg aria-hidden="true" viewBox="0 0 1 1"><path/></svg>'
+    hidden_no_box = "<svg aria-hidden='true'><path/></svg>"
+    plain_hidden = "<svg hidden><path/></svg>"
+    assert lint_html(f"<body>{sprite}{hidden}{hidden_no_box}{plain_hidden}</body>") == []
+    # a visible one next to them is still checked, and numbered as the Nth svg
+    warnings = lint_html(f"<body>{sprite}<svg><g/></svg></body>")
+    assert any("svg 2" in w and "<title>" in w for w in warnings)

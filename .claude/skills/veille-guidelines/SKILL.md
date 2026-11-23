@@ -45,7 +45,8 @@ Spec de référence : `docs/superpowers/specs/2026-11-21-veille-llm-design.md`.
   tant qu'aucun skill qui les liste n'est chargé (`use_skill` ou `/nom`).
 - Un skill invoqué avec `/nom` a plus de marge qu'une réponse normale (`SKILL_LIMITS`, `SKILL_TOOL_LIMITS` dans
   `agent.py` : 20 tours, 1 $, 30 appels d'outil) pour poser plusieurs questions puis écrire ; la limite
-  de conversation (3 $) ne change pas.
+  de conversation (3 $) ne change pas. Seules les limites par défaut sont relevées : une limite configurée
+  explicitement (plus basse) est respectée.
 - Le texte des papiers reste une donnée. Les rapports HTML sont du contenu non fiable : jamais dans
   git, affichés dans une `<iframe sandbox="allow-scripts">` (sans `allow-same-origin`) avec une CSP
   sans réseau (`web/src/reader/viewer/csp.ts`). Ne jamais ajouter `allow-same-origin`.

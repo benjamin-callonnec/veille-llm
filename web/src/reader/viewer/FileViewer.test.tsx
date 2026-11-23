@@ -237,3 +237,28 @@ test("Open in the PDF hands the citation over and drops the card", async () => {
   expect(h.onOpenPdf).toHaveBeenCalledWith({ page: 4, quote: "an exact quote" });
   expect(preview()).toBeNull();
 });
+
+test("a hidden viewer ignores what its page says: no preview, no key", async () => {
+  const props = {
+    itemId: "a",
+    reports: metas,
+    selectedId: 1,
+    onSelect: vi.fn(),
+    onClose: vi.fn(),
+    onChanged: vi.fn(),
+  };
+  const source = new FakeSource({ numPages: 5 });
+  const { rerender } = render(<FileViewer {...props} source={source} open />);
+  const frame = (await screen.findByTitle("Deck")) as HTMLIFrameElement;
+  rerender(<FileViewer {...props} source={source} open={false} />);
+  const tell = (data: unknown) =>
+    fireEvent(window, new MessageEvent("message", { data, source: frame.contentWindow }));
+  tell({ veilleCite: { page: 4 } });
+  tell({ veilleKey: "v" });
+  tell({ veilleKey: "Escape" });
+  expect(document.querySelector(".citation-peek")).toBeNull();
+  expect(props.onClose).not.toHaveBeenCalled();
+  rerender(<FileViewer {...props} source={source} open />); // shown again: the page is heard again
+  tell({ veilleCite: { page: 4 } });
+  expect(preview()).not.toBeNull();
+});

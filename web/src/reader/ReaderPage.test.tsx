@@ -709,3 +709,35 @@ test("a citation of the report previews the paper, and Open in the PDF goes ther
   expect(screen.queryByRole("region", { name: "Viewer" })).toBeNull();
   await waitFor(() => expect((screen.getByLabelText("Page") as HTMLInputElement).value).toBe("3"));
 });
+
+test("a figure citation still works after the captions failed once", async () => {
+  const meta: ReportMeta = { id: 7, title: "Deck", version: 1, updated_at: "" };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: 7, title: "Deck", version: 1, versions: [], html: "<p>x</p>" }),
+    })),
+  );
+  const captionsApi = vi
+    .fn<(item: string) => Promise<Caption[]>>()
+    .mockRejectedValueOnce(new Error("hiccup"))
+    .mockResolvedValue([{ kind: "figure", number: "3", page: 2, rect: [0.1, 0.4, 0.5, 0.03] }]);
+  setup({ reports: async () => [meta], captionsApi });
+  await screen.findByText("Text of page 1");
+  await userEvent.keyboard("v");
+  await screen.findByTitle("Deck");
+  const cite = (number: string) =>
+    fireEvent(
+      window,
+      new MessageEvent("message", {
+        data: { veilleCite: { page: 2, kind: "figure", number } },
+        source: (screen.getByTitle("Deck") as HTMLIFrameElement).contentWindow,
+      }),
+    );
+  cite("2"); // the captions fail: the card says it could not be drawn
+  await screen.findByText("The preview could not be drawn");
+  cite("3"); // asked again, not stuck on the failure
+  await waitFor(() => expect(captionsApi).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.queryByText("The preview could not be drawn")).toBeNull());
+});

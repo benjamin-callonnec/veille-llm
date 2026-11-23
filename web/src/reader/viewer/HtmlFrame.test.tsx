@@ -58,3 +58,11 @@ test("a citation message of the page reaches onCite, raw; other messages do not"
   tell(frame.contentWindow, "x");
   expect(onCite.mock.calls).toEqual([[{ veilleCite: { page: 4 } }], [{ veilleCite: null }]]);
 });
+
+test("a page that reloads while the viewer is not shown does not take the keyboard", () => {
+  render(<HtmlFrame content="<p>hi</p>" title="Deck" active={false} />);
+  const frame = screen.getByTitle("Deck") as HTMLIFrameElement;
+  const focus = vi.spyOn(frame, "focus");
+  fireEvent.load(frame);
+  expect(focus).not.toHaveBeenCalled();
+});

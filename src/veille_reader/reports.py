@@ -38,6 +38,9 @@ def check_html(html: str) -> None:
 
 
 _SVG = re.compile(r"<svg\b([^>]*)>(.*?)</svg>", re.I | re.S)
+_DECORATIVE = re.compile(
+    r"""aria-hidden\s*=\s*["']?true|display\s*:\s*none|(?<![\w-])hidden(?![\w-])""", re.I
+)
 _IMG = re.compile(r"<img\b[^>]*>", re.I)
 MAX_WARNINGS = 5
 
@@ -46,6 +49,8 @@ def lint_html(html: str) -> list[str]:
     """What the model should fix before the report is good (the report is saved anyway)."""
     warnings = []
     for n, (attrs, body) in enumerate(_SVG.findall(html), start=1):
+        if _DECORATIVE.search(attrs):
+            continue  # an icon sprite or a hidden icon: nothing to name, nothing to scale
         if not re.search(r"<title\b", body, re.I):
             warnings.append(f"svg {n} has no <title> (give it a title that states what it shows)")
         if not re.search(r"\bviewBox\s*=", attrs, re.I):

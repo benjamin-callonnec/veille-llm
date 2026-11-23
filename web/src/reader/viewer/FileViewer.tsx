@@ -88,8 +88,14 @@ export function FileViewer({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose, peek]);
 
-  const onFrameKey = (key: string) => (key === "Escape" && peek ? setPeek(null) : onClose());
+  // a hidden viewer still runs its page, but what the page says is not heard until it is shown
+  const onFrameKey = (key: string) => {
+    if (!open) return;
+    if (key === "Escape" && peek) setPeek(null);
+    else onClose();
+  };
   const onFrameCite = (raw: unknown) => {
+    if (!open) return;
     const cite = parseCite(raw, source?.numPages ?? UNKNOWN_PAGES);
     if (cite === "close") setPeek(null);
     else if (cite) setPeek(cite);
