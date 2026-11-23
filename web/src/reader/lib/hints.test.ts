@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { FIRST_HINT, idleHint, recoAt } from "./hints";
+import { FIRST_HINT, idleHint, recoAt, shuffledOrder } from "./hints";
 import { type Available, TIPS } from "./tips";
 
 const none: Available = { skills: false, reports: false, dictation: false };
@@ -53,4 +53,42 @@ test("recommendations come one after the other and wrap; none means nothing to s
     "Second?",
   ]);
   expect(recoAt(0, [])).toBeNull();
+});
+
+// a small seeded generator: the same seed always gives the same numbers
+const seeded = (seed: number) => () => {
+  seed = (seed * 1664525 + 1013904223) % 4294967296;
+  return seed / 4294967296;
+};
+
+test("a shuffled order is a permutation of the tips, never a loss or a duplicate", () => {
+  for (const seed of [1, 2, 3, 99]) {
+    const order = shuffledOrder(TIPS.length, seeded(seed));
+    expect([...order].sort((a, b) => a - b)).toEqual(TIPS.map((_, i) => i));
+  }
+  expect(shuffledOrder(0)).toEqual([]);
+  expect(shuffledOrder(1)).toEqual([0]);
+});
+
+test("different draws give different orders, the same draw the same order", () => {
+  const a = shuffledOrder(TIPS.length, seeded(1));
+  const b = shuffledOrder(TIPS.length, seeded(2));
+  expect(a).not.toEqual(b);
+  expect(shuffledOrder(TIPS.length, seeded(1))).toEqual(a);
+  expect(a).not.toEqual(TIPS.map((_, i) => i)); // not the written order
+});
+
+test("the sequence follows the order it is given, after the invitation", () => {
+  const order = TIPS.map((_, i) => i).reverse();
+  const usable = order.map((i) => TIPS[i]).filter((t) => t && !t.needs);
+  expect(idleHint(0, none, order)).toBe(FIRST_HINT);
+  expect(idleHint(1, none, order)).toBe(usable[0]?.text);
+  expect(idleHint(2, none, order)).toBe(usable[1]?.text);
+});
+
+test("an order that skips a tip about a missing feature still fills every position", () => {
+  const order = shuffledOrder(TIPS.length, seeded(5));
+  const length = 1 + TIPS.filter((t) => !t.needs).length;
+  const seen = new Set(Array.from({ length }, (_, n) => idleHint(n, none, order)));
+  expect(seen.size).toBe(length); // no gap, no repeat in one round
 });

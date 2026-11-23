@@ -411,6 +411,7 @@ test("Enter on an exact skill name sends it at once", async () => {
 
 import { act } from "@testing-library/react";
 import { FIRST_HINT, idleHint } from "../lib/hints";
+import { TIPS } from "../lib/tips";
 import { HINT_FADE_MS, HINT_INTERVAL_MS } from "./useHint";
 
 const placeholder = () => box().getAttribute("placeholder");
@@ -427,10 +428,13 @@ const stubMotion = (reduce: boolean) =>
     removeEventListener() {},
   }));
 const have = { skills: true, reports: false, dictation: false };
+// Math.random at 0.99 never swaps in the shuffle: the tips keep their written order
+const writtenOrder = () => vi.spyOn(Math, "random").mockReturnValue(0.99);
 
 test("with no recommendation the composer opens on the invitation, then shows the tips", () => {
   vi.useFakeTimers();
   stubMotion(false);
+  writtenOrder();
   setup({ skills: SKILLS, speech: null });
   expect(placeholder()).toBe(FIRST_HINT);
   next();
@@ -516,6 +520,7 @@ test("nothing rotates while you type, while it answers, or with reduced motion",
 test("tips about reports and dictation show only when they exist", () => {
   vi.useFakeTimers();
   stubMotion(false);
+  writtenOrder();
   setup({ hasReports: true, speech: null });
   const seen: string[] = [];
   for (let i = 0; i < 15; i++) {
@@ -525,6 +530,39 @@ test("tips about reports and dictation show only when they exist", () => {
   expect(seen.some((t) => t.includes("reports"))).toBe(true);
   expect(seen.some((t) => t.includes("microphone"))).toBe(false); // no speech engine here
   expect(seen.some((t) => t.includes("Type / for commands"))).toBe(false); // no skills here
+  vi.useRealTimers();
+});
+
+test("the tips are not always in the same order: each opening, and each round, is drawn again", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  const random = vi.spyOn(Math, "random").mockReturnValue(0.99); // written order
+  const first = setup({ speech: null });
+  next();
+  const written = placeholder();
+  first.view.unmount();
+  random.mockReturnValue(0); // another draw: another order
+  const second = setup({ speech: null });
+  next();
+  const drawn = placeholder();
+  expect(drawn).not.toBe(written);
+  second.view.unmount();
+  vi.useRealTimers();
+});
+
+test("a new round of tips is drawn again when the last one is done", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  const random = vi.spyOn(Math, "random").mockReturnValue(0.99); // the first round: written order
+  setup({ speech: null });
+  next();
+  const firstRound = placeholder();
+  const roundLength = 1 + TIPS.filter((t) => !t.needs).length;
+  random.mockReturnValue(0); // the next round is drawn with another draw
+  for (let i = 1; i < roundLength; i++) next(); // the round is over: the invitation is back
+  expect(placeholder()).toBe(FIRST_HINT);
+  next();
+  expect(placeholder()).not.toBe(firstRound);
   vi.useRealTimers();
 });
 
