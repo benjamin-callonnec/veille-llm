@@ -18,7 +18,7 @@
 - Pas d'aperçu dans l'export ; pas de rendu serveur ; les puces de citation du chat ne changent pas.
 - Tests sans réseau ni vrai PDF : `FakeSource` (`web/src/reader/pdf/fakeSource.ts`), jsdom pour le pont, test pur pour `cropFor`. Le canvas de jsdom n'a pas de contexte 2D : le code teste `getContext("2d")` et ne dessine rien quand il est nul.
 - TDD ; après chaque tâche, seulement les tests des fichiers touchés ; suite complète (`make check`) une fois à la fin ; `pre-commit run --files <fichiers>` sur les fichiers touchés ; commits sur `develop`, `type(scope): sujet (#43)`.
-- Précision de la spec : la mention « Passage non localisé » n'apparaît que si un extrait ou une figure a été demandé et introuvable ; une citation `[p.N]` seule montre le haut de la page sans mention.
+- Précision de la spec : la mention « Passage non localisé » n'apparaît que si un extrait ou une figure a été demandé et introuvable ; une citation `[p.N]` seule montre le haut de la page avec la mention discrète « Page only: no passage was cited » (ajoutée après coup : sans elle, l'absence de surlignage passait pour un défaut).
 
 ## Review Focus
 

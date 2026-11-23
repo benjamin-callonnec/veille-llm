@@ -53,10 +53,10 @@ test("an extract that is not on the page says so, and shows the page", async () 
   expect((props.source as FakeSource).renders[0]?.page).toBe(2);
 });
 
-test("a page alone shows its top without saying anything", async () => {
+test("a page alone shows its top and says that no passage was cited", async () => {
   const { props } = setup({ page: 3 });
   await waitFor(() => expect((props.source as FakeSource).renders).toHaveLength(1));
-  expect(status()).toBeNull();
+  await waitFor(() => expect(status()).toBe("Page only: no passage was cited"));
 });
 
 test("a figure found in the captions is drawn, on the page where it is", async () => {
@@ -110,7 +110,7 @@ test("a new citation cancels the render in progress", async () => {
   expect(source.renders[0]?.signal?.aborted).toBe(true);
   release();
   await waitFor(() => expect(screen.getByText("p.2")).toBeTruthy());
-  expect(status()).toBeNull();
+  expect(status()).toBe("Page only: no passage was cited"); // page 2 was cited without a passage
 });
 
 test("Open in the PDF and the close button call back with the citation", async () => {
@@ -159,6 +159,13 @@ test("nothing is highlighted when the passage is not located, or for a page alon
   const { props } = setup({ page: 3 });
   await waitFor(() => expect((props.source as FakeSource).renders).toHaveLength(1));
   expect(highlights()).toHaveLength(0);
+});
+
+test("the page-only note belongs to the cited page, not to the neighbours", async () => {
+  setup({ page: 2 });
+  await waitFor(() => expect(status()).toBe("Page only: no passage was cited"));
+  await userEvent.click(screen.getByRole("button", { name: "Next page" }));
+  await waitFor(() => expect(status()).toBeNull());
 });
 
 test("the page is scrolled to the passage once it is drawn", async () => {

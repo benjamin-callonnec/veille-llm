@@ -115,6 +115,7 @@ export function CitationPeek({ cite, source, captions, onOpen, onClose }: Props)
 
   const lastPage = source?.numPages ?? 0;
   const noteMissing = phase === "ready" && onCitedPage && located.asked && !located.rects;
+  const pageOnly = phase === "ready" && onCitedPage && !located.asked;
   const message =
     phase === "nopdf"
       ? "No PDF for this paper"
@@ -122,7 +123,9 @@ export function CitationPeek({ cite, source, captions, onOpen, onClose }: Props)
         ? "The preview could not be drawn"
         : noteMissing
           ? "Passage not located"
-          : null;
+          : pageOnly
+            ? "Page only: no passage was cited"
+            : null;
   const rects = onCitedPage && phase === "ready" ? (located.rects ?? []) : [];
   return (
     <aside className="citation-peek" aria-label="Preview of the paper">
