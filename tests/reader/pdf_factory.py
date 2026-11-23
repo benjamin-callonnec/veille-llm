@@ -5,8 +5,14 @@ def _escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
-def make_pdf(pages: list[str], outline: list[tuple[str, int]] | None = None) -> bytes:
-    """`pages` are texts (lines split on newlines); `outline` is [(title, 1-based page)]."""
+def make_pdf(
+    pages: list[str],
+    outline: list[tuple[str, int]] | None = None,
+    sizes: dict[str, int] | None = None,
+) -> bytes:
+    """`pages` are texts (lines split on newlines); `outline` is [(title, 1-based page)];
+    `sizes` maps a line of text to its font size (12 for any other line)."""
+    sizes = sizes or {}
     count = len(pages)
     page_ids = [4 + 2 * i for i in range(count)]
     content_ids = [5 + 2 * i for i in range(count)]
@@ -25,7 +31,10 @@ def make_pdf(pages: list[str], outline: list[tuple[str, int]] | None = None) -> 
     for i, text in enumerate(pages):
         lines = text.split("\n") if text else []
         stream = "BT /F1 12 Tf 72 720 Td 16 TL " + " T* ".join(
-            f"({_escape(line)}) Tj" for line in lines
+            f"/F1 {sizes[line]} Tf ({_escape(line)}) Tj /F1 12 Tf"
+            if line in sizes
+            else f"({_escape(line)}) Tj"
+            for line in lines
         )
         stream += " ET" if lines else "BT ET"
         bodies[page_ids[i]] = (
