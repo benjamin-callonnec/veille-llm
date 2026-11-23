@@ -69,3 +69,42 @@ export function sentencesFrom(
   }
   return { sentences, next: cursor };
 }
+
+/**
+ * The spoken text of an answer that may still grow, cut where a markdown construct is still open
+ * (a link, an image, inline math or code): when it closes, stripping it rewrites text that was
+ * already counted, which would shift the reading cursor. Once `final`, everything is spoken.
+ */
+export function stableSpokenText(markdown: string, final: boolean): string {
+  if (final) return spokenText(markdown);
+  const open = openConstruct(markdown);
+  return spokenText(open < 0 ? markdown : markdown.slice(0, open));
+}
+
+/** Where the earliest still unfinished link, image, math or inline code begins, or -1. */
+function openConstruct(raw: string): number {
+  // what sits inside a closed fence is not markdown: only look after the last fence
+  const fences = [...raw.matchAll(/```/g)];
+  if (fences.length % 2 === 1) return -1; // inside code: spokenText already drops it
+  const from = fences.length ? (fences[fences.length - 1]?.index ?? 0) + 3 : 0;
+  const tail = raw.slice(from);
+  const found: number[] = [];
+  const link = /!?\[[^\]]*(?:\](?:\([^)]*)?)?$/.exec(tail);
+  if (link) found.push(link.index);
+  for (const mark of ["$", "`"]) {
+    const at = unmatched(tail, mark);
+    if (at >= 0) found.push(at);
+  }
+  return found.length ? from + Math.min(...found) : -1;
+}
+
+/** The last `mark` of an odd count (its partner has not arrived), or -1. */
+function unmatched(text: string, mark: string): number {
+  let last = -1;
+  let count = 0;
+  for (let i = text.indexOf(mark); i >= 0; i = text.indexOf(mark, i + 1)) {
+    count++;
+    last = i;
+  }
+  return count % 2 === 1 ? last : -1;
+}

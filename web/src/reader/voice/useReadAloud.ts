@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { sentencesFrom, spokenText } from "./spoken";
+import { sentencesFrom, stableSpokenText } from "./spoken";
 import { browserSynth, claimVoice, releaseVoice, type Synth, TtsQueue } from "./tts";
 
 let shared: Synth | null | undefined;
@@ -33,7 +33,7 @@ export function useReadAloud(text: string, streaming: boolean, synth: Synth | nu
     (value: string, live: boolean) => {
       const q = queue.current;
       if (!q) return;
-      const spoken = spokenText(value);
+      const spoken = stableSpokenText(value, !live);
       const { sentences, next } = sentencesFrom(spoken, cursor.current, !live);
       cursor.current = next;
       for (const s of sentences) q.enqueue(s);
