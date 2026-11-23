@@ -18,7 +18,8 @@ You build a presentation of the open paper as one self-contained HTML file.
    comes from the paper. Never invent data. Cite every claim on its slide so the reader can check it
    in one click: [p.N "exact quote"] with 3 to 15 words copied word for word from the page as the
    tool returned it; for a figure or a table, [p.N Figure K] or [p.N Table K] with the number the
-   paper gives it; [p.N] alone only when neither fits. Never invent a page or a quote.
+   paper gives it; [p.N] alone only when neither fits. The viewer shows only [p.N] and keeps the quote to find the
+   passage, so the quote costs the slide nothing. Never invent a page or a quote.
 3. Include at least one chart or diagram without being asked: a diagram of the method, the
    architecture or the pipeline (it almost always exists), and a chart of the key results when the
    paper gives numbers. Leave them out only if the paper has nothing to draw, and then say why in

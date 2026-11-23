@@ -20,7 +20,8 @@ export function withCsp(html: string, head = ""): string {
  * app nothing else (never HTML: a page, an extract, a figure, the short text around a citation, or a key):
  * - the page has the keyboard focus, so V and Escape never reach the app: they are passed up
  *   (not in a field, not with a modifier: Cmd+V is a paste);
- * - the citations `[p.4]`, `[p.4 "extract"]`, `[p.4 Figure 2]` of the text become buttons (also the
+ * - the citations `[p.4]`, `[p.4 "extract"]`, `[p.4 Figure 2]` of the text become buttons that
+ *   show only `[p.4]` (the extract or the figure stays in the data of the button) (also the
  *   ones the report adds later: the page is watched); a click
  *   or Enter sends the citation up, a click anywhere else tells the app to close its preview.
  * Hand-written JavaScript in a string on purpose: a stringified function would not survive the build.
@@ -45,7 +46,7 @@ while((m=RE.exec(text))){frag.appendChild(document.createTextNode(text.slice(las
 var s=document.createElement("span");s.className="veille-cite";s.tabIndex=0;s.setAttribute("role","button");
 s.setAttribute("data-p",m[1]);if(m[2])s.setAttribute("data-q",m[2]);
 if(m[3]){s.setAttribute("data-k",m[3].charAt(0).toLowerCase()==="t"?"table":"figure");s.setAttribute("data-n",m[4])}
-s.textContent=m[0];frag.appendChild(s);last=RE.lastIndex}
+s.textContent="[p."+m[1]+"]";frag.appendChild(s);last=RE.lastIndex}
 if(last){frag.appendChild(document.createTextNode(text.slice(last)));t.parentNode.replaceChild(frag,t)}})}
 function wrap(){
 var st=document.createElement("style");st.textContent=".veille-cite{text-decoration:underline dotted;cursor:pointer}";

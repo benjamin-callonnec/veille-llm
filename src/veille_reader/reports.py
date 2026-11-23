@@ -72,6 +72,19 @@ def lint_html(html: str) -> list[str]:
     return warnings[:MAX_WARNINGS]
 
 
+_CITATION_DETAIL = re.compile(
+    r"""\[p\.(\d{1,4})\s+(?:["\u201c][^"\u201d]{3,300}["\u201d]|(?:Figure|Table|Fig\.?)\s+\d+(?:\.\d+)?)\s*\]"""
+)
+
+
+def plain_citations(html: str) -> str:
+    """`[p.4 "an extract"]` and `[p.4 Figure 2]` become `[p.4]`.
+
+    The extract finds the passage in the app, it is not meant to be read: the viewer hides it, and
+    an exported file has no viewer."""
+    return _CITATION_DETAIL.sub(lambda m: f"[p.{m.group(1)}]", html)
+
+
 def with_csp(html: str) -> str:
     """The page with the policy first (after the doctype); never searches for <head>."""
     found = _DOCTYPE.match(html)

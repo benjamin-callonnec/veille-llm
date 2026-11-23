@@ -39,7 +39,7 @@ from veille_reader.quiz import (
     view_of,
     with_results,
 )
-from veille_reader.reports import ReportTools, export_name, with_csp
+from veille_reader.reports import ReportTools, export_name, plain_citations, with_csp
 from veille_reader.skills import load_skills
 from veille_reader.skills_sync import default_fetcher as default_skills_fetcher
 from veille_reader.skills_sync import sync_skills
@@ -355,7 +355,7 @@ def create_app(
             return unknown("unknown_report")
         name = export_name(view["title"])
         return Response(
-            with_csp(view["html"]),
+            with_csp(plain_citations(view["html"])),
             media_type="text/html; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename="{name}"'},
         )

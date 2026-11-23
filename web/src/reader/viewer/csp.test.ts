@@ -64,22 +64,24 @@ const chip = (text: string) =>
 
 test("every citation form becomes a button with its data", () => {
   const chips = [...document.querySelectorAll<HTMLElement>(".veille-cite")];
+  // only the page is shown: the extract, the figure or the table stay in the data of the button
   expect(chips.map((c) => c.textContent)).toEqual([
     "[p.4]",
-    '[p.5 "an exact quote here"]',
-    "[p.6 Figure 2]",
-    "[p.7 Table 1.2]",
-    "[p.8 Fig. 3]",
-    "[p.9 \u201ccurly quote\u201d]",
+    "[p.5]",
+    "[p.6]",
+    "[p.7]",
+    "[p.8]",
+    "[p.9]",
     "[p.11]",
     "[p.15]",
   ]);
   expect(chips.every((c) => c.getAttribute("role") === "button" && c.tabIndex === 0)).toBe(true);
-  expect(chip('[p.5 "an exact quote here"]')?.dataset.q).toBe("an exact quote here");
-  expect(chip("[p.6 Figure 2]")?.dataset).toMatchObject({ p: "6", k: "figure", n: "2" });
-  expect(chip("[p.7 Table 1.2]")?.dataset).toMatchObject({ p: "7", k: "table", n: "1.2" });
-  expect(chip("[p.8 Fig. 3]")?.dataset).toMatchObject({ p: "8", k: "figure", n: "3" });
-  expect(chip("[p.9 \u201ccurly quote\u201d]")?.dataset.q).toBe("curly quote");
+  expect(chip("[p.5]")?.dataset.q).toBe("an exact quote here");
+  expect(chip("[p.6]")?.dataset).toMatchObject({ p: "6", k: "figure", n: "2" });
+  expect(chip("[p.7]")?.dataset).toMatchObject({ p: "7", k: "table", n: "1.2" });
+  expect(chip("[p.8]")?.dataset).toMatchObject({ p: "8", k: "figure", n: "3" });
+  expect(chip("[p.9]")?.dataset.q).toBe("curly quote");
+  expect(document.body.textContent).not.toContain("an exact quote here");
 });
 
 test("the text around a citation is kept, and other brackets are left alone", () => {
@@ -97,8 +99,8 @@ test("a click on a citation tells the parent and does not turn the slide", async
   const bubbled: Event[] = [];
   const onBubble = (e: Event) => bubbled.push(e);
   document.addEventListener("click", onBubble);
-  chip('[p.5 "an exact quote here"]')?.click();
-  chip("[p.6 Figure 2]")?.click();
+  chip("[p.5]")?.click();
+  chip("[p.6]")?.click();
   chip("[p.4]")?.click();
   await flush();
   document.removeEventListener("click", onBubble);
@@ -172,14 +174,12 @@ test("citations added to the page after it loaded are wrapped too, without loopi
   document.body.appendChild(late);
   await new Promise((done) => setTimeout(done, 250));
   expect(late.querySelectorAll(".veille-cite")).toHaveLength(1);
-  expect(chip('[p.12 "a quote written after the load"]')?.dataset.q).toBe(
-    "a quote written after the load",
-  );
+  expect(chip("[p.12]")?.dataset.q).toBe("a quote written after the load");
   // the earlier chips were not wrapped again (a chip inside a chip would loop for ever)
   expect(document.querySelectorAll(".veille-cite")).toHaveLength(before + 1);
   expect(document.querySelectorAll(".veille-cite .veille-cite")).toHaveLength(0);
   seen.length = 0;
-  chip('[p.12 "a quote written after the load"]')?.click();
+  chip("[p.12]")?.click();
   await flush();
   expect(seen).toEqual([
     {

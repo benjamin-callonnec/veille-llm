@@ -4,7 +4,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from veille_reader.agent import build_sdk_tools
-from veille_reader.reports import ReportTools, check_html, export_name, lint_html, with_csp
+from veille_reader.reports import (
+    ReportTools,
+    check_html,
+    export_name,
+    lint_html,
+    plain_citations,
+    with_csp,
+)
 from veille_reader.server import create_app
 from veille_reader.skills import Skill, SkillSession
 from veille_reader.storage import ReaderStore
@@ -249,3 +256,24 @@ def test_lint_does_not_mistake_overflow_hidden_for_a_hidden_svg():
     assert lint_html('<svg style="visibility:hidden"><g/></svg>') == []
     assert lint_html("<svg hidden><g/></svg>") == []
     assert lint_html('<svg hidden="hidden"><g/></svg>') == []
+
+
+def test_plain_citations_keep_only_the_page():
+    html = (
+        'A [p.4 "an exact quote here"] B [p.5 \u201ccurly quote\u201d] C [p.6 Figure 2] '
+        "D [p.7 Table 1.2] E [p.8 Fig. 3] F [p.9]"
+    )
+    assert plain_citations(html) == "A [p.4] B [p.5] C [p.6] D [p.7] E [p.8] F [p.9]"
+
+
+def test_plain_citations_leave_everything_else_alone():
+    html = '[p.1, p.8] [see p.4 "x"] [p.x] [p.4 "ab"] <i>[p.4]</i> [other "quote here"]'
+    assert plain_citations(html) == html
+
+
+def test_the_export_shows_page_only_citations(client):
+    r = client.store.save_report("a1", "Deck", '<p>It rises [p.4 "an exact quote here"].</p>')
+    text = client.get(f"/api/items/a1/reports/{r['id']}/export").text
+    assert "It rises [p.4]." in text and "an exact quote here" not in text
+    # the stored report keeps the quote: the preview needs it
+    assert "an exact quote here" in client.get(f"/api/items/a1/reports/{r['id']}").json()["html"]
