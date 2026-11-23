@@ -566,11 +566,13 @@
 .peek-spacer {
   flex: 1;
 }
+/* The page looks as it does in the PDF pane: the same backdrop, shadow and dark-theme inversion. */
 .peek-scroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  background: #fff;
+  padding: 12px;
+  background: var(--bg);
 }
 .peek-scroll.peek-loading {
   visibility: hidden;
@@ -578,33 +580,22 @@
 }
 .peek-sheet {
   position: relative;
+  width: fit-content;
+  margin: 0 auto;
   line-height: 0;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 .peek-sheet canvas {
   display: block;
-  background: #fff;
+  filter: var(--pdf-filter);
 }
 .peek-highlight {
   position: absolute;
-  background: rgba(255, 213, 0, 0.35);
-  outline: 2px solid rgba(255, 170, 0, 0.9);
   border-radius: 2px;
-  mix-blend-mode: multiply;
   pointer-events: none;
-  animation: peek-pulse 0.9s ease-out 2;
-}
-@keyframes peek-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(255, 170, 0, 0.8);
-  }
-  100% {
-    box-shadow: 0 0 0 10px rgba(255, 170, 0, 0);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .peek-highlight {
-    animation: none;
-  }
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 .citation-peek [role="status"] {
   margin: 8px 12px;

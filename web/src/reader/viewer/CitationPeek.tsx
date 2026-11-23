@@ -11,6 +11,8 @@ const CARD_WIDTH = 640;
 const ZOOM_STEP = 0.25;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
+/** The padding of the scrolling area (see reader.css): the page gets what is left of the width. */
+const SCROLL_PADDING = 12;
 
 /** Where the citation points: its page, the rectangles of the passage (null: not found). */
 interface Located {
@@ -96,7 +98,8 @@ export function CitationPeek({ cite, source, captions, onOpen, onClose }: Props)
         const box = scroller.current;
         if (!target || !box) return;
         // drawn at the width of the card times the zoom: pdf.js makes it sharp on any screen
-        const width = (box.clientWidth || CARD_WIDTH) * zoom;
+        const room = box.clientWidth ? box.clientWidth - 2 * SCROLL_PADDING : CARD_WIDTH;
+        const width = room * zoom;
         await source.render(shown, target, width / info.width, ctrl.signal);
         if (ctrl.signal.aborted) return;
         const rects = shown === located.page ? located.rects : null;
