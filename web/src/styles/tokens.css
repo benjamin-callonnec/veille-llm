@@ -31,9 +31,9 @@
   --hl-yellow: #fff3a8;
   --hl-green: #c5ecc7;
   --hl-red: #f6c4c4;
-  --dot-yellow: #e9c53b;
-  --dot-green: #53b97c;
-  --dot-red: #e5606a;
+  --dot-yellow: #a87c00;
+  --dot-green: #2a8a52;
+  --dot-red: #d23f4b;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -58,9 +58,9 @@
   --hl-yellow: #fff3a8;
   --hl-green: #c5ecc7;
   --hl-red: #f6c4c4;
-  --dot-yellow: #e9c53b;
-  --dot-green: #53b97c;
-  --dot-red: #e5606a;
+  --dot-yellow: #a87c00;
+  --dot-green: #2a8a52;
+  --dot-red: #d23f4b;
 }
 
 :root[data-theme="dark"] {

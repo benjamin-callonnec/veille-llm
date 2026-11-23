@@ -405,6 +405,9 @@
   flex-direction: column;
   gap: 8px;
   max-width: 100%;
+  min-width: 0;
+  /* a long unbroken word (an identifier, a URL) wraps instead of pushing the pane wider */
+  overflow-wrap: anywhere;
 }
 .quiz-question {
   margin: 0;
@@ -434,6 +437,7 @@
 }
 .quiz-option > span:nth-child(2) {
   flex: 1;
+  min-width: 0;
 }
 .quiz-option:hover:not(:disabled),
 .quiz-picked {
@@ -595,6 +599,7 @@
 }
 .quiz-step-text {
   flex: 1;
+  min-width: 0;
 }
 .quiz-move {
   display: inline-flex;
@@ -614,4 +619,5 @@
 }
 .quiz-check > span:nth-child(3) {
   flex: 1;
+  min-width: 0;
 }

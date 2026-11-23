@@ -163,3 +163,57 @@ def test_the_highlights_list_is_quiet_and_its_text_is_readable_in_every_theme():
     assert "opacity: 0" in actions  # shown on hover or focus, like the chat messages
     assert "highlights-strip li button:first-child" not in reader  # the old coloured row rule
     assert ".highlights-strip button" not in reader.split(".pdf-scroll {")[0]  # no boxed buttons
+
+
+def _luminance(color: str) -> float:
+    channels = [int(color[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+    lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+
+def _contrast(a: str, b: str) -> float:
+    hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_the_colour_dots_are_visible_on_every_surface_of_every_theme():
+    """A dot is a non-text control: WCAG asks 3:1 against what it sits on (page, card, bubble)."""
+    for name, block in _token_blocks().items():
+        for surface in ("--bg", "--card", "--bubble"):
+            background = _color(block, surface)
+            assert background, (name, surface)
+            for c in ("yellow", "green", "red"):
+                dot = _color(block, f"--dot-{c}")
+                assert dot and _contrast(dot, background) >= 3, (name, c, surface)
+
+
+def test_the_muted_text_is_readable_on_every_surface_of_every_theme():
+    for name, block in _token_blocks().items():
+        for surface in ("--bg", "--card", "--bubble", "--composer"):
+            background = _color(block, surface)
+            muted = _color(block, "--muted")
+            assert background and muted, (name, surface)
+            assert _contrast(muted, background) >= 4.5, (name, surface)
+
+
+def test_the_highlight_actions_stay_visible_on_a_touch_screen():
+    reader = (STYLES / "reader.css").read_text()
+    assert "@media (hover: none)" in reader
+    touch = reader.split("@media (hover: none)")[1]
+    assert ".hl-actions" in touch and "opacity: 1" in touch
+
+
+def test_on_a_narrow_screen_the_panes_stack_instead_of_leaving_slivers():
+    reader = (STYLES / "reader.css").read_text()
+    assert "@media (max-width: 640px)" in reader
+    narrow = reader.split("@media (max-width: 640px)")[1]
+    assert re.search(r"\.panes-body\s*\{[^}]*flex-direction:\s*column", narrow)
+    assert "!important" in rule(narrow, ".pane")  # beats the inline flex-basis of the ratio
+
+
+def test_long_unbroken_words_wrap_in_quiz_cards_and_highlight_rows():
+    reader = (STYLES / "reader.css").read_text()
+    assert "overflow-wrap: anywhere" in rule(CHAT, ".quiz")
+    assert "overflow-wrap: anywhere" in rule(reader, ".hl-quote")
+    for selector in (".quiz-option > span:nth-child(2)", ".quiz-step-text"):
+        assert "min-width: 0" in rule(CHAT, selector), selector
