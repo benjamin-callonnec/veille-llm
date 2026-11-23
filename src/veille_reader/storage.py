@@ -338,13 +338,22 @@ class ReaderStore:
         ]
 
     def replace_last_assistant(self, conversation_id: int) -> None:
-        """Drop the trailing assistant message (regenerate); anything else stays."""
+        """Drop the last answer (regenerate) and the quiz cards and notices that follow it."""
         with self._con:
-            self._con.execute(
-                "DELETE FROM messages WHERE id = (SELECT id FROM messages WHERE conversation_id = ?"
-                " ORDER BY seq DESC LIMIT 1) AND role = 'assistant'",
+            rows = self._con.execute(
+                "SELECT id, role, kind FROM messages WHERE conversation_id = ? ORDER BY seq DESC",
                 (conversation_id,),
-            )
+            ).fetchall()
+            trailing = []
+            for message_id, role, kind in rows:
+                trailing.append(message_id)
+                if role == "assistant":
+                    self._con.executemany(
+                        "DELETE FROM messages WHERE id = ?", [(i,) for i in trailing]
+                    )
+                    return
+                if not (role == "system" and kind in ("quiz", "notice")):
+                    return
 
     def export_markdown(self, item_id: str, conversation_id: int) -> str | None:
         conversation = self.conversation(item_id, conversation_id)

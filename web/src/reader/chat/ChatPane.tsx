@@ -131,6 +131,10 @@ export function ChatPane({
               api={quizApi}
               onCite={onCite}
             />
+          ) : m.kind === "notice" ? (
+            <p key={`${m.id}-${m.seq}`} className="compaction-note">
+              {String(m.content.text ?? "")}
+            </p>
           ) : m.role === "system" ? (
             <p key={`${m.id}-${m.seq}`} className="compaction-note">
               Earlier messages were summarised to keep the conversation light.

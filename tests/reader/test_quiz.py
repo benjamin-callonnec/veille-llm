@@ -582,7 +582,28 @@ def test_a_failed_marker_quiz_leaves_a_plain_message_not_a_broken_card(tmp_path)
     cid = cid_of(client)
     client.post(f"/api/items/a1/conversations/{cid}/messages", json={"kind": "text", "text": "q"})
     last = client.get(f"/api/items/a1/conversations/{cid}/messages").json()[-1]
-    assert last["role"] == "assistant" and "could not start the quiz" in last["content"]["answer"]
+    assert last["role"] == "system" and last["kind"] == "notice"
+    assert "could not start the quiz" in last["content"]["text"]
+
+
+def test_regenerate_works_after_a_quiz_card_or_a_failed_quiz_notice(tmp_path):
+    seen = []
+
+    async def runner(request):
+        seen.append(request)
+        yield events.text_delta("Sure.\n[[quiz: heads]]")
+        yield events.done(5)
+
+    for name, maker in (("card", Maker(GOOD)), ("notice", Maker("x", "y"))):
+        client = client_for(tmp_path / name, maker, runner=runner)
+        cid = cid_of(client)
+        url = f"/api/items/a1/conversations/{cid}"
+        client.post(f"{url}/messages", json={"kind": "text", "text": "quiz me"})
+        seen.clear()
+        assert client.post(f"{url}/regenerate").status_code == 200
+        assert seen[0].question == "quiz me" and seen[0].history == []
+        roles = [m["role"] for m in client.get(f"{url}/messages").json()]
+        assert roles.count("assistant") == 1 and roles[0] == "user"
 
 
 def test_the_marker_is_ignored_when_the_turn_failed_or_without_a_paper(tmp_path):

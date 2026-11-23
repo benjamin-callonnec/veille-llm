@@ -564,14 +564,5 @@ async def quiz_after_turn(
             store, maker, item_id, item, cid, paper, "any", focus, recent_turns(store, cid)
         )
     except QuizError as exc:
-        store.add_message(
-            cid,
-            "assistant",
-            "assistant",
-            {
-                "blocks": [],
-                "answer": f"I could not start the quiz: {exc}.",
-                "stopped": False,
-                "duration_ms": 0,
-            },
-        )
+        # a notice, not a tutor turn: it never goes into the model's history
+        store.add_message(cid, "system", "notice", {"text": f"I could not start the quiz: {exc}."})

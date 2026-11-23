@@ -163,6 +163,37 @@ test("regenerate replaces the last answer", async () => {
   expect(result.current.messages.filter((m) => m.role === "assistant")).toHaveLength(1);
 });
 
+test("regenerate also drops the quiz card and notice that follow the answer, while it streams", async () => {
+  const { api, messages } = fakeApi(SCRIPT);
+  const { result } = renderHook(() => useChat("a1", api));
+  await waitFor(() => expect(result.current.ready).toBe(true));
+  await act(() => result.current.send({ kind: "text", text: "Hi" }));
+  const id = result.current.current?.id as number;
+  const list = messages.get(id) ?? [];
+  list.push(
+    { id: 50, seq: 3, role: "system", kind: "quiz", content: {}, created_at: "t" },
+    { id: 51, seq: 4, role: "system", kind: "notice", content: { text: "x" }, created_at: "t" },
+  );
+  await act(() => result.current.select(id));
+  expect(result.current.messages).toHaveLength(4);
+  let release: () => void = () => {};
+  const hold = new Promise<void>((r) => {
+    release = r;
+  });
+  const base = api.regenerate;
+  api.regenerate = async function* (i, c, signal) {
+    await hold;
+    yield* base(i, c, signal);
+  };
+  let pending: Promise<void> = Promise.resolve();
+  act(() => {
+    pending = result.current.regenerate();
+  });
+  await waitFor(() => expect(result.current.messages.map((m) => m.kind)).toEqual(["text"]));
+  release();
+  await act(() => pending);
+});
+
 test("switching conversation loads its messages", async () => {
   const { api, messages } = fakeApi(SCRIPT);
   const { result } = renderHook(() => useChat("a1", api));
