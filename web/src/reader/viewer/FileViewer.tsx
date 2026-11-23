@@ -116,7 +116,7 @@ export function FileViewer({ itemId, reports, selectedId, onSelect, onClose, onC
       </header>
       <div className="viewer-body">
         {view && Render ? (
-          <Render content={view.html} title={view.title} />
+          <Render content={view.html} title={view.title} onKey={() => onClose()} />
         ) : (
           <p className="viewer-empty">
             {reports.length === 0

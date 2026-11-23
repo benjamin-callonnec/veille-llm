@@ -6,6 +6,8 @@ export type ViewerKind = "html";
 export interface ViewerProps {
   content: string;
   title: string;
+  /** A key typed inside the file that the app wants (V, Escape). */
+  onKey?: (key: string) => void;
 }
 
 /** One renderer per type of file: adding a type is adding an entry here. */

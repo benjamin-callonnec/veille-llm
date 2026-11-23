@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FileViewer } from "./FileViewer";
@@ -107,4 +107,17 @@ test("Esc that something else already handled does not close the viewer", async 
   await userEvent.keyboard("{Escape}");
   document.body.removeEventListener("keydown", other);
   expect(h.onClose).not.toHaveBeenCalled();
+});
+
+test("V or Escape typed inside the page (it has the focus) close the viewer", async () => {
+  const h = setup();
+  const frame = await screen.findByTitle("Deck");
+  fireEvent(
+    window,
+    new MessageEvent("message", {
+      data: { veilleKey: "v" },
+      source: (frame as HTMLIFrameElement).contentWindow,
+    }),
+  );
+  expect(h.onClose).toHaveBeenCalledTimes(1);
 });
