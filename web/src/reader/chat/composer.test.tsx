@@ -572,6 +572,59 @@ test("a new round is drawn again, and never starts with the text that ended the 
   vi.useRealTimers();
 });
 
+test("typing during a fade does not leave the placeholder invisible afterwards", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  setup({ skills: SKILLS });
+  tick(HINT_INTERVAL_MS); // the fade has started
+  expect(box().className).toContain("hint-fading");
+  fireEvent.change(box(), { target: { value: "x" } });
+  fireEvent.change(box(), { target: { value: "" } });
+  expect(box().className).not.toContain("hint-fading");
+  vi.useRealTimers();
+});
+
+test("new recommendations during a fade start again from the first, for a full interval", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  const { view, props } = setup({ recommendations: ["A?", "B?"] });
+  tick(HINT_INTERVAL_MS); // a change to B is pending
+  view.rerender(<Composer {...props} recommendations={["C?", "D?"]} />);
+  expect(placeholder()).toBe("C?");
+  tick(HINT_FADE_MS + 50);
+  expect(placeholder()).toBe("C?"); // the old pending change did not skip the first new one
+  next();
+  expect(placeholder()).toBe("D?");
+  vi.useRealTimers();
+});
+
+test("a round is not thrown off when the available tips change in the middle of it", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  writtenOrder();
+  const { view, props } = setup({ speech: null });
+  const seen: string[] = [placeholder() ?? ""];
+  for (let i = 0; i < 40; i++) {
+    next();
+    seen.push(placeholder() ?? "");
+    if (i === 3) view.rerender(<Composer {...props} skills={SKILLS} hasReports />); // two more tips
+  }
+  for (let i = 1; i < seen.length; i++) expect(seen[i]).not.toBe(seen[i - 1]); // never twice in a row
+  expect(seen.every((t) => t.length > 5)).toBe(true);
+  vi.useRealTimers();
+});
+
+test("with recommendations on screen no new draw of tips is made", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
+  setup({ recommendations: ["A?", "B?"] });
+  const atMount = random.mock.calls.length; // the first draw, at mount
+  for (let i = 0; i < 12; i++) next();
+  expect(random.mock.calls.length).toBe(atMount);
+  vi.useRealTimers();
+});
+
 test("the timers are cleared when the composer goes away", () => {
   vi.useFakeTimers();
   stubMotion(false);

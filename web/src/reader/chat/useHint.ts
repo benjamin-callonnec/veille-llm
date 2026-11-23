@@ -28,12 +28,13 @@ export function useHint(
   have: Available,
   recommendations: string[],
 ): { text: string; reco: string | null; fading: boolean } {
+  // `n` is the position in what is shown: in the recommendations, or in the round of tips
   const [n, setN] = useState(0);
   const [fading, setFading] = useState(false);
   // the texts are drawn again at each opening and for each round (the invitation is one of them)
   const [order, setOrder] = useState(() => shuffledOrder(ENTRY_COUNT));
-  const latest = useRef({ n: 0, order, have });
-  latest.current = { n, order, have };
+  const latest = useRef({ n, order, have, recommendations });
+  latest.current = { n, order, have, recommendations };
   const reduce = reducedMotion();
   const key = recommendations.join("\u0001");
 
@@ -45,17 +46,20 @@ export function useHint(
   }, [key]);
 
   const rotates = enabled && !reduce && recommendations.length !== 1;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` restarts the clock with the list
   useEffect(() => {
     if (!rotates) return;
+    setFading(false); // after a pause the placeholder is never left invisible
     let fade: ReturnType<typeof setTimeout> | undefined;
     const every = setInterval(() => {
       setFading(true);
       fade = setTimeout(() => {
-        const { n: current, order: now, have: available } = latest.current;
-        const next = current + 1;
-        // a round is over: draw the next one, which never starts with the text that ended this one
-        if (next % idleSequence(available, now).length === 0) {
+        const { n: current, order: now, have: available, recommendations: recos } = latest.current;
+        let next = current + 1;
+        // a round of tips is over: draw the next one (nothing to draw while recommendations show)
+        if (recos.length === 0 && next >= idleSequence(available, now).length) {
           setOrder(nextRound(now, available));
+          next = 0;
         }
         setN(next);
         setFading(false);
@@ -65,12 +69,11 @@ export function useHint(
       clearInterval(every);
       clearTimeout(fade);
     };
-  }, [rotates]);
+  }, [rotates, key]);
 
   const reco = recoAt(n, recommendations);
-  const index = reduce ? 0 : n;
   return {
-    text: reco ?? (reduce ? FIRST_HINT : idleHint(index, have, order)),
+    text: reco ?? (reduce ? FIRST_HINT : idleHint(n, have, order)),
     reco,
     fading: rotates && fading,
   };
