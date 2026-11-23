@@ -106,6 +106,10 @@ MIGRATIONS: list[str] = [
         reasoning TEXT NOT NULL
     );
     """,
+    """
+    ALTER TABLE traces ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE traces ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+    """,
 ]
 
 
@@ -319,6 +323,19 @@ class ReaderStore:
             "created_at": now,
         }
 
+    def update_message_content(self, message_id: int, content: dict) -> None:
+        with self._con:
+            self._con.execute(
+                "UPDATE messages SET content = ? WHERE id = ?", (json.dumps(content), message_id)
+            )
+
+    def delete_messages(self, conversation_id: int, message_ids: list[int]) -> None:
+        with self._con:
+            self._con.executemany(
+                "DELETE FROM messages WHERE id = ? AND conversation_id = ?",
+                [(i, conversation_id) for i in message_ids],
+            )
+
     def messages(self, conversation_id: int) -> list[dict]:
         rows = self._con.execute(
             "SELECT id, seq, role, kind, content, created_at FROM messages"
@@ -380,13 +397,20 @@ class ReaderStore:
         ).fetchall()
         return [{"id": r[0], "text": r[1], "created_at": r[2], "source": r[3]} for r in rows]
 
-    def add_memory_note(self, item_id: str, text: str, source: str = "user") -> dict:
+    def add_memory_note(
+        self, item_id: str, text: str, source: str = "user", limit: int | None = None
+    ) -> dict | None:
+        """Add a note; with a `limit`, count and insert in one statement (None when full)."""
         now = self._now()
         with self._con:
             cursor = self._con.execute(
-                "INSERT INTO memory_notes (item_id, text, created_at, source) VALUES (?, ?, ?, ?)",
-                (item_id, text, now, source),
+                "INSERT INTO memory_notes (item_id, text, created_at, source)"
+                " SELECT ?, ?, ?, ? WHERE ? IS NULL"
+                " OR (SELECT COUNT(*) FROM memory_notes WHERE item_id = ?) < ?",
+                (item_id, text, now, source, limit, item_id, limit),
             )
+        if cursor.rowcount == 0:
+            return None
         return {"id": int(cursor.lastrowid), "text": text, "created_at": now, "source": source}
 
     def update_memory_note(self, item_id: str, note_id: int, text: str) -> bool:
@@ -428,13 +452,15 @@ class ReaderStore:
         model: str,
         stopped: bool,
         error_kind: str,
+        cache_read_tokens: int = 0,
+        cache_write_tokens: int = 0,
     ) -> None:
         """What a turn did (tools, tokens, time), never what was said or read."""
         with self._con:
             self._con.execute(
                 "INSERT INTO traces (conversation_id, created_at, duration_ms, tools, input_tokens,"
-                " output_tokens, cost_usd, model, stopped, error_kind)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " output_tokens, cost_usd, model, stopped, error_kind, cache_read_tokens,"
+                " cache_write_tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     conversation_id,
                     self._now(),
@@ -446,6 +472,8 @@ class ReaderStore:
                     model,
                     int(stopped),
                     error_kind,
+                    cache_read_tokens,
+                    cache_write_tokens,
                 ),
             )
 
@@ -460,7 +488,8 @@ class ReaderStore:
     def traces(self, conversation_id: int) -> list[dict]:
         rows = self._con.execute(
             "SELECT created_at, duration_ms, tools, input_tokens, output_tokens, cost_usd, model,"
-            " stopped, error_kind FROM traces WHERE conversation_id = ? ORDER BY id",
+            " stopped, error_kind, cache_read_tokens, cache_write_tokens FROM traces"
+            " WHERE conversation_id = ? ORDER BY id",
             (conversation_id,),
         ).fetchall()
         return [
@@ -474,6 +503,8 @@ class ReaderStore:
                 "model": r[6],
                 "stopped": bool(r[7]),
                 "error_kind": r[8],
+                "cache_read_tokens": r[9],
+                "cache_write_tokens": r[10],
             }
             for r in rows
         ]

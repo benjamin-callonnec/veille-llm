@@ -162,11 +162,18 @@ def _usage_of(message: object) -> dict | None:
     cost = getattr(message, "total_cost_usd", None)
     if not usage and cost is None:
         return None
-    return {
-        "input_tokens": int(usage.get("input_tokens", 0)),
-        "output_tokens": int(usage.get("output_tokens", 0)),
+    found = {
+        "input_tokens": int(usage.get("input_tokens") or 0),
+        "output_tokens": int(usage.get("output_tokens") or 0),
         "cost_usd": cost,
     }
+    for key, name in (
+        ("cache_read_input_tokens", "cache_read_tokens"),
+        ("cache_creation_input_tokens", "cache_write_tokens"),
+    ):
+        if usage.get(key):
+            found[name] = int(usage[key])
+    return found
 
 
 def _failure(message: str, usage: dict | None = None) -> dict:

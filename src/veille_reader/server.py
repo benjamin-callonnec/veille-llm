@@ -492,9 +492,10 @@ def create_app(
     def add_note(item_id: str, body: NoteIn):  # noqa: ANN202
         if item_id not in current_items():
             return unknown()
-        if len(store.memory_notes(item_id)) >= MAX_NOTES:
+        note = store.add_memory_note(item_id, body.text, limit=MAX_NOTES)
+        if note is None:
             return JSONResponse({"reason": "memory_full"}, status_code=409)
-        return store.add_memory_note(item_id, body.text)
+        return note
 
     @app.put("/api/items/{item_id}/memory/{note_id}")
     def edit_note(item_id: str, note_id: int, body: NoteIn):  # noqa: ANN202

@@ -389,7 +389,20 @@ def test_the_done_event_carries_the_usage_and_the_cost(monkeypatch):
         total_cost_usd=0.01,
     )
     done = collect(request(), fake_query(result))[-1]
-    assert done["usage"] == {"input_tokens": 10, "output_tokens": 20, "cost_usd": 0.01}
+    assert done["usage"] == {
+        "input_tokens": 10,
+        "output_tokens": 20,
+        "cost_usd": 0.01,
+        "cache_read_tokens": 99,
+    }
+
+
+def test_the_cache_tokens_are_reported_only_when_the_sdk_gives_them(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    usage = {"input_tokens": 1, "cache_creation_input_tokens": 7, "cache_read_input_tokens": None}
+    done = collect(request(), fake_query(ResultMessage(usage=usage)))[-1]
+    assert done["usage"]["cache_write_tokens"] == 7
+    assert "cache_read_tokens" not in done["usage"]
 
 
 def test_the_notes_are_pinned_in_the_data_block_and_escaped():

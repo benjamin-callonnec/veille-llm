@@ -304,3 +304,12 @@ def test_failure_messages_are_redacted(tmp_path):
         f"/api/items/a1/conversations/{cid}/messages", json={"kind": "text", "text": "Hi"}
     )
     assert "secret999" not in response.text
+
+
+def test_the_cache_tokens_of_an_answer_reach_its_trace(tmp_path):
+    usage = {"input_tokens": 1, "output_tokens": 2, "cost_usd": 0.1, "cache_read_tokens": 30}
+    client, _ = make_client(tmp_path, script(events.text_delta("x"), events.done(5, usage)))
+    cid = new_conversation(client)
+    client.post(f"/api/items/a1/conversations/{cid}/messages", json={"kind": "text", "text": "Hi"})
+    trace = client.get(f"/api/items/a1/conversations/{cid}/trace").json()[0]
+    assert (trace["cache_read_tokens"], trace["cache_write_tokens"]) == (30, 0)

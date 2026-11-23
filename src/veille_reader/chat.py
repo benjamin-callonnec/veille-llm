@@ -267,6 +267,8 @@ async def stream_turn(
                 model=model,
                 stopped=stopped,
                 error_kind=(answer.error or {}).get("kind", ""),
+                cache_read_tokens=int(usage.get("cache_read_tokens") or 0),
+                cache_write_tokens=int(usage.get("cache_write_tokens") or 0),
             )
         except sqlite3.IntegrityError:
             pass  # the conversation was deleted while the answer was being produced
