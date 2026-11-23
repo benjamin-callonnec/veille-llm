@@ -68,6 +68,17 @@ test("dropping image files attaches them; other files are ignored", () => {
   expect(document.querySelectorAll(".composer-images img")).toHaveLength(1);
 });
 
+test("a dropped file that is not an image is kept from replacing the page, with a quiet message", () => {
+  setup();
+  const zone = document.querySelector(".composer") as HTMLElement;
+  const txt = new File(["x"], "a.txt", { type: "text/plain" });
+  const notPrevented = fireEvent.drop(zone, {
+    dataTransfer: { files: [txt], items: [], types: ["Files"] },
+  });
+  expect(notPrevented).toBe(false); // preventDefault was called: the browser does not open the file
+  expect(screen.getByText("Only PNG, JPEG, WebP and GIF images.")).toBeTruthy();
+});
+
 test("at most four images, each under 5 MB, only png/jpeg/webp/gif, with a quiet message", () => {
   setup();
   fireEvent.paste(box(), clip([png("1"), png("2"), png("3"), png("4"), png("5")]));

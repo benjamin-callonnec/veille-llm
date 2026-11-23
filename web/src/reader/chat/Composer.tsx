@@ -147,10 +147,12 @@ export function Composer({
           if ([...e.dataTransfer.types].includes("Files")) e.preventDefault();
         }}
         onDrop={(e) => {
-          const files = imagesOf(e.dataTransfer);
-          if (files.length === 0) return;
+          if (![...e.dataTransfer.types].includes("Files")) return;
+          // always claim a file drop: left alone, the browser would open the file over the app
           e.preventDefault();
-          attach(files);
+          const files = imagesOf(e.dataTransfer);
+          if (files.length === 0) setNotice("Only PNG, JPEG, WebP and GIF images.");
+          else attach(files);
         }}
       >
         {images.length > 0 && (
