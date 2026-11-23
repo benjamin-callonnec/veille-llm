@@ -1,5 +1,8 @@
 export const MAX_IMAGES = 4;
+/** What is sent, once scaled down (the server refuses more). */
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** What can be picked: the scaling happens after, and brings a big photo well under 5 MB. */
+export const MAX_RAW_BYTES = 30 * 1024 * 1024;
 export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 /** Longer sides are scaled down to this before sending: the model does not use more. */
 export const MAX_SIDE = 1568;
@@ -17,7 +20,7 @@ export function pickImages(files: File[], already: number): Picked {
   let notice: string | null = null;
   for (const file of images) {
     if (!IMAGE_TYPES.includes(file.type)) notice = "Only PNG, JPEG, WebP and GIF images.";
-    else if (file.size > MAX_IMAGE_BYTES) notice = "Images must be under 5 MB.";
+    else if (file.size > MAX_RAW_BYTES) notice = "Images must be under 30 MB.";
     else if (already + accepted.length >= MAX_IMAGES) notice = `At most ${MAX_IMAGES} images.`;
     else accepted.push(file);
   }
@@ -76,5 +79,6 @@ export async function downscale(file: File): Promise<Blob> {
 
 export async function toPayload(file: File): Promise<ImagePayload> {
   const blob = await downscale(file);
+  if (blob.size > MAX_IMAGE_BYTES) throw new Error(`${file.name} is still over 5 MB once scaled.`);
   return { name: file.name, mime: blob.type || file.type, data: await readBase64(blob) };
 }
