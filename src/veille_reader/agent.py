@@ -27,6 +27,7 @@ from veille_reader.asking import (
 from veille_reader.events import RunRequest
 from veille_reader.limits import AgentLimits
 from veille_reader.quiz import QUIZ_PROMPT
+from veille_reader.reports import ReportTools
 from veille_reader.skills import SkillSession
 from veille_reader.suggestions import with_rule
 from veille_reader.tools import KINDS, Limits, PaperTools, ToolBudget, ToolError
@@ -208,6 +209,7 @@ def build_sdk_tools(
     budget: ToolBudget,
     ask: Callable | None = None,
     session: SkillSession | None = None,
+    reports: ReportTools | None = None,
 ) -> list:
     """The tools as SDK tools. Errors and limits are answers to the model, never crashes."""
     from claude_agent_sdk import tool
@@ -287,6 +289,49 @@ def build_sdk_tools(
             return await run("use_skill", lambda: session.use(str(args.get("name", ""))))
 
         built.append(use_skill)
+
+    if reports is not None:
+
+        async def gated(name: str, fn) -> dict:  # noqa: ANN001
+            if session is None or not session.allows(name):
+                return _result(
+                    f"{name} is only available once a skill that uses it is loaded: call "
+                    "use_skill first.",
+                    error=True,
+                )
+            return await run(name, fn)
+
+        @tool(
+            "write_report",
+            "Save an HTML report (one self-contained file) as a new version; give report_id to "
+            "change an existing report. No external URL: inline CSS, JavaScript and images.",
+            {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "html": {"type": "string"},
+                    "report_id": {"type": "integer"},
+                },
+                "required": ["title", "html"],
+            },
+        )
+        async def write_report(args: dict) -> dict:
+            wanted = pick(args, "title", "html", "report_id")
+            return await gated("write_report", lambda: reports.write(**wanted))
+
+        @tool(
+            "read_report",
+            "Read the HTML of a saved report (its latest version) to change it.",
+            {
+                "type": "object",
+                "properties": {"report_id": {"type": "integer"}},
+                "required": ["report_id"],
+            },
+        )
+        async def read_report(args: dict) -> dict:
+            return await gated("read_report", lambda: reports.read(args.get("report_id")))
+
+        built += [write_report, read_report]
 
     if ask is None:
         return built
@@ -386,7 +431,9 @@ async def sdk_runner(request: RunRequest, query: Callable | None = None) -> Asyn
 
         budget = ToolBudget(request.tool_limits or Limits())
         session = SkillSession(request.skills, request.skill)
-        sdk_tools = build_sdk_tools(request.paper_tools, budget, request.ask, session)
+        sdk_tools = build_sdk_tools(
+            request.paper_tools, budget, request.ask, session, request.reports
+        )
         extra = {
             "mcp_servers": {"paper": create_sdk_mcp_server("paper", tools=sdk_tools)},
             "allowed_tools": [f"{TOOL_PREFIX}{t.name}" for t in sdk_tools],

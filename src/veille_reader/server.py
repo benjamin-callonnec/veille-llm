@@ -39,6 +39,7 @@ from veille_reader.quiz import (
     view_of,
     with_results,
 )
+from veille_reader.reports import ReportTools, export_name
 from veille_reader.skills import load_skills
 from veille_reader.skills_sync import default_fetcher as default_skills_fetcher
 from veille_reader.skills_sync import sync_skills
@@ -71,6 +72,10 @@ class QuoteIn(BaseModel):
 class ImageIn(BaseModel):
     name: str | None = Field(default=None, max_length=200)
     data: str = Field(max_length=8_000_000)  # base64, checked again once decoded
+
+
+class RestoreIn(BaseModel):
+    version: int = Field(ge=1)
 
 
 class MessageIn(BaseModel):
@@ -321,6 +326,40 @@ def create_app(
             return unknown("unknown_highlight")
         return Response(status_code=204)
 
+    @app.get("/api/items/{item_id}/reports")
+    def list_reports(item_id: str):  # noqa: ANN202
+        if item_id not in current_items():
+            return unknown()
+        return store.reports(item_id)
+
+    @app.get("/api/items/{item_id}/reports/{report_id}")
+    def get_report(item_id: str, report_id: int, version: int | None = None):  # noqa: ANN202
+        view = store.report(item_id, report_id, version)
+        return view if view is not None else unknown("unknown_report")
+
+    @app.post("/api/items/{item_id}/reports/{report_id}/restore", status_code=201)
+    def restore_report(item_id: str, report_id: int, body: RestoreIn):  # noqa: ANN202
+        saved = store.restore_report(item_id, report_id, body.version)
+        return saved if saved is not None else unknown("unknown_report")
+
+    @app.delete("/api/items/{item_id}/reports/{report_id}")
+    def delete_report(item_id: str, report_id: int):  # noqa: ANN202
+        if not store.delete_report(item_id, report_id):
+            return unknown("unknown_report")
+        return Response(status_code=204)
+
+    @app.get("/api/items/{item_id}/reports/{report_id}/export")
+    def export_report(item_id: str, report_id: int, version: int | None = None):  # noqa: ANN202
+        view = store.report(item_id, report_id, version)
+        if view is None:
+            return unknown("unknown_report")
+        name = export_name(view["title"])
+        return Response(
+            view["html"],
+            media_type="text/html; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{name}"'},
+        )
+
     @app.get("/api/items/{item_id}/conversations")
     def list_conversations(item_id: str):  # noqa: ANN202
         if item_id not in current_items():
@@ -447,6 +486,7 @@ def create_app(
                     asks=app.state.asks,
                     ask_timeout=ask_timeout,
                     skills=catalogue_skills,
+                    reports=ReportTools(store, item_id),
                     skill=next((s for s in catalogue_skills if s.name == skill_name), None),
                 ):
                     yield line

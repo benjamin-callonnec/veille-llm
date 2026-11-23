@@ -96,6 +96,8 @@ class RunRequest:
     # the skills the tutor may load (`Skill`s) and the one the user invoked with /name, if any
     skills: list[Any] = field(default_factory=list)
     skill: Any = None
+    # the report tools of this paper (a `ReportTools`), gated by the skills
+    reports: Any = None
 
 
 AgentRunner = Callable[[RunRequest], AsyncIterator[dict]]
