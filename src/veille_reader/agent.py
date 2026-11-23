@@ -374,7 +374,7 @@ async def sdk_runner(request: RunRequest, query: Callable | None = None) -> Asyn
             elif name == "ResultMessage":
                 subtype = getattr(message, "subtype", "") or ""
                 if subtype in ("error_max_turns", "error_max_budget_usd"):
-                    yield events.error("limit", LIMIT_HELP, _usage_of(message))
+                    yield events.error("budget", LIMIT_HELP, _usage_of(message))
                 elif message.is_error:
                     detail = message.result or "; ".join(message.errors or []) or "unknown error"
                     yield _failure(detail, _usage_of(message))

@@ -351,7 +351,7 @@ def test_a_refused_turn_does_not_pay_for_a_summary(tmp_path, monkeypatch):
         error_kind="",
     )
     response = send(client, cid)
-    assert '"kind": "limit"' in response.text
+    assert '"kind": "budget"' in response.text
     assert called == [] and runner.seen == []
 
 

@@ -119,10 +119,7 @@ def session_refusal(
             "This conversation already used its raised limit. Start a new conversation "
             "to keep going."
         )
-    return (
-        "This conversation reached its budget. Start a new conversation, or send your "
-        "message again with the limit raised (this can be done once per conversation)."
-    )
+    return "This conversation reached its budget. Start a new conversation to keep going."
 
 
 def load_images(store: ReaderStore, item_id: str, messages: list[dict]) -> list[Image]:
@@ -151,7 +148,7 @@ def check_citations(tools: object, text: str) -> list[dict]:
 
 def _refusal_runner(message: str) -> AgentRunner:
     async def runner(request: RunRequest) -> AsyncIterator[dict]:
-        yield events.error("limit", message)
+        yield events.error("budget", message)  # not the subscription limit
 
     return runner
 

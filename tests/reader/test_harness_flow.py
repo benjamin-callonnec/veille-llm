@@ -233,10 +233,11 @@ def test_a_conversation_over_its_budget_is_refused_without_calling_the_model(tmp
     assert types(response) == ["error"]
     assert runner.seen == []
     message = json.loads(response.text.split("\n\n")[0][6:])
-    assert message["kind"] == "limit" and "conversation" in message["message"].lower()
+    assert message["kind"] == "budget" and "conversation" in message["message"].lower()
+    assert "raised" not in message["message"]  # the UI has no way to raise the limit
     # the refusal is kept in the conversation like any other answer
     stored = client.get(f"/api/items/a1/conversations/{cid}/messages").json()
-    assert stored[-1]["content"]["error"]["kind"] == "limit"
+    assert stored[-1]["content"]["error"]["kind"] == "budget"
 
 
 def test_the_limit_can_be_raised_once_per_conversation(tmp_path):
