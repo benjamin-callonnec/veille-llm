@@ -129,6 +129,8 @@
 }
 .pdf-text canvas {
   display: block;
+  /* Only the canvas: the text layer and the highlights stay as they are. */
+  filter: var(--pdf-filter);
 }
 .pdf-text-layer {
   position: absolute;
