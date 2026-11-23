@@ -199,7 +199,7 @@
 ```markdown
 ---
 name: present
-description: Generate an HTML presentation of the paper, after asking for the audience, depth, length and focus.
+description: Make an HTML presentation of the paper; asks audience, depth, length and focus.
 tools: [ask_user, load_artifact, search_paper, write_report, read_report]
 ---
 You build a presentation of the open paper as one self-contained HTML file.
