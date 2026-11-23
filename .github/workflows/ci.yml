@@ -7,9 +7,11 @@ on:
 permissions:
   contents: read
 
+# A newer push waits instead of cancelling: cancelling would kill a `wrangler deploy` or a
+# `terraform apply` half way (the scheduler-deploy job).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   check:
@@ -34,7 +36,8 @@ jobs:
       - run: make check
       - run: make web-build
 
-  # The Cloudflare Worker that dispatches daily.yml and weekly.yml on time (#38). No secret here.
+  # The Terraform of the Cloudflare scheduler (#38), validated without credentials. The Worker itself
+  # (Biome, tsc, Vitest) is checked by `make check` in the job above.
   scheduler:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -42,13 +45,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: scheduler/package-lock.json
-      - run: make scheduler-install
-      - run: make scheduler-check
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
@@ -57,7 +53,7 @@ jobs:
   # Deploys the Worker (wrangler) then the crons (Terraform). The Cloudflare secrets are given only to
   # the steps that use them, after `npm ci --ignore-scripts`, so no install script sees them.
   scheduler-deploy:
-    needs: scheduler
+    needs: [check, scheduler]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

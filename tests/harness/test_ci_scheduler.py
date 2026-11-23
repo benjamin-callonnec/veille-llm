@@ -9,14 +9,24 @@ DEPLOY = DOC["jobs"]["scheduler-deploy"]
 SECRET_STEPS = ("make scheduler-deploy", "make tf-init", "make tf-apply-ci")
 
 
-def test_the_check_job_holds_no_secret():
+def test_the_check_job_holds_no_secret_and_validates_terraform():
     assert "secrets." not in str(CHECK)
     runs = [s.get("run", "") for s in CHECK["steps"]]
-    assert "make scheduler-check" in runs and "make tf-validate" in runs
+    assert "make tf-validate" in runs
+    # `make check` of the main job already installs and checks the Worker: not done twice
+    assert "make scheduler-check" not in runs and "make scheduler-install" not in runs
 
 
-def test_the_deploy_job_needs_the_check_and_never_runs_two_at_once():
-    assert DEPLOY["needs"] == "scheduler"
+def test_nothing_is_deployed_unless_every_gate_passed():
+    assert set(DEPLOY["needs"]) == {"check", "scheduler"}
+
+
+def test_a_deploy_in_flight_is_never_cancelled_by_a_newer_push():
+    # the workflow-level group would otherwise kill `terraform apply` half way
+    assert DOC["concurrency"]["cancel-in-progress"] is False
+
+
+def test_the_deploy_job_never_runs_two_at_once():
     assert DEPLOY["concurrency"] == {"group": "scheduler-deploy", "cancel-in-progress": False}
     assert DEPLOY["permissions"] == {"contents": "read"}
 

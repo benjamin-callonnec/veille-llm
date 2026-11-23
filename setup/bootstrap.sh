@@ -11,7 +11,10 @@ if ! command -v wrangler >/dev/null 2>&1; then
   exit 1
 fi
 
-if wrangler r2 bucket list | grep -q "${BUCKET_NAME}"; then
+# The listing goes through a variable (grep -q would close the pipe on wrangler under pipefail) and the
+# name must stand alone: veille-llm-tfstate-old is not veille-llm-tfstate.
+existing="$(wrangler r2 bucket list)"
+if printf '%s\n' "${existing}" | grep -Eq "(^|[^A-Za-z0-9-])${BUCKET_NAME}([^A-Za-z0-9-]|$)"; then
   echo "Bucket ${BUCKET_NAME} already exists, nothing to do."
 else
   wrangler r2 bucket create "${BUCKET_NAME}"
