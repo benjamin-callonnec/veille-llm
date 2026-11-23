@@ -5,6 +5,20 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-23
+
+### Added
+- Reader (#43): clicking a citation of a report opens a preview of the paper on the right of the viewer: the whole page, at a readable size, scrolled to the cited passage and highlighted, with zoom (50 to 300 %), previous and next page, and an icon to open the PDF at that place. The page looks like the PDF pane (backdrop, shadow, dark-theme inversion, accent highlight).
+- Reader (#43): when a citation gives no exact quote (a page only, or a quote not found), the preview highlights the closest passage to the text of the slide, dashed and marked "Closest match: not an exact quote"; when nothing is close enough it says so instead of showing a wrong passage.
+- Reader (#43): a citation shows only `[p.N]` in the viewer and in the exported file; the quote stays hidden and is only used to find the passage. Citations a report builds after it loaded are picked up too.
+- Reader (#43): the `/present` skill asks as many questions as it needs (audience, depth, length as a time or a size, focus, what to leave out, tone), always includes a diagram or a chart when the paper has something to draw, makes slides clean but never empty (bullets, two columns, a big number, a chart or a diagram), lets you move with a click on the right or the left half of the screen, and cites with exact quotes. It gets more room (20 turns, 1 $, 30 tool calls) when you invoke it with `/present`; a limit you configured yourself is respected.
+- Reader (#43): two new sub-skills, `charts` and `diagrams`, give the rules for a readable chart or architecture diagram as inline SVG (title, legend, labels, units, scale); `write_report` tells the agent what to fix (an SVG without title or viewBox, an image without alt text) and ignores decorative SVGs.
+- Reader (#43): a quiet reports icon in the chat header reopens the viewer; `V` opens and closes it and the page keeps the slide you were on; the PDF toolbar only shows when the mouse reaches the top edge; the viewer bar has icons for export and full screen; the `/` menu is a quiet list of names with a card for the highlighted skill.
+- Reader (#44): while the agent works, three dots make a wave before "Thinking" (they rest while it waits for your answer), and a timer in the corner of the message counts the whole answer, then keeps the final duration.
+
+### Fixed
+- Reader (#43): `V` and `Esc` typed inside a report close the viewer; a hidden viewer no longer opens previews or steals the keyboard; the captions of figures are asked again after a failure; regenerating an answer keeps the skill you invoked.
+
 ## [0.17.0] - 2026-11-23
 
 ### Added
