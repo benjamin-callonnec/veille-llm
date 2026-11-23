@@ -1,4 +1,4 @@
-.PHONY: tf-env tf-init tf-validate tf-plan tf-apply tf-apply-ci scheduler-install scheduler-check scheduler-deploy scheduler-secret catalogue reader reader-build reader-token subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
+.PHONY: tf-init tf-validate tf-plan tf-apply tf-apply-ci scheduler-install scheduler-check scheduler-deploy scheduler-secret catalogue reader reader-build reader-token subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
 
 install:
 	uv sync --locked
@@ -119,33 +119,32 @@ scheduler-deploy:
 scheduler-secret:
 	cd scheduler && npx wrangler secret put GITHUB_TOKEN
 
-# Terraform of the scheduler (iac/): crons and state. CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID
-# and the R2_STATE_* keys of the state bucket come from the environment (never from a file in git):
-# `set -a; source .env.cloudflare; set +a` (see setup/README.md). Terraform's S3 backend wants the keys
-# under the AWS_* names, so they are mapped here: everywhere else they keep their R2_STATE_* names.
-export TF_VAR_cloudflare_api_token := $(CLOUDFLARE_API_TOKEN)
-export TF_VAR_cloudflare_account_id := $(CLOUDFLARE_ACCOUNT_ID)
-export AWS_ACCESS_KEY_ID := $(R2_STATE_ACCESS_KEY_ID)
-export AWS_SECRET_ACCESS_KEY := $(R2_STATE_SECRET_ACCESS_KEY)
-
-# Fails at once, with the name of what is missing, instead of letting Terraform look for a cloud role.
-tf-env:
-	@for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID R2_STATE_ACCESS_KEY_ID R2_STATE_SECRET_ACCESS_KEY; do \
-		eval "value=\$${$$name}"; \
+# Terraform of the scheduler (iac/): crons and state. $(TF_ENV) starts every command that needs the
+# credentials, in the same shell: it loads .env.cloudflare when it exists (CI has no file, its
+# variables are already set; make runs /bin/sh, hence `.` and not `source`), stops at once naming
+# the first variable that is missing, and maps the R2_STATE_* keys to the AWS_* names that
+# Terraform's S3 backend requires. See setup/README.md.
+TF_ENV = set -a; if [ -f .env.cloudflare ]; then . ./.env.cloudflare; fi; set +a; \
+	for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID R2_STATE_ACCESS_KEY_ID R2_STATE_SECRET_ACCESS_KEY; do \
+		eval "value=\$$$$name"; \
 		test -n "$$value" || { echo "$$name is not set: see setup/README.md"; exit 1; }; \
-	done
+	done; \
+	export TF_VAR_cloudflare_api_token="$$CLOUDFLARE_API_TOKEN" \
+		TF_VAR_cloudflare_account_id="$$CLOUDFLARE_ACCOUNT_ID" \
+		AWS_ACCESS_KEY_ID="$$R2_STATE_ACCESS_KEY_ID" \
+		AWS_SECRET_ACCESS_KEY="$$R2_STATE_SECRET_ACCESS_KEY";
 
-tf-init: tf-env
-	cd iac && terraform init -backend-config="endpoints={s3=\"https://$(CLOUDFLARE_ACCOUNT_ID).r2.cloudflarestorage.com\"}"
+tf-init:
+	$(TF_ENV) cd iac && terraform init -backend-config="endpoints={s3=\"https://$$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com\"}"
 
 tf-validate:
 	cd iac && terraform init -backend=false && terraform validate && terraform fmt -check
 
-tf-plan: tf-env
-	cd iac && terraform plan
+tf-plan:
+	$(TF_ENV) cd iac && terraform plan
 
-tf-apply: tf-env
-	cd iac && terraform apply
+tf-apply:
+	$(TF_ENV) cd iac && terraform apply
 
-tf-apply-ci: tf-env
-	cd iac && terraform apply -auto-approve
+tf-apply-ci:
+	$(TF_ENV) cd iac && terraform apply -auto-approve

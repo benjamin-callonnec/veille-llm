@@ -30,10 +30,11 @@ R2_STATE_SECRET_ACCESS_KEY=...    # étape 2
 
 ```bash
 chmod 600 .env.cloudflare
-set -a; source .env.cloudflare; set +a     # dans chaque nouveau terminal, avant make tf-*
 ```
 
-`make tf-*` s'arrête en nommant la variable manquante. Le Makefile range lui-même les clés R2 sous les noms
+`make tf-*` charge ce fichier lui-même (`. ./.env.cloudflare`, rien à `source` à la main ; en CI il n'y a
+pas de fichier, les variables viennent des secrets). Il passe avant les variables déjà exportées dans le terminal.
+Il s'arrête en nommant la variable manquante. Le Makefile range lui-même les clés R2 sous les noms
 `AWS_*` que Terraform exige : n'exportez pas ceux-là.
 
 ## 2. Bucket R2 de l'état Terraform

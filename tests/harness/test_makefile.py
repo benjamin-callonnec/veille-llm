@@ -94,27 +94,36 @@ def test_terraform_targets():
     assert "-auto-approve" not in _recipe("tf-apply")
 
 
-def test_terraform_targets_stop_early_when_the_environment_is_incomplete():
+def _tf_env() -> str:
     makefile = (ROOT / "Makefile").read_text()
+    match = re.search(r"^TF_ENV = (.*?)\n\n", makefile, re.MULTILINE | re.DOTALL)
+    assert match, "TF_ENV is not defined"
+    return match.group(1)
+
+
+def test_terraform_targets_load_the_env_file_and_stop_early_when_it_is_incomplete():
     for target in ("tf-init", "tf-plan", "tf-apply", "tf-apply-ci"):
-        assert re.search(rf"^{target}:.*\btf-env\b", makefile, re.MULTILINE), target
-    recipe = _recipe("tf-env")
+        assert "$(TF_ENV)" in _recipe(target), target
+    assert "$(TF_ENV)" not in _recipe("tf-validate")  # validate needs no credentials
+    env = _tf_env()
+    assert ". ./.env.cloudflare" in env and "source" not in env  # make runs /bin/sh
+    assert "[ -f .env.cloudflare ]" in env  # CI has no file: its variables are already set
     for name in (
         "CLOUDFLARE_API_TOKEN",
         "CLOUDFLARE_ACCOUNT_ID",
         "R2_STATE_ACCESS_KEY_ID",
         "R2_STATE_SECRET_ACCESS_KEY",
     ):
-        assert name in recipe, name
-    assert "AWS_" not in recipe
-    assert "is not set" in recipe and "setup/README.md" in recipe
-    assert "tf-env" not in re.search(r"^tf-validate:.*", makefile, re.MULTILINE).group(0)
+        assert name in env, name
+    assert "is not set" in env and "setup/README.md" in env
 
 
-def test_the_r2_keys_have_the_same_names_everywhere_and_make_maps_them_to_terraform_s():
-    makefile = (ROOT / "Makefile").read_text()
-    assert "export AWS_ACCESS_KEY_ID := $(R2_STATE_ACCESS_KEY_ID)" in makefile
-    assert "export AWS_SECRET_ACCESS_KEY := $(R2_STATE_SECRET_ACCESS_KEY)" in makefile
+def test_the_r2_keys_keep_their_names_and_are_mapped_to_terraform_s_in_the_shell():
+    env = _tf_env()
+    assert 'AWS_ACCESS_KEY_ID="$$R2_STATE_ACCESS_KEY_ID"' in env
+    assert 'AWS_SECRET_ACCESS_KEY="$$R2_STATE_SECRET_ACCESS_KEY"' in env
+    assert 'TF_VAR_cloudflare_account_id="$$CLOUDFLARE_ACCOUNT_ID"' in env
+    assert "$$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" in _recipe("tf-init")
     readme = (ROOT / "setup" / "README.md").read_text()
     for name in ("R2_STATE_ACCESS_KEY_ID", "R2_STATE_SECRET_ACCESS_KEY", ".env.cloudflare"):
         assert name in readme, name
