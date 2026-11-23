@@ -1,6 +1,6 @@
-/** No network, no frames, no forms: the report can only draw itself with what it carries. */
+/** No network, no frames, no forms, no <base>: the report can only draw itself with what it carries. */
 export const CSP =
-  "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:";
+  "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'";
 
 const META = `<meta http-equiv="Content-Security-Policy" content="${CSP}">`;
 const DOCTYPE = /^\s*<!doctype[^>]*>/i;

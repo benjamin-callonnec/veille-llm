@@ -3,9 +3,9 @@ import { CSP, withCsp } from "./csp";
 
 const META = `<meta http-equiv="Content-Security-Policy" content="${CSP}">`;
 
-test("the policy blocks the network and keeps inline styles, scripts and data: media", () => {
+test("the policy blocks the network, <base> and forms, and keeps inline styles, scripts and data: media", () => {
   expect(CSP).toBe(
-    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:",
+    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'",
   );
 });
 
