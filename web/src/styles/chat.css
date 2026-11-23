@@ -986,3 +986,16 @@
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
 }
+
+/* The rotating placeholder: a short fade between two hints. */
+.composer-row textarea::placeholder {
+  transition: opacity 0.2s ease;
+}
+.composer-row textarea.hint-fading::placeholder {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-row textarea::placeholder {
+    transition: none;
+  }
+}

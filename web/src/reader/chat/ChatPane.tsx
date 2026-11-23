@@ -270,6 +270,7 @@ export function ChatPane({
         onDirty={setDirty}
         onSend={(text, files, voice, skill) => void send(text, files, voice, skill)}
         skills={skills}
+        hasReports={viewer?.available}
       />
     </div>
   );

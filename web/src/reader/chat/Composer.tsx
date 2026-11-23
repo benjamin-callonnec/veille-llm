@@ -7,6 +7,7 @@ import { imagesOf, pickImages } from "./attachments";
 import { loadDraft, saveDraft } from "./drafts";
 import { SkillMenu } from "./SkillMenu";
 import { type SkillInfo, slashQuery, splitSkill } from "./skillsApi";
+import { useHint } from "./useHint";
 
 interface Props {
   /** `voice` is true when the message was (at least partly) dictated: the answer is then read aloud. */
@@ -27,6 +28,8 @@ interface Props {
   speech?: SttEngine | null;
   /** The skills behind the slash menu; with none, a slash is plain text. */
   skills?: SkillInfo[];
+  /** There is a report to open: the tips may say so. */
+  hasReports?: boolean;
 }
 
 interface Attached {
@@ -50,6 +53,7 @@ export function Composer({
   onDirty,
   speech,
   skills = [],
+  hasReports = false,
 }: Props) {
   const [text, setText] = useState(() => loadDraft(draftKey));
   const [images, setImages] = useState<Attached[]>([]);
@@ -84,6 +88,10 @@ export function Composer({
 
   const ready = shown.trim().length > 0 || images.length > 0;
 
+  const hint = useHint(!streaming && !tabFill && !ready, {
+    skills: skills.length > 0,
+    reports: hasReports,
+  });
   const query = slashQuery(shown);
   const matches = query === null ? [] : skills.filter((s) => s.name.startsWith(query));
   const menuOpen = matches.length > 0 && !menuClosed;
@@ -223,7 +231,8 @@ export function Composer({
           <textarea
             ref={area}
             aria-label="Message"
-            placeholder={streaming ? "Answering…" : (tabFill ?? "Ask about the paper…")}
+            placeholder={streaming ? "Answering…" : (tabFill ?? hint.text)}
+            className={hint.fading ? "hint-fading" : undefined}
             rows={1}
             value={shown}
             onChange={(e) => {

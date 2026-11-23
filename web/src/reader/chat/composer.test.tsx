@@ -406,3 +406,85 @@ test("Enter on an exact skill name sends it at once", async () => {
   await userEvent.type(box(), "/present{Enter}");
   expect(onSend).toHaveBeenCalledWith("/present", undefined, false, "present");
 });
+
+// --- the rotating placeholder ----------------------------------------------------------------
+
+import { act } from "@testing-library/react";
+import { FIRST_HINT, hintAt } from "../lib/hints";
+import { HINT_FADE_MS, HINT_INTERVAL_MS } from "./useHint";
+
+const placeholder = () => box().getAttribute("placeholder");
+const tick = (ms: number) =>
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
+const stubMotion = (reduce: boolean) =>
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: reduce && query.includes("reduce"),
+    media: query,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+
+test("the placeholder opens on the plain invitation and then rotates", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  setup({ skills: SKILLS });
+  expect(placeholder()).toBe(FIRST_HINT);
+  tick(HINT_INTERVAL_MS + HINT_FADE_MS);
+  expect(placeholder()).toBe(hintAt(1, { skills: true, reports: false }));
+  expect(placeholder()).not.toBe(FIRST_HINT);
+  vi.useRealTimers();
+});
+
+test("a tip shows up as every fourth hint, and only for what exists", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  setup({ skills: SKILLS, hasReports: true });
+  const seen: string[] = [];
+  for (let i = 0; i < 4; i++) {
+    tick(HINT_INTERVAL_MS + HINT_FADE_MS);
+    seen.push(placeholder() ?? "");
+  }
+  expect(seen[2]).toBe(hintAt(3, { skills: true, reports: true })); // the fourth hint overall
+  vi.useRealTimers();
+});
+
+test("nothing rotates while you type, while it answers, or with reduced motion", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  const { view, props } = setup({ skills: SKILLS });
+  fireEvent.change(box(), { target: { value: "hello" } });
+  expect(vi.getTimerCount()).toBe(0);
+  fireEvent.change(box(), { target: { value: "" } });
+  expect(vi.getTimerCount()).toBeGreaterThan(0);
+  view.rerender(<Composer {...props} streaming />);
+  expect(vi.getTimerCount()).toBe(0);
+  expect(placeholder()).toBe("Answering…");
+  cleanup();
+  stubMotion(true);
+  setup({ skills: SKILLS });
+  expect(vi.getTimerCount()).toBe(0);
+  expect(placeholder()).toBe(FIRST_HINT);
+  vi.useRealTimers();
+});
+
+test("the suggestion of the agent wins over the rotation", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  setup({ tabFill: "Why does it work?" });
+  tick(3 * (HINT_INTERVAL_MS + HINT_FADE_MS));
+  expect(placeholder()).toBe("Why does it work?");
+  expect(vi.getTimerCount()).toBe(0);
+  vi.useRealTimers();
+});
+
+test("the timers are cleared when the composer goes away", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  const { view } = setup({ skills: SKILLS });
+  expect(vi.getTimerCount()).toBeGreaterThan(0);
+  view.unmount();
+  expect(vi.getTimerCount()).toBe(0);
+  vi.useRealTimers();
+});
