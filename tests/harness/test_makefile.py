@@ -92,3 +92,19 @@ def test_terraform_targets():
     assert "-backend-config" in _recipe("tf-init")
     assert "-auto-approve" in _recipe("tf-apply-ci")
     assert "-auto-approve" not in _recipe("tf-apply")
+
+
+def test_terraform_targets_stop_early_when_the_environment_is_incomplete():
+    makefile = (ROOT / "Makefile").read_text()
+    for target in ("tf-init", "tf-plan", "tf-apply", "tf-apply-ci"):
+        assert re.search(rf"^{target}:.*\btf-env\b", makefile, re.MULTILINE), target
+    recipe = _recipe("tf-env")
+    for name in (
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+    ):
+        assert name in recipe, name
+    assert "is not set" in recipe and "setup/README.md" in recipe
+    assert "tf-env" not in re.search(r"^tf-validate:.*", makefile, re.MULTILINE).group(0)

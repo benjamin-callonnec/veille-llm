@@ -1,4 +1,4 @@
-.PHONY: tf-init tf-validate tf-plan tf-apply tf-apply-ci scheduler-install scheduler-check scheduler-deploy scheduler-secret catalogue reader reader-build reader-token subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
+.PHONY: tf-env tf-init tf-validate tf-plan tf-apply tf-apply-ci scheduler-install scheduler-check scheduler-deploy scheduler-secret catalogue reader reader-build reader-token subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
 
 install:
 	uv sync --locked
@@ -124,17 +124,24 @@ scheduler-secret:
 export TF_VAR_cloudflare_api_token := $(CLOUDFLARE_API_TOKEN)
 export TF_VAR_cloudflare_account_id := $(CLOUDFLARE_ACCOUNT_ID)
 
-tf-init:
+# Fails at once, with the name of what is missing, instead of letting Terraform look for a cloud role.
+tf-env:
+	@for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do \
+		eval "value=\$${$$name}"; \
+		test -n "$$value" || { echo "$$name is not set: see setup/README.md"; exit 1; }; \
+	done
+
+tf-init: tf-env
 	cd iac && terraform init -backend-config="endpoints={s3=\"https://$(CLOUDFLARE_ACCOUNT_ID).r2.cloudflarestorage.com\"}"
 
 tf-validate:
 	cd iac && terraform init -backend=false && terraform validate && terraform fmt -check
 
-tf-plan:
+tf-plan: tf-env
 	cd iac && terraform plan
 
-tf-apply:
+tf-apply: tf-env
 	cd iac && terraform apply
 
-tf-apply-ci:
+tf-apply-ci: tf-env
 	cd iac && terraform apply -auto-approve
