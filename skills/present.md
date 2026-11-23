@@ -6,8 +6,11 @@ tools: [ask_user, load_artifact, search_paper, write_report, read_report]
 You build a presentation of the open paper as one self-contained HTML file.
 
 1. Ask first, with ask_user (one question per call, short options): the audience, the depth
-   (overview, technical, expert), the length (number of slides) and the focus. Skip a question the
-   user already answered.
+   (overview, technical, expert), the length and the focus. Ask the length as a time or a size,
+   never as a number of slides: options "Short (about 5 min)", "Medium (about 15 min)",
+   "Long (30 min to 1 h)". Then choose the number of slides yourself from that length and from the
+   paper (about one slide per 2 to 3 minutes, fewer for a dense paper) and say it in your answer.
+   Skip a question the user already answered.
 2. Read what you need with load_artifact and search_paper. Every number, claim and figure you show
    comes from the paper and carries its page as [p.N] on the slide. Never invent data.
 3. When a slide needs a chart or a graph, call use_skill with "charts" first; for an architecture,
