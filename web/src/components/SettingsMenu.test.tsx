@@ -29,6 +29,8 @@ test("a small gear is there, closed by default", () => {
   render(<SettingsMenu shortcuts={READER_SHORTCUTS} storage={storage} />);
   expect(gear().getAttribute("aria-expanded")).toBe("false");
   expect(gear().getAttribute("title")).toMatch(/Settings/);
+  expect(gear().textContent).toBe("");
+  expect(gear().querySelector("svg.icon")).not.toBeNull();
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 

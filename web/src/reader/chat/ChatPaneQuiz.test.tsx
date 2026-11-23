@@ -69,3 +69,39 @@ test("a quiz that cannot be made says so", async () => {
   await userEvent.click(await screen.findByRole("button", { name: "Quiz me" }));
   expect(await screen.findByText("The quiz could not be made. Try again.")).toBeTruthy();
 });
+
+test("while a quiz starts and once its card is last, no suggested prompt is offered", async () => {
+  const answer = {
+    id: 3,
+    seq: 1,
+    role: "assistant",
+    kind: "assistant",
+    content: { answer: "Done.", blocks: [], suggestions: ["First idea?", "Second idea?"] },
+    created_at: "",
+  } as unknown as StoredMessage;
+  const { chatApi, quizApi } = apis(true);
+  const base = chatApi.messages;
+  const stored = [answer];
+  chatApi.messages = async (...a) => [...stored, ...(await base(...a))];
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  (quizApi.start as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+    await gate;
+    stored.push(card);
+    return card;
+  });
+  render(<Host chatApi={chatApi} quizApi={quizApi} />);
+  expect(await screen.findByRole("button", { name: "Second idea?" })).toBeTruthy();
+  expect(screen.getByRole("textbox").getAttribute("placeholder")).toBe("First idea?");
+
+  await userEvent.click(screen.getByRole("button", { name: "Quiz me" }));
+  expect(screen.queryByRole("button", { name: "Second idea?" })).toBeNull();
+  expect(screen.getByRole("textbox").getAttribute("placeholder")).not.toBe("First idea?");
+
+  release();
+  expect(await screen.findByText("Which one?")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Second idea?" })).toBeNull();
+  expect(screen.getByRole("textbox").getAttribute("placeholder")).not.toBe("First idea?");
+});

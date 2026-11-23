@@ -18,6 +18,9 @@ const NAMES: IconName[] = [
   "trash",
   "chevron",
   "compose",
+  "search",
+  "outline",
+  "settings",
 ];
 
 test.each(NAMES)("the %s icon is a decorative svg drawn in the current colour", (name) => {
