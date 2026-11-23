@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { IconButton } from "../../components/Icon";
 import { placeholders } from "../lib/placeholders";
+import { AskCard, toAsk } from "./AskCard";
 import { AssistantMessage, StoredAssistantMessage } from "./AssistantMessage";
+import { type AskApi, httpAskApi } from "./askApi";
 import { toPayload } from "./attachments";
+import { CompactionNote } from "./CompactionNote";
 import { Composer } from "./Composer";
 import { ConversationMenu } from "./ConversationMenu";
 import { toSuggestions } from "./events";
 import { QuizCard } from "./QuizCard";
 import { httpQuizApi, type QuizApi } from "./quizApi";
+import { SessionTools } from "./SessionTools";
 import { UserMessage } from "./UserMessage";
 import type { useChat } from "./useChat";
 
@@ -27,6 +31,7 @@ export function ChatPane({
   model,
   itemId: itemProp = "",
   quizApi = httpQuizApi,
+  askApi = httpAskApi,
 }: {
   chat: ReturnType<typeof useChat>;
   /** The quote arrow of a user message. */
@@ -38,6 +43,7 @@ export function ChatPane({
   /** The paper, for the quiz routes. */
   itemId?: string;
   quizApi?: QuizApi;
+  askApi?: AskApi;
 }) {
   // the paper is the chat's own: the prop is only an override (a card must never post with no id)
   const itemId = itemProp || chat.itemId;
@@ -90,6 +96,9 @@ export function ChatPane({
     else void send(prompt);
   };
 
+  const answerAsk = async (askId: string, text: string) => {
+    if (chat.current) await askApi.answer(itemId, chat.current.id, askId, text);
+  };
   const lastUser = chat.messages.map((m) => m.role).lastIndexOf("user");
   return (
     <div className="chat">
@@ -107,6 +116,11 @@ export function ChatPane({
           disabled={chat.streaming || quizBusy || !itemId}
           onClick={startQuiz}
           size={18}
+        />
+        <SessionTools
+          itemId={itemId}
+          conversation={chat.current?.id ?? null}
+          version={chat.messages.length}
         />
         <ConversationMenu
           disabled={chat.streaming}
@@ -143,17 +157,30 @@ export function ChatPane({
             <p key={`${m.id}-${m.seq}`} className="compaction-note">
               {String(m.content.text ?? "")}
             </p>
-          ) : m.role === "system" ? (
-            <p key={`${m.id}-${m.seq}`} className="compaction-note">
-              Earlier messages were summarised to keep the conversation light.
+          ) : m.kind === "ask" ? (
+            <AskCard
+              key={`${m.id}-${m.seq}`}
+              card={toAsk(m.content) ?? { id: "", question: "", options: [], status: "expired" }}
+              onAnswer={async (text) => {
+                await answerAsk(String(m.content.id), text);
+                await chat.refresh();
+              }}
+            />
+          ) : m.kind === "memory" ? (
+            <p key={`${m.id}-${m.seq}`} className="memory-line">
+              {m.content.action === "saved"
+                ? `The tutor saved a note: ${String(m.content.text ?? "")}`
+                : "The tutor removed a note."}
             </p>
+          ) : m.role === "system" ? (
+            <CompactionNote key={`${m.id}-${m.seq}`} summary={String(m.content.summary ?? "")} />
           ) : m.role === "user" ? (
             <UserMessage
               key={`${m.id}-${m.seq}`}
               message={m}
               itemId={chat.itemId}
               onGo={onGo}
-              onRetry={i === lastUser && !chat.streaming ? chat.regenerate : undefined}
+              onRetry={i === lastUser && !chat.streaming ? () => chat.regenerate() : undefined}
             />
           ) : (
             <StoredAssistantMessage
@@ -161,6 +188,11 @@ export function ChatPane({
               content={m.content}
               createdAt={m.created_at}
               onCite={onCite}
+              onRaise={
+                i === chat.messages.length - 1 && !chat.streaming
+                  ? () => chat.regenerate({ raiseLimit: true })
+                  : undefined
+              }
             />
           ),
         )}
@@ -169,6 +201,7 @@ export function ChatPane({
             state={chat.assistant}
             onToggleThinking={chat.toggleThinking}
             onCite={onCite}
+            onAnswerAsk={answerAsk}
           />
         )}
         {suggestions.length > 1 && (

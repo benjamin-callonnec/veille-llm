@@ -177,16 +177,19 @@ export function useChat(
     [api, itemId, run],
   );
 
-  const regenerate = useCallback(async () => {
-    const id = currentRef.current;
-    if (busy.current || id === null) return;
-    busy.current = true;
-    setError(false);
-    const ctrl = new AbortController();
-    controller.current = ctrl;
-    setMessages(withoutLastAnswer);
-    await run(id, api.regenerate(itemId, id, ctrl.signal), ctrl);
-  }, [api, itemId, run]);
+  const regenerate = useCallback(
+    async (options?: { raiseLimit?: boolean }) => {
+      const id = currentRef.current;
+      if (busy.current || id === null) return;
+      busy.current = true;
+      setError(false);
+      const ctrl = new AbortController();
+      controller.current = ctrl;
+      setMessages(withoutLastAnswer);
+      await run(id, api.regenerate(itemId, id, ctrl.signal, options?.raiseLimit), ctrl);
+    },
+    [api, itemId, run],
+  );
 
   const stop = useCallback(() => {
     controller.current?.abort();

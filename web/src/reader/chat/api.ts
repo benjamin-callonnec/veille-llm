@@ -57,7 +57,12 @@ export interface ChatApi {
   messages(item: string, id: number): Promise<StoredMessage[]>;
   exportMarkdown(item: string, id: number): Promise<string>;
   send(item: string, id: number, body: SendBody, signal: AbortSignal): AsyncIterable<ChatEvent>;
-  regenerate(item: string, id: number, signal: AbortSignal): AsyncIterable<ChatEvent>;
+  regenerate(
+    item: string,
+    id: number,
+    signal: AbortSignal,
+    raiseLimit?: boolean,
+  ): AsyncIterable<ChatEvent>;
 }
 
 const base = (item: string) => `/api/items/${encodeURIComponent(item)}/conversations`;
@@ -115,7 +120,13 @@ export const httpChatApi: ChatApi = {
       fetch(`${base(item)}/${id}/messages`, { method: "POST", ...json(body), signal }),
     );
   },
-  regenerate(item, id, signal) {
-    return streamOf(fetch(`${base(item)}/${id}/regenerate`, { method: "POST", signal }));
+  regenerate(item, id, signal, raiseLimit) {
+    return streamOf(
+      fetch(`${base(item)}/${id}/regenerate`, {
+        method: "POST",
+        ...(raiseLimit ? json({ raise_limit: true }) : {}),
+        signal,
+      }),
+    );
   },
 };
