@@ -233,10 +233,11 @@ def test_a_conversation_over_its_budget_is_refused_without_calling_the_model(tmp
     assert types(response) == ["error"]
     assert runner.seen == []
     message = json.loads(response.text.split("\n\n")[0][6:])
-    assert message["kind"] == "limit" and "conversation" in message["message"].lower()
+    assert message["kind"] == "budget" and "conversation" in message["message"].lower()
+    assert "raised" not in message["message"]  # the UI has no way to raise the limit
     # the refusal is kept in the conversation like any other answer
     stored = client.get(f"/api/items/a1/conversations/{cid}/messages").json()
-    assert stored[-1]["content"]["error"]["kind"] == "limit"
+    assert stored[-1]["content"]["error"]["kind"] == "budget"
 
 
 def test_the_limit_can_be_raised_once_per_conversation(tmp_path):
@@ -384,3 +385,52 @@ def test_there_is_nothing_to_check_without_citations_or_without_the_paper(tmp_pa
     news = conv(news_client, "n1")
     response = send(news_client, news, item="n1")
     assert "citations" not in types(response)  # a news item has no paper to check against
+
+
+def test_a_turn_checks_its_citations_once_and_off_the_event_loop(tmp_path, monkeypatch):
+    import threading
+
+    from veille_reader import chat
+
+    loop_thread = []
+    calls = []
+    real = chat.check_citations
+
+    def spy(tools, text):
+        calls.append(threading.get_ident())
+        return real(tools, text)
+
+    monkeypatch.setattr(chat, "check_citations", spy)
+
+    async def runner(request):
+        loop_thread.append(threading.get_ident())
+        yield events.text_delta('Yes [p.1 "attention page one"]')
+        yield events.done(1)
+
+    client, _ = client_for(tmp_path, runner)
+    cid = conv(client)
+    send(client, cid)
+    assert len(calls) == 1 and calls[0] != loop_thread[0]
+    calls.clear()
+    plain = recording(events.text_delta("no citation here"), events.done(1))
+    client.app.state.runner = plain
+    send(client, cid)
+    assert len(calls) == 1  # done found nothing: the final save does not look again
+
+
+def test_nothing_is_normalised_without_citations_and_pages_are_normalised_once(monkeypatch):
+    from veille_reader import citations
+    from veille_reader.chat import check_citations
+
+    count = []
+    real = citations.normalise
+    monkeypatch.setattr(citations, "normalise", lambda t: count.append(t) or real(t))
+    paper = PaperText(["Attention page one", "Second page"], [])
+    tools = type("T", (), {"paper": paper})()
+    assert check_citations(tools, "an answer without any citation") == []
+    assert count == []
+    cited = 'See [p.1 "attention page one"] and [p.2 "second page"].'
+    assert [v["status"] for v in check_citations(tools, cited)] == ["verified", "verified"]
+    pages_pass = len(count)
+    check_citations(tools, cited)
+    assert len(count) - pages_pass == 2  # only the two quotes: the pages are cached

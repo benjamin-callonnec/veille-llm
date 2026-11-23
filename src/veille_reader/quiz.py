@@ -294,7 +294,7 @@ def validate_quiz(raw: object, pages: list[str], outline: list[tuple[str, int]])
     if verdict["status"] not in ("verified", "wrong_page"):
         raise QuizError("the quote is not in the paper")
     spec["page"] = int(verdict.get("found_page") or page)
-    spec["quote"] = quote
+    spec["quote"] = verdict["quote"]  # without the entities of the model's escaped view
     spec["section"] = verdict.get("section")
     return spec
 
@@ -394,7 +394,7 @@ async def create_quiz(
     pages, outline = paper.pages, paper.outline  # type: ignore[attr-defined]
     if not any(p.strip() for p in pages):
         raise QuizError("the paper has no text to ask about")
-    avoid = [h["question"] for h in store.quiz_history(item_id)[:10]]
+    avoid = store.quiz_questions(item_id, 10)
     request = QuizRequest(item, pages, kind, focus[:MAX_FOCUS], list(recent or []), avoid)
     failure = "the quiz could not be made"
     for _ in range(ATTEMPTS):
@@ -564,14 +564,5 @@ async def quiz_after_turn(
             store, maker, item_id, item, cid, paper, "any", focus, recent_turns(store, cid)
         )
     except QuizError as exc:
-        store.add_message(
-            cid,
-            "assistant",
-            "assistant",
-            {
-                "blocks": [],
-                "answer": f"I could not start the quiz: {exc}.",
-                "stopped": False,
-                "duration_ms": 0,
-            },
-        )
+        # a notice, not a tutor turn: it never goes into the model's history
+        store.add_message(cid, "system", "notice", {"text": f"I could not start the quiz: {exc}."})

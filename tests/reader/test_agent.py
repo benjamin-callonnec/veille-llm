@@ -373,11 +373,11 @@ def test_the_tool_prefix_is_hidden_in_the_events(monkeypatch):
     assert out[0]["name"] == "search_paper"
 
 
-def test_running_out_of_turns_or_budget_is_a_limit_event(monkeypatch):
+def test_running_out_of_turns_or_budget_is_a_budget_event_not_a_subscription_limit(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     for subtype in ("error_max_turns", "error_max_budget_usd"):
         out = collect(request(), fake_query(ResultMessage(subtype=subtype)))
-        assert out[-1]["type"] == "error" and out[-1]["kind"] == "limit", subtype
+        assert out[-1]["type"] == "error" and out[-1]["kind"] == "budget", subtype
         assert "limit" in out[-1]["message"].lower()
 
 
@@ -455,7 +455,7 @@ def test_a_limit_result_carries_the_cost_the_sdk_reported(monkeypatch):
         total_cost_usd=0.5,
     )
     event = collect(request(), fake_query(result))[-1]
-    assert event["kind"] == "limit"
+    assert event["kind"] == "budget"
     assert event["usage"] == {"input_tokens": 3, "output_tokens": 4, "cost_usd": 0.5}
 
 

@@ -124,6 +124,12 @@ def test_references_start_at_the_references_heading():
     assert "page 9" in out and "[2] Bahdanau" in out and "page 8" not in out
 
 
+@pytest.mark.parametrize("kind", ["figure", "table"])
+def test_a_figure_or_table_without_a_number_is_an_error_not_figure_0(kind):
+    with pytest.raises(ToolError, match=f"kind '{kind}' needs number"):
+        make().load_artifact(kind)
+
+
 def test_a_figure_and_a_table_are_found_by_their_caption():
     tools = make()
     fig = tools.load_artifact("figure", number=1)
@@ -163,6 +169,23 @@ def test_a_paper_without_text_says_so_instead_of_guessing():
 # --- search_paper ----------------------------------------------------------------------------
 
 
+def test_the_index_is_built_once_per_paper_across_turns_and_rebuilt_when_the_text_changes(
+    monkeypatch,
+):
+    from veille_reader import tools as tools_module
+
+    built = []
+    real = tools_module.build_index
+    monkeypatch.setattr(tools_module, "build_index", lambda p, o: built.append(1) or real(p, o))
+    pages = ["Alpha beta gamma. Unique heron.", "Delta epsilon."]
+    for _ in range(3):  # PaperTools is made again for each message
+        assert "heron" in make(pages=list(pages), outline=[]).search_paper("heron")
+    assert len(built) == 1
+    changed = ["Alpha beta gamma. Unique ibis.", "Delta epsilon."]
+    out = make(pages=changed, outline=[]).search_paper("ibis")
+    assert "ibis" in out and len(built) == 2
+
+
 def test_search_finds_passages_with_their_page_ignoring_case_and_spacing():
     out = make().search_paper("MULTI-HEAD   attention")
     assert "page 4 (section: Model Architecture)" in out
@@ -193,14 +216,6 @@ def test_search_escapes_and_cuts_section_titles():
     title = "<b>" + "T" * 300
     out = make(pages=["alpha beta"], outline=[(title, 1)]).search_paper("alpha")
     assert out.count("</data>") == 1 and "<b>" not in out and "T" * 121 not in out
-
-
-def test_search_builds_its_index_once():
-    tools = make()
-    tools.search_paper("attention")
-    first = tools._index
-    tools.search_paper("results")
-    assert first is not None and tools._index is first
 
 
 # --- session memory --------------------------------------------------------------------------

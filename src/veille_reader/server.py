@@ -196,6 +196,9 @@ def create_app(
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         return response
 
+    def unknown(reason: str = "unknown_item") -> JSONResponse:
+        return JSONResponse({"reason": reason}, status_code=404)
+
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok", **({"model": model} if model else {})}
@@ -204,7 +207,7 @@ def create_app(
     def item(item_id: str):  # noqa: ANN202
         found = current_items().get(item_id)
         if found is None:
-            return JSONResponse({"reason": "unknown_item"}, status_code=404)
+            return unknown()
         return {
             "id": item_id,
             "title": str(found.get("title", "")),
@@ -214,14 +217,11 @@ def create_app(
             "has_pdf": arxiv_id(str(found.get("url", ""))) is not None,
         }
 
-    def unknown_item() -> JSONResponse:
-        return JSONResponse({"reason": "unknown_item"}, status_code=404)
-
     @app.get("/api/items/{item_id}/pdf")
     def item_pdf(item_id: str):  # noqa: ANN202
         found = current_items().get(item_id)
         if found is None:
-            return JSONResponse({"reason": "unknown_item"}, status_code=404)
+            return unknown()
         try:
             path = ensure_pdf(store, item_id, str(found.get("url", "")), fetch)
         except PdfError as exc:
@@ -232,10 +232,10 @@ def create_app(
     @app.get("/api/items/{item_id}/images/{image_id}")
     def item_image(item_id: str, image_id: str):  # noqa: ANN202
         if item_id not in current_items() or not IMAGE_ID.fullmatch(image_id):
-            return unknown_item()
+            return unknown()
         stored = store.image(item_id, image_id)
         if stored is None:
-            return unknown_item()
+            return unknown()
         data, mime = stored
         return Response(
             data,
@@ -250,24 +250,21 @@ def create_app(
     @app.get("/api/items/{item_id}/highlights")
     def list_highlights(item_id: str):  # noqa: ANN202
         if item_id not in current_items():
-            return JSONResponse({"reason": "unknown_item"}, status_code=404)
+            return unknown()
         return store.highlights(item_id)
 
     @app.post("/api/items/{item_id}/highlights", status_code=201)
     def add_highlight(item_id: str, body: HighlightIn):  # noqa: ANN202
         if item_id not in current_items():
-            return JSONResponse({"reason": "unknown_item"}, status_code=404)
+            return unknown()
         hid = store.add_highlight(item_id, body.page, body.color, body.text, body.rects)
         return next(h for h in store.highlights(item_id) if h["id"] == hid)
 
     @app.delete("/api/items/{item_id}/highlights/{highlight_id}")
     def delete_highlight(item_id: str, highlight_id: int):  # noqa: ANN202
         if not store.delete_highlight(item_id, highlight_id):
-            return JSONResponse({"reason": "unknown_highlight"}, status_code=404)
+            return unknown("unknown_highlight")
         return Response(status_code=204)
-
-    def unknown(reason: str = "unknown_item") -> JSONResponse:
-        return JSONResponse({"reason": reason}, status_code=404)
 
     @app.get("/api/items/{item_id}/conversations")
     def list_conversations(item_id: str):  # noqa: ANN202
@@ -420,17 +417,18 @@ def create_app(
         if cid in app.state.streaming:
             return JSONResponse({"reason": "busy"}, status_code=409)
         item = current_items()[item_id]
+        app.state.streaming.add(cid)  # before any await: one quiz at a time, none during an answer
         try:
-            tools, _ = await asyncio.wait_for(
-                asyncio.to_thread(tools_factory or default_tools, item_id, item), TOOLS_TIMEOUT
-            )
-        except Exception:  # noqa: BLE001 - reported as "no paper"
-            tools = None
-        paper = getattr(tools, "paper", None)
-        if paper is None:
-            return JSONResponse({"reason": "no_paper"}, status_code=422)
-        app.state.streaming.add(cid)  # one quiz at a time, and not during an answer
-        try:
+            try:
+                tools, _ = await asyncio.wait_for(
+                    asyncio.to_thread(tools_factory or default_tools, item_id, item),
+                    TOOLS_TIMEOUT,
+                )
+            except Exception:  # noqa: BLE001 - reported as "no paper"
+                tools = None
+            paper = getattr(tools, "paper", None)
+            if paper is None:
+                return JSONResponse({"reason": "no_paper"}, status_code=422)
             message = await create_quiz(
                 store, quiz_maker, item_id, item, cid, paper, body.kind, body.focus.strip(),
                 recent_turns(store, cid),

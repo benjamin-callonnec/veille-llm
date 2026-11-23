@@ -237,6 +237,28 @@ test("a compaction shows as a quiet note, not as a message with actions", async 
   expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(1); // only the old question
 });
 
+test("a notice shows its own text as a quiet note", async () => {
+  const api = makeApi(Promise.resolve());
+  api.messages = async () => [
+    { id: 1, seq: 1, role: "user", kind: "text", content: { text: "q" }, created_at: "" },
+    {
+      id: 2,
+      seq: 2,
+      role: "system",
+      kind: "notice",
+      content: { text: "I could not start the quiz: nope." },
+      created_at: "",
+    },
+  ];
+  api.listConversations = async () => [
+    { id: 1, item_id: "a1", title: "T", created_at: "", updated_at: "" },
+  ];
+  render(<Host api={api} onGo={() => {}} />);
+  const note = await screen.findByText("I could not start the quiz: nope.");
+  expect(note.closest(".turn")).toBeNull();
+  expect(screen.queryByText(/earlier messages were summarised/i)).toBeNull();
+});
+
 test("a citation chip goes through onCite when given, onGo stays for the quote arrow", async () => {
   const onGo = vi.fn();
   const onCite = vi.fn();

@@ -18,6 +18,20 @@ import {
 const titleOf = (body: SendBody) =>
   (body.kind === "text" ? body.text : body.question).trim().slice(0, 50) || "New conversation";
 
+const TRAILING = new Set(["quiz", "notice"]);
+
+/** What regenerate drops, as the server does: the last answer and the quiz cards after it. */
+function withoutLastAnswer(messages: StoredMessage[]): StoredMessage[] {
+  let end = messages.length;
+  while (
+    end > 0 &&
+    messages[end - 1]?.role === "system" &&
+    TRAILING.has(messages[end - 1]?.kind ?? "")
+  )
+    end--;
+  return messages[end - 1]?.role === "assistant" ? messages.slice(0, end - 1) : messages;
+}
+
 export function useChat(
   itemId: string,
   api: ChatApi = httpChatApi,
@@ -170,7 +184,7 @@ export function useChat(
     setError(false);
     const ctrl = new AbortController();
     controller.current = ctrl;
-    setMessages((m) => (m.at(-1)?.role === "assistant" ? m.slice(0, -1) : m));
+    setMessages(withoutLastAnswer);
     await run(id, api.regenerate(itemId, id, ctrl.signal), ctrl);
   }, [api, itemId, run]);
 

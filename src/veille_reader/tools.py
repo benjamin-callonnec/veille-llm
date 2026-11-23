@@ -3,6 +3,8 @@
 import asyncio
 import html
 import re
+import threading
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -47,6 +49,26 @@ def _int(value: object, name: str) -> int:
         raise ToolError(f"{name} must be a whole number") from None
 
 
+_INDEXES: OrderedDict[str, Index] = OrderedDict()
+_INDEXES_LOCK = threading.Lock()
+MAX_INDEXES = 8  # papers whose search index stays in memory
+
+
+def _index_of(paper: PaperText) -> Index:
+    """The search index of a paper, built once and reused by every turn (keyed by its text)."""
+    key = paper.digest
+    with _INDEXES_LOCK:
+        if key in _INDEXES:
+            _INDEXES.move_to_end(key)
+            return _INDEXES[key]
+    index = build_index(paper.pages, paper.outline)
+    with _INDEXES_LOCK:
+        _INDEXES[key] = index
+        while len(_INDEXES) > MAX_INDEXES:
+            _INDEXES.popitem(last=False)
+    return index
+
+
 def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
@@ -56,7 +78,6 @@ class PaperTools:
         self.paper = paper
         self.highlights = highlights
         self.memory = memory
-        self._index: Index | None = None
 
     # --- load_artifact -------------------------------------------------------------------
     def load_artifact(
@@ -80,8 +101,10 @@ class PaperTools:
             return self._section(title or "")
         if kind == "references":
             return self._references()
+        if number is None:
+            raise ToolError(f"kind '{kind}' needs number (the figure or table number)")
         label = "Figure" if kind == "figure" else "Table"
-        return self._caption(label, _int(number, "number") if number is not None else 0)
+        return self._caption(label, _int(number, "number"))
 
     def _need_text(self) -> None:
         if not self.paper.has_text:
@@ -159,9 +182,7 @@ class PaperTools:
         if not _norm(query):
             raise ToolError("query must not be empty")
         self._need_text()
-        if self._index is None:
-            self._index = build_index(self.paper.pages, self.paper.outline)
-        hits = self._index.search(query, limit=MAX_HITS)
+        hits = _index_of(self.paper).search(query, limit=MAX_HITS)
         if not hits:
             return "No results for that query."
         lines = []

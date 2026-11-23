@@ -1,11 +1,15 @@
 """The text of a cached PDF, for the tutor's tools: extracted once, cached in the database."""
 
+import hashlib
+import json
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
+from veille_reader.citations import normalise
 from veille_reader.storage import ReaderStore
 
 MAX_PAGES = 400
@@ -63,6 +67,17 @@ class PaperText:
     @property
     def page_count(self) -> int:
         return len(self.pages)
+
+    @cached_property
+    def flat_pages(self) -> list[str]:
+        """The normalised text of each page, worked out once (citations are checked against it)."""
+        return [normalise(p) for p in self.pages]
+
+    @cached_property
+    def digest(self) -> str:
+        """A fingerprint of the text: what a cache of anything derived from it is keyed by."""
+        raw = json.dumps([self.pages, self.outline], ensure_ascii=False)
+        return hashlib.sha256(raw.encode()).hexdigest()
 
     @property
     def has_text(self) -> bool:

@@ -43,6 +43,7 @@ export function ChatPane({
   const itemId = itemProp || chat.itemId;
   const [quizBusy, setQuizBusy] = useState(false);
   const [quizError, setQuizError] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
   async function startQuiz() {
     setQuizBusy(true);
     setQuizError(false);
@@ -68,7 +69,14 @@ export function ChatPane({
   const [dirty, setDirty] = useState(false);
   const [fill, setFill] = useState<{ text: string; n: number } | null>(null);
   const send = async (text: string, files: File[] = []) => {
-    const images = await Promise.all(files.map(toPayload));
+    setAttachError(null);
+    let images: Awaited<ReturnType<typeof toPayload>>[];
+    try {
+      images = await Promise.all(files.map(toPayload));
+    } catch (e) {
+      setAttachError(e instanceof Error ? e.message : "An image could not be sent.");
+      return;
+    }
     await chat.send({ kind: "text", text, ...(images.length ? { images } : {}) });
   };
   // the follow-up questions of the last answer, until you type or send something or a quiz starts
@@ -131,6 +139,10 @@ export function ChatPane({
               api={quizApi}
               onCite={onCite}
             />
+          ) : m.kind === "notice" ? (
+            <p key={`${m.id}-${m.seq}`} className="compaction-note">
+              {String(m.content.text ?? "")}
+            </p>
           ) : m.role === "system" ? (
             <p key={`${m.id}-${m.seq}`} className="compaction-note">
               Earlier messages were summarised to keep the conversation light.
@@ -174,6 +186,11 @@ export function ChatPane({
         {quizError && (
           <p role="alert" className="chat-error">
             The quiz could not be made. Try again.
+          </p>
+        )}
+        {attachError && (
+          <p role="alert" className="chat-error">
+            {attachError}
           </p>
         )}
         {chat.error && (

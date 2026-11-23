@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { ChatApi, Conversation, SendBody, StoredMessage } from "./api";
-import { MAX_IMAGE_BYTES } from "./attachments";
+import { MAX_IMAGE_BYTES, MAX_RAW_BYTES } from "./attachments";
 import { ChatPane } from "./ChatPane";
 import { Composer } from "./Composer";
 import { resetDrafts } from "./drafts";
@@ -86,9 +86,9 @@ test("at most four images, each under 5 MB, only png/jpeg/webp/gif, with a quiet
   expect(screen.getByRole("status").textContent).toMatch(/at most 4/i);
   cleanup();
   setup();
-  fireEvent.paste(box(), clip([png("big", MAX_IMAGE_BYTES + 1)]));
+  fireEvent.paste(box(), clip([png("big", MAX_RAW_BYTES + 1)]));
   expect(document.querySelectorAll(".composer-images img")).toHaveLength(0);
-  expect(screen.getByRole("status").textContent).toMatch(/5 MB/);
+  expect(screen.getByRole("status").textContent).toMatch(/30 MB/);
   fireEvent.paste(box(), clip([new File(["<svg/>"], "a.svg", { type: "image/svg+xml" })]));
   expect(document.querySelectorAll(".composer-images img")).toHaveLength(0);
   expect(screen.getByRole("status").textContent).toMatch(/PNG, JPEG, WebP and GIF/);
@@ -263,6 +263,16 @@ test("sending an image alone passes it, base64 encoded, to the api", async () =>
   expect(body.text).toBe("");
   expect(body.images?.[0]).toMatchObject({ name: "shot.png", mime: "image/png" });
   expect(body.images?.[0]?.data).toBe("AAAAAAAAAAAAAA==");
+});
+
+test("an image still over 5 MB once scaled is not sent, and the user is told", async () => {
+  const { api, sent } = chatApi([]);
+  render(<Host api={api} />);
+  const area = await screen.findByRole("textbox", { name: "Message" });
+  fireEvent.paste(area, clip([png("huge.png", MAX_IMAGE_BYTES + 1)])); // no canvas: not scaled
+  await userEvent.click(screen.getByRole("button", { name: "Send" }));
+  expect((await screen.findByRole("alert")).textContent).toMatch(/huge\.png.*5 MB/);
+  expect(sent).toHaveLength(0);
 });
 
 test("suggestions show under the last answer only, send on click, and fold away while typing", async () => {

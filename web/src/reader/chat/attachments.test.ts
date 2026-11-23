@@ -1,5 +1,13 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { downscale, imagesOf, MAX_SIDE, toPayload } from "./attachments";
+import {
+  downscale,
+  imagesOf,
+  MAX_IMAGE_BYTES,
+  MAX_RAW_BYTES,
+  MAX_SIDE,
+  pickImages,
+  toPayload,
+} from "./attachments";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -103,4 +111,20 @@ test("imagesOf reads files, falls back to items, and keeps images only", () => {
     { kind: "string", getAsFile: () => null },
   ];
   expect(imagesOf({ files: [], items } as unknown as DataTransfer)).toEqual([png]);
+});
+
+test("a 6 MB image is accepted before scaling; only a huge raw file is refused", () => {
+  const six = file("image/png", 6 * 1024 * 1024);
+  expect(pickImages([six], 0)).toEqual({ accepted: [six], notice: null });
+  const huge = file("image/png", MAX_RAW_BYTES + 1);
+  expect(pickImages([huge], 0)).toEqual({ accepted: [], notice: "Images must be under 30 MB." });
+});
+
+test("the 5 MB limit applies to what is sent: a 6 MB image scaled down goes, else it is refused", async () => {
+  const six = file("image/png", 6 * 1024 * 1024);
+  stubImage(4000, 3000, 100);
+  expect((await toPayload(six)).data.length).toBeGreaterThan(0);
+  vi.stubGlobal("createImageBitmap", undefined); // cannot be scaled: still 6 MB
+  expect(MAX_IMAGE_BYTES).toBe(5 * 1024 * 1024);
+  await expect(toPayload(six)).rejects.toThrow(/a\.png.*5 MB/);
 });

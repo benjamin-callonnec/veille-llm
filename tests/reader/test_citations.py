@@ -184,3 +184,12 @@ def test_when_no_heading_can_be_found_in_the_text_the_section_is_unknown_not_gue
     pages = ["no heading line here, only running text about attention and heads"]
     [v] = verdicts('[p.1 "running text about attention"]', pages, [("Introduction", 1)])
     assert v["status"] == "verified" and v["section"] is None
+
+
+def test_a_quote_copied_from_the_escaped_text_the_model_saw_is_verified():
+    # the tools and the quiz prompts show the model "a &amp; b &lt; c", the paper says "a & b < c"
+    pages = ["Results\nWe show that a & b < c holds for every input."]
+    for quoted in ("a &amp; b &lt; c holds", "a & b < c holds"):
+        [v] = verify_citations(pages, [], parse_citations(f'[p.1 "{quoted}"]'))
+        assert v["status"] == "verified"
+        assert v["quote"] == "a & b < c holds"

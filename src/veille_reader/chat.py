@@ -1,5 +1,6 @@
 """One chat turn: store the user message, stream the runner's events, store the answer."""
 
+import asyncio
 import json
 import sqlite3
 import time
@@ -32,6 +33,7 @@ class _Answer:
         self.error: dict | None = None
         self.usage: dict | None = None
         self.citations: list[dict] = []
+        self.checked = False  # the citations were already checked (at `done`)
         self.suggestions: list[str] = []
         self.tool_log: list[dict] = []
         self._tool_started: dict[str, tuple[str, float]] = {}
@@ -119,10 +121,7 @@ def session_refusal(
             "This conversation already used its raised limit. Start a new conversation "
             "to keep going."
         )
-    return (
-        "This conversation reached its budget. Start a new conversation, or send your "
-        "message again with the limit raised (this can be done once per conversation)."
-    )
+    return "This conversation reached its budget. Start a new conversation to keep going."
 
 
 def load_images(store: ReaderStore, item_id: str, messages: list[dict]) -> list[Image]:
@@ -144,14 +143,18 @@ def check_citations(tools: object, text: str) -> list[dict]:
     if paper is None or not text:
         return []
     try:
-        return verify_citations(paper.pages, paper.outline, parse_citations(text))
+        found = parse_citations(text)
+        if not found:
+            return []
+        flat = getattr(paper, "flat_pages", None)
+        return verify_citations(paper.pages, paper.outline, found, flat)
     except Exception:  # noqa: BLE001 - a failed check must never break the answer
         return []
 
 
 def _refusal_runner(message: str) -> AgentRunner:
     async def runner(request: RunRequest) -> AsyncIterator[dict]:
-        yield events.error("limit", message)
+        yield events.error("budget", message)  # not the subscription limit
 
     return runner
 
@@ -225,7 +228,11 @@ async def stream_turn(
                         late = events.text_delta(rest)
                         answer.apply(late)
                         yield sse(late)
-                    answer.citations = check_citations(tools, answer.answer)
+                    # off the event loop: a long answer on a long paper is not instant
+                    answer.citations = await asyncio.to_thread(
+                        check_citations, tools, answer.answer
+                    )
+                    answer.checked = True
                     if answer.citations:
                         yield sse(events.citations(answer.citations))
                     if answer.suggestions:
@@ -244,7 +251,7 @@ async def stream_turn(
     finally:
         # Save first, with no await before it: a cancelled request (Stop) is cancelled again at
         # every later await, so the answer must already be stored by then.
-        if not answer.citations:  # an answer cut short is checked too, quietly
+        if not answer.checked:  # an answer cut short is checked too, quietly
             answer.citations = check_citations(tools, answer.answer)
         final = answer.content(stopped)
         try:

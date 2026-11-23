@@ -1,4 +1,5 @@
 import json
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -68,6 +69,13 @@ def test_a_good_quiz_is_validated_and_grounded():
     spec = check()
     assert spec["correct"] == 0 and spec["page"] == 2 and spec["section"] == "Method"
     assert validate_quiz(FREE, PAGES, OUTLINE)["reference"].startswith("Each head")
+
+
+def test_a_quiz_quote_with_html_entities_is_checked_and_stored_unescaped():
+    pages = ["Intro\nWe show that a & b < c holds for every input."]
+    raw = {**GOOD, "page": 1, "quote": "that a &amp; b &lt; c holds for every"}
+    spec = validate_quiz(raw, pages, [])
+    assert spec["quote"] == "that a & b < c holds for every"
 
 
 def test_a_quote_on_another_page_moves_the_quiz_to_that_page():
@@ -246,6 +254,21 @@ def test_the_questions_already_asked_are_given_to_the_maker(store, paper):
     assert maker.requests[1].avoid == [GOOD["question"]]
 
 
+def test_unanswered_quizzes_are_avoided_too_newest_first_and_capped(store, paper):
+    import asyncio
+
+    maker = Maker(GOOD, FREE, GOOD, GOOD)
+    cid, _ = make(store, maker, paper)  # a first quiz, left unanswered
+    asyncio.run(create_quiz(store, maker, "a1", ITEMS[0], cid, paper, "free"))
+    asyncio.run(create_quiz(store, maker, "a1", ITEMS[0], cid, paper))
+    assert maker.requests[1].avoid == [GOOD["question"]]
+    assert maker.requests[2].avoid == [FREE["question"], GOOD["question"]]
+    for _ in range(12):
+        store.add_quiz("a1", cid, {**GOOD, "question": f"Q{_}?"})
+    asyncio.run(create_quiz(store, maker, "a1", ITEMS[0], cid, paper))
+    assert len(maker.requests[3].avoid) == 10 and maker.requests[3].avoid[0] == "Q11?"
+
+
 def test_a_choice_answer_scores_and_a_miss_writes_a_weak_point_note(store, paper):
     import asyncio
 
@@ -411,7 +434,7 @@ def test_a_deleted_conversation_keeps_the_scores(store, paper):
 # ---- server
 
 
-def client_for(tmp_path, maker=None, grader=None, runner=None, paper=True):
+def client_for(tmp_path, maker=None, grader=None, runner=None, paper=True, load_delay=0.0):
     tmp_path.mkdir(parents=True, exist_ok=True)
     cat = tmp_path / "c.json"
     cat.write_text(json.dumps({"items": ITEMS}), encoding="utf-8")
@@ -422,7 +445,7 @@ def client_for(tmp_path, maker=None, grader=None, runner=None, paper=True):
         runner=runner,
         quiz_maker=maker,
         grader=grader,
-        tools_factory=lambda item_id, item: (tools, []),
+        tools_factory=lambda item_id, item: (time.sleep(load_delay), (tools, []))[1],
     )
     return TestClient(app, base_url="http://127.0.0.1:8765")
 
@@ -582,7 +605,48 @@ def test_a_failed_marker_quiz_leaves_a_plain_message_not_a_broken_card(tmp_path)
     cid = cid_of(client)
     client.post(f"/api/items/a1/conversations/{cid}/messages", json={"kind": "text", "text": "q"})
     last = client.get(f"/api/items/a1/conversations/{cid}/messages").json()[-1]
-    assert last["role"] == "assistant" and "could not start the quiz" in last["content"]["answer"]
+    assert last["role"] == "system" and last["kind"] == "notice"
+    assert "could not start the quiz" in last["content"]["text"]
+
+
+def test_regenerate_works_after_a_quiz_card_or_a_failed_quiz_notice(tmp_path):
+    seen = []
+
+    async def runner(request):
+        seen.append(request)
+        yield events.text_delta("Sure.\n[[quiz: heads]]")
+        yield events.done(5)
+
+    for name, maker in (("card", Maker(GOOD)), ("notice", Maker("x", "y"))):
+        client = client_for(tmp_path / name, maker, runner=runner)
+        cid = cid_of(client)
+        url = f"/api/items/a1/conversations/{cid}"
+        client.post(f"{url}/messages", json={"kind": "text", "text": "quiz me"})
+        seen.clear()
+        assert client.post(f"{url}/regenerate").status_code == 200
+        assert seen[0].question == "quiz me" and seen[0].history == []
+        roles = [m["role"] for m in client.get(f"{url}/messages").json()]
+        assert roles.count("assistant") == 1 and roles[0] == "user"
+
+
+def test_two_quiz_starts_at_once_make_one_quiz_and_a_409(tmp_path):
+    import asyncio
+
+    import httpx
+
+    maker = Maker(GOOD, GOOD)
+    client = client_for(tmp_path, maker, load_delay=0.2)
+    cid = cid_of(client)
+
+    async def both():
+        transport = httpx.ASGITransport(app=client.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8765") as c:
+            url = f"/api/items/a1/conversations/{cid}/quizzes"
+            return await asyncio.gather(c.post(url, json={}), c.post(url, json={}))
+
+    codes = sorted(r.status_code for r in asyncio.run(both()))
+    assert codes == [201, 409] and len(maker.requests) == 1
+    assert cid not in client.app.state.streaming
 
 
 def test_the_marker_is_ignored_when_the_turn_failed_or_without_a_paper(tmp_path):

@@ -146,6 +146,24 @@ test("an answer with no text has nothing to copy", () => {
   expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
 });
 
+test("a budget error shows the server's own message, not the subscription text", () => {
+  render(
+    <StoredAssistantMessage
+      content={{
+        answer: "",
+        blocks: [],
+        duration_ms: 1,
+        stopped: false,
+        error: { kind: "budget", message: "This conversation reached its budget." },
+      }}
+      onCite={() => {}}
+    />,
+  );
+  const alert = screen.getByRole("alert").textContent ?? "";
+  expect(alert).toBe("This conversation reached its budget.");
+  expect(alert).not.toMatch(/subscription/i);
+});
+
 test("limit and failure errors read clearly and keep the partial answer", () => {
   const { rerender } = render(
     <StoredAssistantMessage
