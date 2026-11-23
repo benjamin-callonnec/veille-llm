@@ -56,7 +56,33 @@ with feedback that explains mistakes and cites the paper, and a local score and 
     marked, explanation with a citation chip using `onCite`, a score line such as "3/5 on this paper").
     Everything from the server is rendered as text, never as HTML.
 
+## Formats
+The author found the send-style icon on the card confusing and asked for faster answers and more formats.
+Rulings (all validated on the server, the key hidden until the answer, closed kinds graded without the model):
+11. **Kinds**: `choice` (4 options, one right: a click answers, no validate button), `multi` (4 to 5 options,
+    one or more right, never all: tick boxes, a right-arrow icon appears once one is ticked, all-or-nothing,
+    feedback marks each option right, wrong or missed), `truefalse` (a statement, options True and False, a click
+    answers), `cloze` (a sentence of the paper with one or two `___`, the user types the words), `order` (3 to 5
+    steps shown shuffled, never in the right order; up and down icons; exact order), `free` (graded by the model).
+    `matching` is skipped.
+12. **Answer bodies**: `{choice}`, `{choices: [..]}`, `{words: [..]}`, `{order: [..]}` (positions in the list
+    shown), `{text}`. Exactly one field, matching the kind, otherwise 422 `bad_answer`.
+13. **Cloze grading** folds case, accents, punctuation and spacing; each blank has the right word first and up to
+    three accepted variants, all in the key. The question keeps `___` (the markup check hides them first).
+14. **Order**: the shuffle is made once at validation and stored, so every fetch shows the same list; the result
+    carries the steps in the right order.
+15. **Kind on request**: `start_quiz` takes `kind` ("any" by default). On "any" the maker picks what suits the
+    content; on a named kind a different kind made is refused (retried). The "Quiz me" icon and the tutor marker
+    use "any".
+16. **Errors on the card**: 409 refetches the quiz and shows its result (answered in another tab), 422, 502 and
+    503 have their own short message, a network error a generic one. The card and `quizApi` refuse an empty
+    paper id with a clear message, and a double click answers once.
+17. **Icons**: new `arrow-right` (validate), `arrow-up`, `arrow-down`; `send` stays the composer's.
+18. **Maker prompt**: explanations must avoid `<` and `>` (the model wrote "n < d"), and a quote copied across a
+    line break has its whitespace collapsed before validation.
+
 ## Not verified / limits
-- The real model has not been called: makers and graders are faked in tests. Quality of generated
-  questions, and whether the tutor reliably writes the marker, need a live try.
+- Real maker run (1706.03762, subscription): every kind was made and answered. Over 4 tries per kind, only
+  multi failed validation (2 of 4, `<` in an explanation, fixed in the prompt; 1 later quote with a newline,
+  fixed). Whether the tutor reliably writes the marker still needs a live try. Drag to reorder is not built.
 - The score history has routes but no screen yet.
