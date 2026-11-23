@@ -80,6 +80,15 @@ export class TtsQueue {
   }
 }
 
+// Chrome may garbage-collect an utterance that nothing references while it is being spoken, and
+// then never fires its `end`: keep each one here until it ended, failed or was cancelled.
+const live = new Set<SpeechSynthesisUtterance>();
+
+/** How many utterances are held (a test hook). */
+export function liveUtterances(): number {
+  return live.size;
+}
+
 /** The browser's speech synthesis, or null where it does not exist. */
 export function browserSynth(): Synth | null {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
@@ -89,11 +98,21 @@ export function browserSynth(): Synth | null {
     speak(text, done) {
       const u = new SpeechSynthesisUtterance(text);
       u.rate = RATES[loadSpeed(defaultStorage())]; // read at each sentence: a change applies at once
-      u.onend = () => done();
-      u.onerror = (e) => done(e.error || "synthesis-failed");
+      live.add(u);
+      u.onend = () => {
+        live.delete(u);
+        done();
+      };
+      u.onerror = (e) => {
+        live.delete(u);
+        done(e.error || "synthesis-failed");
+      };
       synth.speak(u);
     },
-    cancel: () => synth.cancel(),
+    cancel: () => {
+      live.clear();
+      synth.cancel();
+    },
   };
 }
 
