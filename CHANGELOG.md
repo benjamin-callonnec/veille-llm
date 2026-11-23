@@ -5,6 +5,9 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+### Fixed
+- Voice socket: a speech replaced by another with the same id no longer unregisters its replacement (cancel works), synthesis runs off the event loop and an engine crash sends an error frame instead of a lost task error, and an over-long utterance no longer floods the client with errors.
+
 ## [0.13.0] - 2026-11-23
 
 ### Added

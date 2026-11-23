@@ -1,4 +1,8 @@
+import asyncio
+import gc
 import json
+import threading
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +15,7 @@ from veille_reader.voice import (
     EchoEngine,
     VoiceError,
     VoiceSession,
+    serve,
 )
 
 
@@ -284,3 +289,134 @@ def test_speak_without_engine_is_an_error(tmp_path, catalogue):
         recv(ws)
         send(ws, type="speak", id=1, text="hi")
         assert recv(ws)["code"] == "no_engine"
+
+
+# --- review fixes ------------------------------------------------------------------------------
+
+
+def test_audio_after_an_utterance_too_long_is_dropped_silently_until_restart():
+    s = session()
+    s.on_text('{"type":"start_stt","rate":8000}')
+    with pytest.raises(VoiceError) as e:
+        for _ in range(100):
+            s.on_bytes(b"x" * MAX_AUDIO_FRAME)
+    assert e.value.code == "utterance_too_long"
+    assert s.on_bytes(b"x") == []  # no flood of not_listening errors
+    s.on_text('{"type":"start_stt","rate":8000}')
+    assert s.on_bytes(b"ab") == [{"type": "partial", "text": "ab"}]
+    s.on_text('{"type":"stop_stt"}')
+    with pytest.raises(VoiceError) as again:
+        s.on_bytes(b"x")
+    assert again.value.code == "not_listening"
+
+
+class FakeWs:
+    """Just enough of a WebSocket to drive `serve` in-process."""
+
+    def __init__(self):
+        self.inbox: asyncio.Queue = asyncio.Queue()
+        self.sent: list = []
+
+    async def receive(self):
+        return await self.inbox.get()
+
+    async def send_text(self, text):
+        self.sent.append(json.loads(text))
+
+    async def send_bytes(self, data):
+        self.sent.append(data)
+
+    async def close(self, code=1000):
+        pass
+
+    def say(self, **msg):
+        self.inbox.put_nowait({"type": "websocket.receive", "text": json.dumps(msg)})
+
+    def types(self):
+        return [f["type"] for f in self.sent if isinstance(f, dict)]
+
+
+async def _until(predicate, timeout=2.0):
+    loop = asyncio.get_running_loop()
+    end = loop.time() + timeout
+    while not predicate():
+        assert loop.time() < end, "timed out"
+        await asyncio.sleep(0.01)
+
+
+async def _stop(ws, task):
+    ws.inbox.put_nowait({"type": "websocket.disconnect"})
+    await asyncio.wait_for(task, 2)
+
+
+def test_replaced_speech_does_not_unregister_its_replacement():
+    class Endless(EchoEngine):
+        def synthesize(self, text):
+            while True:
+                yield b"x"
+                time.sleep(0.001)
+
+    async def scenario():
+        ws = FakeWs()
+        task = asyncio.create_task(serve(ws, Endless()))
+        ws.say(type="speak", id=1, text="a")
+        await _until(lambda: "audio_start" in ws.types())
+        ws.say(type="speak", id=1, text="b")
+        await _until(lambda: ws.types().count("audio_start") == 2)
+        await asyncio.sleep(0.05)  # the replaced task ends: it must not forget the new one
+        ws.say(type="cancel", id=1)
+        await _until(lambda: "cancelled" in ws.types())
+        await asyncio.sleep(0.1)
+        count = len(ws.sent)
+        await asyncio.sleep(0.2)
+        assert len(ws.sent) == count  # the second speech really stopped
+        await _stop(ws, task)
+
+    asyncio.run(scenario())
+
+
+def test_a_failing_engine_sends_an_error_frame_without_a_lost_task_exception():
+    class Broken(EchoEngine):
+        def synthesize(self, text):
+            yield b"x"
+            raise RuntimeError("model crashed")
+
+    async def scenario():
+        ws = FakeWs()
+        lost = []
+        asyncio.get_running_loop().set_exception_handler(lambda loop, ctx: lost.append(ctx))
+        task = asyncio.create_task(serve(ws, Broken()))
+        ws.say(type="speak", id=7, text="a")
+        await _until(lambda: "error" in ws.types())
+        error = next(f for f in ws.sent if isinstance(f, dict) and f["type"] == "error")
+        assert error["code"] == "synthesis_failed"
+        assert "model crashed" not in json.dumps(error)
+        await _stop(ws, task)
+        gc.collect()
+        assert lost == []
+
+    asyncio.run(scenario())
+
+
+def test_synthesis_runs_off_the_event_loop():
+    gate = threading.Event()
+
+    class Slow(EchoEngine):
+        def synthesize(self, text):
+            gate.wait(3)  # blocks its thread, not the loop
+            yield b"x"
+
+    async def scenario():
+        ws = FakeWs()
+        task = asyncio.create_task(serve(ws, Slow()))
+        ws.say(type="speak", id=1, text="a")
+        await _until(lambda: "audio_start" in ws.types())
+        started = time.monotonic()
+        ws.say(type="ping")
+        await _until(lambda: "pong" in ws.types(), timeout=1.0)
+        assert time.monotonic() - started < 1.0  # answered while the engine was still blocked
+        gate.set()
+        await _until(lambda: "audio_end" in ws.types())
+        await _stop(ws, task)
+
+    asyncio.run(scenario())
