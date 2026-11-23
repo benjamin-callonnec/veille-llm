@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { IconButton } from "../components/Icon";
 import { locateQuote } from "./lib/locate";
 import { pageOffsets, visibleWindow } from "./lib/pages";
 import { type Quote, type Rect, toQuote } from "./lib/quote";
@@ -395,9 +396,7 @@ export function PdfViewer({
         <button type="button" aria-label="Zoom in" onClick={() => zoom(ZOOM_STEP)}>
           +
         </button>
-        <button type="button" onClick={() => setSearching(true)}>
-          Search
-        </button>
+        <IconButton icon="search" label="Search" onClick={() => setSearching(true)} />
         <OutlineMenu source={source} onGo={goto} />
       </div>
       {searching && (

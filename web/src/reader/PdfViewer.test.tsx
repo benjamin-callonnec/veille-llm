@@ -170,6 +170,15 @@ test("never renders links from the PDF", async () => {
   expect(document.querySelector("a[href]")).toBeNull();
 });
 
+test("the search button is an icon with a name and a tooltip, and opens the search", async () => {
+  setup();
+  const button = await screen.findByRole("button", { name: "Search" });
+  expect(button.textContent).toBe("");
+  expect(button.getAttribute("title")).toMatch(/Search/);
+  await userEvent.click(button);
+  expect(await screen.findByRole("searchbox", { name: "Search" })).toBeTruthy();
+});
+
 test("the slash key opens the search and matches are marked in the text", async () => {
   const source = new FakeSource({ text: () => "The needle is here" });
   setup({}, source);

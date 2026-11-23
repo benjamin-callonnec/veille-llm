@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Icon } from "../components/Icon";
 import { combo, isMac, modifierPressed } from "../lib/platform";
 import {
   clampRatio,
@@ -162,7 +163,7 @@ function Cross({ label, shortcut, onClick }: { label: string; shortcut: string; 
       title={`${label} (${shortcut})`}
       onClick={onClick}
     >
-      ×
+      <Icon name="close" size={14} />
     </button>
   );
 }
@@ -178,7 +179,7 @@ function Rail({ label, shortcut, onClick }: { label: string; shortcut: string; o
         title={`${label} (${shortcut})`}
         onClick={onClick}
       >
-        +
+        <Icon name="plus" size={14} />
       </button>
     </div>
   );

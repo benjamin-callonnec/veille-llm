@@ -17,6 +17,9 @@
   min-height: 0;
 }
 .pane-cross {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: absolute;
   top: 4px;
   right: 8px;
@@ -94,9 +97,9 @@
   width: 4.5em;
   margin-left: 6px;
 }
-.pdf-toolbar button,
-.pdf-search button,
-.pdf-outline button,
+.pdf-toolbar button:not(.icon-btn),
+.pdf-search button:not(.icon-btn),
+.pdf-outline button:not(.icon-btn),
 .selection-box button:not(.icon-btn):not(.dot),
 .questions button {
   border: 1px solid var(--border);

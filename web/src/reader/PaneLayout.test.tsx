@@ -115,7 +115,8 @@ test("there are no Hide/Show text buttons any more, only discreet cross controls
   setup(null);
   expect(screen.queryByRole("button", { name: /^(Hide|Show) / })).toBeNull();
   const cross = screen.getByRole("button", { name: "Collapse chat" });
-  expect(cross.textContent).toBe("×");
+  expect(cross.textContent).toBe("");
+  expect(cross.querySelector("svg")).not.toBeNull();
 });
 
 test("a collapsed pane leaves a thin rail with a control to expand it", async () => {

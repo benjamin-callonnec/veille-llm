@@ -63,7 +63,10 @@ test("outline lists entries and jumps", async () => {
     { title: "<b>Model</b>", page: 3 },
   ];
   render(<OutlineMenu source={new FakeSource({ outline })} onGo={onGo} />);
-  await userEvent.click(await screen.findByRole("button", { name: "Outline" }));
+  const trigger = await screen.findByRole("button", { name: "Outline" });
+  expect(trigger.textContent).toBe("");
+  expect(trigger.getAttribute("title")).toBe("Outline");
+  await userEvent.click(trigger);
   expect(screen.getByText("<b>Model</b>")).toBeTruthy();
   expect(document.querySelector("b")).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "<b>Model</b>" }));
