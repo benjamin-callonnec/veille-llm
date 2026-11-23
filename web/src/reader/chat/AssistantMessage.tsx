@@ -1,12 +1,14 @@
 import { useState } from "react";
+import { IconButton } from "../../components/Icon";
 import { timeAgo } from "../../lib/time";
 import { stripQuizMarker } from "../lib/quiz";
 import { ReadAloudButton } from "../voice/ReadAloudButton";
 import { defaultSynth } from "../voice/useReadAloud";
+import { AskCard, type AskCardData } from "./AskCard";
 import { CopyButton } from "./CopyButton";
 import { type Citation, toCitations } from "./events";
 import { Markdown } from "./Markdown";
-import type { AssistantState, Block } from "./reducer";
+import type { AssistantState, Block, NoteLine } from "./reducer";
 import { Thinking } from "./Thinking";
 
 interface BodyProps {
@@ -15,9 +17,15 @@ interface BodyProps {
   open: boolean;
   working: boolean;
   durationMs: number | null;
-  error?: { kind: string; message: string };
+  error?: { kind: string; message: string; raisable?: boolean };
   stopped: boolean;
   citations?: Citation[];
+  /** Questions of the tutor still shown with the answer being produced. */
+  asks?: AskCardData[];
+  notes?: NoteLine[];
+  onAnswerAsk?(id: string, text: string): Promise<void>;
+  /** Continue with the raised limit (only offered when the refusal says it can be raised). */
+  onRaise?(): void;
   onToggle(): void;
   onCite?(page: number, quote?: string): void;
   /** Shown as a quiet row of icons on hover, only for a finished answer that has text. */
@@ -35,6 +43,23 @@ function Body(p: BodyProps) {
           durationMs={p.durationMs}
           onToggle={p.onToggle}
         />
+        {p.notes?.map((n, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: lines only grow
+          <p key={i} className="memory-line">
+            {n.action === "saved"
+              ? `The tutor saved a note: ${n.text}`
+              : "The tutor removed a note."}
+          </p>
+        ))}
+        {p.asks?.map((a) => (
+          <AskCard
+            key={a.id}
+            card={a}
+            onAnswer={
+              p.onAnswerAsk ? (text) => p.onAnswerAsk?.(a.id, text) ?? Promise.resolve() : undefined
+            }
+          />
+        ))}
         {p.answer && (
           <Markdown text={stripQuizMarker(p.answer)} citations={p.citations} onCite={p.onCite} />
         )}
@@ -44,6 +69,14 @@ function Body(p: BodyProps) {
             {p.error.kind === "limit"
               ? "The subscription limit was reached. Try again later."
               : p.error.message}
+            {p.error.raisable && p.onRaise && (
+              <IconButton
+                icon="raise"
+                label="Continue with a raised limit"
+                className="raise-limit"
+                onClick={p.onRaise}
+              />
+            )}
           </p>
         )}
       </div>
@@ -63,10 +96,12 @@ export function AssistantMessage({
   state,
   onToggleThinking,
   onCite,
+  onAnswerAsk,
 }: {
   state: AssistantState;
   onToggleThinking(): void;
   onCite?(page: number, quote?: string): void;
+  onAnswerAsk?(id: string, text: string): Promise<void>;
 }) {
   return (
     <Body
@@ -78,6 +113,9 @@ export function AssistantMessage({
       error={state.error}
       stopped={state.status === "stopped"}
       citations={state.citations}
+      asks={state.asks}
+      notes={state.notes}
+      onAnswerAsk={onAnswerAsk}
       onToggle={onToggleThinking}
       onCite={onCite}
     />
@@ -90,7 +128,7 @@ export interface StoredAssistant {
   duration_ms?: number;
   stopped?: boolean;
   citations?: Citation[];
-  error?: { kind: string; message: string };
+  error?: { kind: string; message: string; raisable?: boolean };
 }
 
 /** An answer read from history: thinking starts folded and can be reopened. */
@@ -99,11 +137,13 @@ export function StoredAssistantMessage({
   createdAt = "",
   now,
   onCite,
+  onRaise,
 }: {
   content: StoredAssistant;
   createdAt?: string;
   now?: number;
   onCite?(page: number, quote?: string): void;
+  onRaise?(): void;
 }) {
   const [open, setOpen] = useState(false);
   const answer = content.answer ?? "";
@@ -119,6 +159,7 @@ export function StoredAssistantMessage({
       citations={toCitations(content.citations)}
       onToggle={() => setOpen(!open)}
       onCite={onCite}
+      onRaise={onRaise}
       actions={answer ? { text: answer, time: timeAgo(createdAt, now) } : undefined}
     />
   );

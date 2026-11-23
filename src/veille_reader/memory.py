@@ -17,9 +17,10 @@ class StoreMemory:
         return self.store.memory_notes(self.item_id)
 
     def write(self, text: str) -> dict:
-        if len(self.store.memory_notes(self.item_id)) >= MAX_NOTES:
+        note = self.store.add_memory_note(self.item_id, text, source="tutor", limit=MAX_NOTES)
+        if note is None:
             raise ToolError(f"The memory is full ({MAX_NOTES} notes): delete a note first.")
-        return self.store.add_memory_note(self.item_id, text, source="tutor")
+        return note
 
     def delete(self, note_id: int) -> bool:
         return self.store.delete_memory_note(self.item_id, note_id)

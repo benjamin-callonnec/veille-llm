@@ -650,3 +650,207 @@
 .icon-btn[aria-pressed="true"] {
   color: var(--fg);
 }
+/* Questions of the tutor (ask_user): quiet, like the quiz rows; the reply controls go away once
+   the card is answered or expired. */
+.ask {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.ask-question {
+  margin: 0;
+  font-weight: 600;
+}
+.ask-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ask-option {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+}
+.ask-option:hover:not(:disabled) {
+  border-color: var(--muted);
+  background: var(--bubble);
+}
+.ask-option:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.ask-reply,
+.note-add {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ask-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--composer);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.88rem;
+}
+.ask-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.88rem;
+}
+.ask-given {
+  color: var(--fg);
+}
+.memory-line {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.compaction-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.compaction-toggle:hover {
+  color: var(--fg);
+}
+.compaction {
+  text-align: center;
+}
+.compaction-toggle[aria-expanded="true"] .chevron {
+  transform: rotate(90deg);
+}
+.compaction-summary {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--bubble);
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.raise-limit {
+  vertical-align: middle;
+  margin-left: 6px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--fg);
+}
+.raise-limit:hover {
+  border-color: var(--muted);
+}
+
+/* The memory and trace panels hang under the chat tools, like the conversations list. */
+.session-tools {
+  display: contents;
+}
+.chat-panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 6;
+  margin-top: 4px;
+  padding: 10px;
+  width: min(340px, calc(100vw - 48px));
+  max-height: 60vh;
+  overflow: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: 0.88rem;
+}
+.panel-title {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.panel-empty,
+.panel-note {
+  margin: 4px 0;
+}
+.notes,
+.trace {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.note-who {
+  flex: none;
+  display: inline-flex;
+  padding: 5px 2px 0 0;
+  color: var(--muted);
+}
+.note-text {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 0;
+  overflow-wrap: anywhere;
+}
+.note-edit {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--composer);
+  color: var(--fg);
+  font: inherit;
+  resize: vertical;
+}
+.notes li .icon-btn {
+  width: 24px;
+  height: 24px;
+}
+.note-add {
+  margin-top: 8px;
+}
+.trace-turn {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.trace-turn:first-child {
+  border-top: 0;
+}
+.trace-sub {
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}

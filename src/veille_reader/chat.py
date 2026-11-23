@@ -10,6 +10,7 @@ import anyio
 
 from veille_llm.llm import redact
 from veille_reader import events
+from veille_reader.asking import ASK_TIMEOUT, AskBroker, Asker
 from veille_reader.citations import parse_citations, verify_citations
 from veille_reader.compaction import Summarizer, compact, current_history, needs_compaction
 from veille_reader.events import AgentRunner, RunRequest
@@ -78,8 +79,26 @@ class _Answer:
             self.usage = event.get("usage")
         elif kind == "error":
             self.error = {"kind": event["kind"], "message": event["message"]}
+            if event.get("raisable"):
+                self.error["raisable"] = True
             if event.get("usage"):
                 self.usage = event["usage"]
+
+    def memory_line(self, event: dict) -> dict | None:
+        """The note the tutor just saved or deleted, to show as a quiet line (never hidden)."""
+        if event.get("type") != "tool_result" or event.get("is_error"):
+            return None
+        block = next(
+            (b for b in self.blocks if b["type"] == "tool" and b["id"] == event["id"]), None
+        )
+        if block is None or block["name"] != "session_memory":
+            return None
+        action = block["input"].get("action")
+        if action == "write":
+            return {"action": "saved", "text": str(block["input"].get("text", ""))[:500]}
+        if action == "delete":
+            return {"action": "deleted", "text": ""}
+        return None
 
     def content(self, stopped: bool) -> dict:
         duration = self.duration_ms
@@ -121,7 +140,10 @@ def session_refusal(
             "This conversation already used its raised limit. Start a new conversation "
             "to keep going."
         )
-    return "This conversation reached its budget. Start a new conversation to keep going."
+    return (
+        "This conversation reached its budget. Continue once with a raised limit (the arrow), "
+        "or start a new conversation."
+    )
 
 
 def load_images(store: ReaderStore, item_id: str, messages: list[dict]) -> list[Image]:
@@ -152,11 +174,60 @@ def check_citations(tools: object, text: str) -> list[dict]:
         return []
 
 
-def _refusal_runner(message: str) -> AgentRunner:
+def _refusal_runner(message: str, raisable: bool) -> AgentRunner:
     async def runner(request: RunRequest) -> AsyncIterator[dict]:
-        yield events.error("budget", message)  # not the subscription limit
+        yield events.error("budget", message, raisable=raisable)  # not the subscription limit
 
     return runner
+
+
+def _forget_refused_repeat(store: ReaderStore, cid: int, content: dict) -> None:
+    """Asking again the question that was just refused (budget) replaces it."""
+    messages = store.messages(cid)
+    if len(messages) < 2:
+        return
+    question, refusal = messages[-2], messages[-1]
+    if (
+        question["role"] == "user"
+        and question["content"] == content
+        and refusal["role"] == "assistant"
+        and (refusal["content"].get("error") or {}).get("kind") == "budget"
+        and not refusal["content"].get("answer")
+    ):
+        store.delete_messages(cid, [question["id"], refusal["id"]])
+
+
+_END = object()
+
+
+async def _pumped(source: AsyncIterator[dict], side: asyncio.Queue) -> AsyncIterator[dict]:
+    """The runner's events merged with the ones the tools push on `side` (a card to show).
+
+    The runner runs in one task of its own from start to end (its SDK stream must not hop between
+    tasks), and this generator only reads the queue.
+    """
+
+    async def pump() -> None:
+        try:
+            async for event in source:
+                side.put_nowait(event)
+            side.put_nowait(_END)
+        except Exception as exc:  # noqa: BLE001 - re-raised on the reading side
+            side.put_nowait(exc)
+
+    task = asyncio.create_task(pump())
+    try:
+        while True:
+            item = await side.get()
+            if item is _END:
+                return
+            if isinstance(item, Exception):
+                raise item
+            yield item
+    finally:
+        task.cancel()
+        with anyio.move_on_after(5, shield=True):
+            await asyncio.gather(task, return_exceptions=True)
 
 
 async def stream_turn(
@@ -175,20 +246,23 @@ async def stream_turn(
     raise_limit: bool = False,
     summarizer: Summarizer | None = None,
     after_turn: Callable[[str], Awaitable[None]] | None = None,
+    asks: AskBroker | None = None,
+    ask_timeout: float = ASK_TIMEOUT,
 ) -> AsyncIterator[str]:
     """Stream one turn. With `kind` None the last user message is run again (regenerate)."""
     if kind is not None and content is not None:
+        _forget_refused_repeat(store, cid, content)
         store.add_message(cid, "user", kind, content)
     answer = _Answer()
     stopped = True
-    events_stream = None
+    events_stream = source = None
     # Everything from here is inside the try: Stop pressed while the old turns are being summarised
     # must still leave a stopped answer, not an orphan question.
     try:
         limits = agent_limits or AgentLimits()
         refusal = session_refusal(store, cid, limits, raise_limit)
         if refusal is not None:
-            runner = _refusal_runner(refusal)
+            runner = _refusal_runner(refusal, raisable=not store.limit_raised(cid))
         messages = store.messages(cid)
         summary, turns = current_history(messages)
         # a refused turn does not pay for a summary
@@ -214,10 +288,14 @@ async def stream_turn(
             agent_limits=limits,
             images=load_images(store, str(item.get("id", "")), messages),
         )
-        events_stream = runner(request)
+        events_stream = source = runner(request)
+        if asks is not None:  # the tutor may pause the turn to ask the user something
+            side: asyncio.Queue = asyncio.Queue()
+            request.ask = Asker(asks, store, cid, side.put_nowait, ask_timeout)
+            source = _pumped(events_stream, side)
         hider = SuggestionFilter()
         try:
-            async for event in events_stream:
+            async for event in source:
                 if event.get("type") == "text_delta":
                     event = {**event, "text": hider.feed(event["text"])}
                     if not event["text"]:
@@ -239,6 +317,9 @@ async def stream_turn(
                         yield sse(events.suggestions(answer.suggestions))
                 answer.apply(event)
                 yield sse(event)
+                if (line := answer.memory_line(event)) is not None:
+                    store.add_message(cid, "system", "memory", line)
+                    yield sse(events.memory_note(line["action"], line["text"]))
                 if event.get("type") in ("done", "error"):
                     break
         except Exception as exc:  # noqa: BLE001 - reported to the user as a stream event
@@ -267,15 +348,18 @@ async def stream_turn(
                 model=model,
                 stopped=stopped,
                 error_kind=(answer.error or {}).get("kind", ""),
+                cache_read_tokens=int(usage.get("cache_read_tokens") or 0),
+                cache_write_tokens=int(usage.get("cache_write_tokens") or 0),
             )
         except sqlite3.IntegrityError:
             pass  # the conversation was deleted while the answer was being produced
-        aclose = getattr(events_stream, "aclose", None) if events_stream is not None else None
-        if aclose is not None:
-            with anyio.move_on_after(5, shield=True):
-                try:
-                    await aclose()
-                except Exception:  # noqa: BLE001, S110 - closing a finished generator is best effort
-                    pass
+        for stream in (source, events_stream):
+            aclose = getattr(stream, "aclose", None) if stream is not None else None
+            if aclose is not None:
+                with anyio.move_on_after(5, shield=True):
+                    try:
+                        await aclose()
+                    except Exception:  # noqa: BLE001, S110 - closing a finished generator is best effort
+                        pass
     if after_turn is not None and not stopped and answer.error is None:
         await after_turn(answer.answer)  # after the answer is stored: a card goes after it

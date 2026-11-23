@@ -1,4 +1,4 @@
-import type { ChatEvent, Citation } from "./events";
+import type { AskStatus, ChatEvent, Citation } from "./events";
 
 export type Block =
   | { type: "thinking"; text: string }
@@ -11,6 +11,21 @@ export type Block =
       is_error: boolean;
     };
 
+/** A question of the tutor to the user, as the card shows it. */
+export interface AskCardState {
+  id: string;
+  question: string;
+  options: string[];
+  status: AskStatus;
+  answer?: string;
+}
+
+/** A note the tutor saved or deleted, shown as a quiet line. */
+export interface NoteLine {
+  action: "saved" | "deleted";
+  text: string;
+}
+
 export interface AssistantState {
   blocks: Block[];
   answer: string;
@@ -19,7 +34,9 @@ export interface AssistantState {
   startedAt: number;
   durationMs: number | null;
   status: "streaming" | "done" | "stopped" | "error";
-  error?: { kind: string; message: string };
+  error?: { kind: string; message: string; raisable?: boolean };
+  asks?: AskCardState[];
+  notes?: NoteLine[];
   /** The server's verdicts on the answer's citations, sent just before the end. */
   citations?: Citation[];
   /** Follow-up questions the tutor proposes (sent just before the end). */
@@ -77,6 +94,30 @@ export function applyEvent(s: AssistantState, event: ChatEvent, now: number): As
         answer: s.answer + event.text,
         thinkingOpen: s.userToggled ? s.thinkingOpen : false,
       };
+    case "ask_user":
+      return {
+        ...s,
+        asks: [
+          ...(s.asks ?? []),
+          {
+            id: event.id,
+            question: event.question,
+            options: event.options,
+            status: "pending",
+          },
+        ],
+      };
+    case "ask_resolved":
+      return {
+        ...s,
+        asks: (s.asks ?? []).map((a) =>
+          a.id === event.id
+            ? { ...a, status: event.status, ...(event.answer ? { answer: event.answer } : {}) }
+            : a,
+        ),
+      };
+    case "memory_note":
+      return { ...s, notes: [...(s.notes ?? []), { action: event.action, text: event.text }] };
     case "citations":
       return { ...s, citations: event.items };
     case "suggestions":
@@ -88,7 +129,11 @@ export function applyEvent(s: AssistantState, event: ChatEvent, now: number): As
         ...s,
         status: "error",
         durationMs: now - s.startedAt,
-        error: { kind: event.kind, message: event.message },
+        error: {
+          kind: event.kind,
+          message: event.message,
+          ...(event.raisable ? { raisable: true } : {}),
+        },
       };
   }
 }

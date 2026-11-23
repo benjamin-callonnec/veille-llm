@@ -234,7 +234,7 @@ def test_a_conversation_over_its_budget_is_refused_without_calling_the_model(tmp
     assert runner.seen == []
     message = json.loads(response.text.split("\n\n")[0][6:])
     assert message["kind"] == "budget" and "conversation" in message["message"].lower()
-    assert "raised" not in message["message"]  # the UI has no way to raise the limit
+    assert "raised limit" in message["message"]  # the chat offers the raise icon
     # the refusal is kept in the conversation like any other answer
     stored = client.get(f"/api/items/a1/conversations/{cid}/messages").json()
     assert stored[-1]["content"]["error"]["kind"] == "budget"
@@ -434,3 +434,111 @@ def test_nothing_is_normalised_without_citations_and_pages_are_normalised_once(m
     pages_pass = len(count)
     check_citations(tools, cited)
     assert len(count) - pages_pass == 2  # only the two quotes: the pages are cached
+
+
+# --- the screens' needs: raise button, memory line, ask cards, repeated question -------------
+
+
+def test_a_session_refusal_says_it_can_be_raised_only_before_the_raise(tmp_path):
+    client, _ = tight(tmp_path, recording(*ANSWER))
+    cid = conv(client)
+    over_limit(client, cid, spent=1.2)
+    first = json.loads(send(client, cid).text.split("\n\n")[0][6:])
+    assert first["kind"] == "budget" and first["raisable"] is True
+    stored = client.get(f"/api/items/a1/conversations/{cid}/messages").json()
+    assert stored[-1]["content"]["error"]["raisable"] is True
+    send(client, cid, raise_limit=True)
+    over_limit(client, cid, spent=2.5)
+    last = json.loads(send(client, cid).text.split("\n\n")[0][6:])
+    assert last["kind"] == "budget" and "raisable" not in last
+
+
+def test_regenerating_can_continue_with_the_raised_limit(tmp_path):
+    runner = recording(*ANSWER)
+    client, _ = tight(tmp_path, runner)
+    cid = conv(client)
+    over_limit(client, cid, spent=1.2)
+    send(client, cid, text="Why?")  # refused
+    plain = client.post(f"/api/items/a1/conversations/{cid}/regenerate")
+    assert types(plain) == ["error"] and runner.seen == []
+    raised = client.post(
+        f"/api/items/a1/conversations/{cid}/regenerate", json={"raise_limit": True}
+    )
+    assert types(raised) == ["text_delta", "done"] and len(runner.seen) == 1
+    texts = [
+        m["content"].get("text")
+        for m in client.get(f"/api/items/a1/conversations/{cid}/messages").json()
+        if m["role"] == "user"
+    ]
+    assert texts == ["earlier", "Why?"]
+
+
+def test_repeating_a_refused_question_does_not_store_it_twice(tmp_path):
+    client, _ = tight(tmp_path, recording(*ANSWER))
+    cid = conv(client)
+    over_limit(client, cid, spent=1.2)
+    send(client, cid, text="Why?")
+    send(client, cid, text="Why?")
+    shown = client.get(f"/api/items/a1/conversations/{cid}/messages").json()
+    assert [m["content"].get("text") for m in shown if m["role"] == "user"] == ["earlier", "Why?"]
+    assert [m["role"] for m in shown].count("assistant") == 2  # the earlier answer and the refusal
+
+
+def test_a_different_question_after_a_refusal_is_kept(tmp_path):
+    client, _ = tight(tmp_path, recording(*ANSWER))
+    cid = conv(client)
+    over_limit(client, cid, spent=1.2)
+    send(client, cid, text="Why?")
+    send(client, cid, text="How?")
+    shown = client.get(f"/api/items/a1/conversations/{cid}/messages").json()
+    assert [m["content"].get("text") for m in shown if m["role"] == "user"] == [
+        "earlier", "Why?", "How?"
+    ]  # fmt: skip
+
+
+NOTED = (
+    events.tool_use("m1", "session_memory", {"action": "write", "text": "knows RNNs"}),
+    events.tool_result("m1", "Saved note 4.", False),
+    events.tool_use("m2", "session_memory", {"action": "delete", "id": 2}),
+    events.tool_result("m2", "Deleted note 2.", False),
+    events.tool_use("m3", "session_memory", {"action": "write", "text": "refused"}),
+    events.tool_result("m3", "The memory is full", True),
+    events.tool_use("m4", "session_memory", {"action": "read"}),
+    events.tool_result("m4", "notes", False),
+    events.text_delta("ok"),
+    events.done(5),
+)
+
+
+def test_a_note_the_tutor_saves_or_deletes_is_a_visible_line(tmp_path):
+    client, _ = client_for(tmp_path, recording(*NOTED))
+    cid = conv(client)
+    response = send(client, cid)
+    lines = [json.loads(p[6:]) for p in response.text.split("\n\n") if '"memory_note"' in p]
+    assert lines == [
+        {"type": "memory_note", "action": "saved", "text": "knows RNNs"},
+        {"type": "memory_note", "action": "deleted", "text": ""},
+    ]
+    stored = client.get(f"/api/items/a1/conversations/{cid}/messages").json()
+    assert [(m["kind"], m["content"]["action"]) for m in stored if m["kind"] == "memory"] == [
+        ("memory", "saved"),
+        ("memory", "deleted"),
+    ]
+
+
+def test_regenerating_drops_the_cards_and_note_lines_of_the_old_answer(tmp_path):
+    client, app = client_for(tmp_path, recording(*NOTED))
+    cid = conv(client)
+    send(client, cid)
+    store = app.state.store
+    ask = store.messages(cid)[1]
+    assert ask["kind"] == "memory"
+    store.add_message(cid, "system", "ask", {"id": "q", "question": "?", "status": "expired"})
+    # a real turn stores its card before the answer: move the answer after it
+    answer = store.messages(cid)[-2]
+    store.delete_messages(cid, [answer["id"]])
+    store.add_message(cid, "assistant", "assistant", answer["content"])
+    client.post(f"/api/items/a1/conversations/{cid}/regenerate")
+    kinds = [m["kind"] for m in store.messages(cid)]
+    # the old lines and the old card went with the old answer; the new run added its own lines
+    assert kinds.count("ask") == 0 and kinds.count("memory") == 2 and kinds.count("assistant") == 1

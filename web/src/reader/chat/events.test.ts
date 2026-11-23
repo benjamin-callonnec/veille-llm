@@ -116,3 +116,39 @@ test("a suggestions event keeps three plain, short questions at most", async () 
 test("a suggestions event without a list is dropped", async () => {
   expect(await collect(chunks(line({ type: "suggestions", items: "x" })))).toEqual([]);
 });
+
+test("parses the question of the tutor, its outcome and the note lines", async () => {
+  const out = await collect(
+    chunks(
+      line({ type: "ask_user", id: "a", question: "Which?", options: ["A", "B"], timeout_s: 120 }) +
+        line({ type: "ask_resolved", id: "a", status: "answered", answer: "B" }) +
+        line({ type: "memory_note", action: "saved", text: "knows RNNs" }),
+    ),
+  );
+  expect(out).toEqual([
+    { type: "ask_user", id: "a", question: "Which?", options: ["A", "B"], timeout_s: 120 },
+    { type: "ask_resolved", id: "a", status: "answered", answer: "B" },
+    { type: "memory_note", action: "saved", text: "knows RNNs" },
+  ]);
+});
+
+test("drops a malformed ask, keeps only plain options, and keeps the raisable flag", async () => {
+  const out = await collect(
+    chunks(
+      line({ type: "ask_user", id: 5, question: "?" }) +
+        line({ type: "ask_resolved", id: "a", status: "weird" }) +
+        line({ type: "memory_note", action: "boom", text: "x" }) +
+        line({
+          type: "ask_user",
+          id: "b",
+          question: "Q",
+          options: ["ok", 3, "", "x".repeat(200)],
+        }) +
+        line({ type: "error", kind: "budget", message: "m", raisable: true }),
+    ),
+  );
+  expect(out).toEqual([
+    { type: "ask_user", id: "b", question: "Q", options: ["ok"], timeout_s: 0 },
+    { type: "error", kind: "budget", message: "m", raisable: true },
+  ]);
+});

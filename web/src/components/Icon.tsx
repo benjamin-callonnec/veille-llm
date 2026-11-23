@@ -23,7 +23,12 @@ export type IconName =
   | "outline"
   | "settings"
   | "mic"
-  | "speaker";
+  | "speaker"
+  | "note"
+  | "trace"
+  | "raise"
+  | "person"
+  | "sparkle";
 
 /** One line style for every icon of the app: 24px grid, round caps, drawn in the current colour. */
 const SHAPES: Record<IconName, ReactNode> = {
@@ -101,6 +106,21 @@ const SHAPES: Record<IconName, ReactNode> = {
       <path d="M16 16l4.5 4.5" />
     </>
   ),
+  note: (
+    <>
+      <path d="M6 4h9l3 3v13H6z" />
+      <path d="M9 11h6M9 15h4" />
+    </>
+  ),
+  trace: <path d="M3 12h4l3-7 4 14 3-7h4" />,
+  raise: <path d="M12 18V8M7 12l5-5 5 5M6 4h12" />,
+  person: (
+    <>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5 20a7 7 0 0 1 14 0" />
+    </>
+  ),
+  sparkle: <path d="M12 4l1.8 5.2L19 11l-5.2 1.8L12 18l-1.8-5.2L5 11l5.2-1.8z" />,
   outline: <path d="M4 6h16M4 12h16M4 18h10" />,
   settings: (
     <>

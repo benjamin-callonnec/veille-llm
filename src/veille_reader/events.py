@@ -30,8 +30,10 @@ def done(duration_ms: int, usage: dict | None = None) -> dict:
     return event
 
 
-def error(kind: str, message: str, usage: dict | None = None) -> dict:
+def error(kind: str, message: str, usage: dict | None = None, raisable: bool = False) -> dict:
     event = {"type": "error", "kind": kind, "message": message}
+    if raisable:
+        event["raisable"] = True  # the conversation budget can be raised once, from the chat
     if usage:
         event["usage"] = usage  # an answer that fails or hits a limit still cost something
     return event
@@ -45,6 +47,29 @@ def citations(items: list[dict]) -> dict:
 def suggestions(items: list[str]) -> dict:
     """Follow-up questions for the user, already validated (sent just before `done`)."""
     return {"type": "suggestions", "items": items}
+
+
+def ask_user(id: str, question: str, options: list[str], timeout: float) -> dict:
+    """The tutor waits for an answer; the stream is paused until `ask_resolved`."""
+    return {
+        "type": "ask_user",
+        "id": id,
+        "question": question,
+        "options": options,
+        "timeout_s": int(timeout),
+    }
+
+
+def ask_resolved(id: str, status: str, answer: str | None = None) -> dict:
+    event = {"type": "ask_resolved", "id": id, "status": status}
+    if answer is not None:
+        event["answer"] = answer
+    return event
+
+
+def memory_note(action: str, text: str) -> dict:
+    """The tutor saved or deleted a note of its session memory (shown as a quiet line)."""
+    return {"type": "memory_note", "action": action, "text": text}
 
 
 def compaction(replaced: int) -> dict:
@@ -66,6 +91,8 @@ class RunRequest:
     agent_limits: AgentLimits | None = None
     # the images attached to the question being asked, as validated `veille_reader.images.Image`
     images: list[Any] = field(default_factory=list)
+    # `ask_user`: an async function (question, options) -> the user's reply, None if none came
+    ask: Any = None
 
 
 AgentRunner = Callable[[RunRequest], AsyncIterator[dict]]
