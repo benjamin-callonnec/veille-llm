@@ -5,6 +5,14 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-23
+
+### Added
+- Reader (#30): going back to a place in the PDF now lands on the exact spot: the box is scrolled to a third of the view (never above the top of its page) and flashed. It works from a highlight row, the quote of an *ask the agent* question and the agent's citations, and falls back to the page when no position is known.
+- Reader (#30): the structure of a paper (text lines with their position, sections, figure and table captions) is extracted once with `pdfminer.six`, stored in `reader.db` and served by `GET /api/items/<id>/structure`. A paper it cannot read simply has none: the reader works as before.
+- Reader (#30): the tutor can cite a figure or a table, `[p.N Figure K]` or `[p.N Table K]` (also `Figure 3.1` for chapter-numbered papers); the citation chip brings you to the caption.
+- Adds `pdfminer.six` to the reader dependencies.
+
 ## [0.13.1] - 2026-11-23
 
 ### Fixed
