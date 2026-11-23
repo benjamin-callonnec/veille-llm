@@ -71,10 +71,10 @@ export function ChatPane({
     const images = await Promise.all(files.map(toPayload));
     await chat.send({ kind: "text", text, ...(images.length ? { images } : {}) });
   };
-  // the follow-up questions of the last answer, until you type or send something
+  // the follow-up questions of the last answer, until you type or send something or a quiz starts
   const last = chat.messages.at(-1);
   const suggestions =
-    last?.role === "assistant" && !chat.streaming && !dirty
+    last?.role === "assistant" && last.kind !== "quiz" && !chat.streaming && !quizBusy && !dirty
       ? toSuggestions(last.content.suggestions)
       : [];
   const pick = (prompt: string) => {
