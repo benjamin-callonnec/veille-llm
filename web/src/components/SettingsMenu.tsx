@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { isMac, keysFor } from "../lib/platform";
+import { isMac, isTyping, keysFor } from "../lib/platform";
 import type { ShortcutGroup } from "../lib/shortcuts";
 import { loadSpeed, RATES, SPEEDS, type SpeechSpeed, saveSpeed } from "../lib/speechRate";
 import { applyTheme, defaultStorage, loadTheme, saveTheme, type Theme } from "../lib/theme";
@@ -18,10 +18,6 @@ const SPEED_LABELS: Record<SpeechSpeed, string> = {
 };
 
 const canSpeak = () => typeof window !== "undefined" && "speechSynthesis" in window;
-
-const isTyping = (target: EventTarget | null) =>
-  target instanceof HTMLElement &&
-  (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
 
 interface Props {
   shortcuts: ShortcutGroup[];
