@@ -415,7 +415,7 @@ test("a timer runs under the whole answer, even when thinking is folded and the 
   vi.useRealTimers();
 });
 
-test("the dots move while the agent works (thinking or a tool call) and stand still once the text starts", () => {
+test("the dots keep moving for as long as the agent works: thinking, a tool call, text, more tools", () => {
   const t0 = 1_000;
   const moving = () => document.querySelector(".thinking-dots")?.classList.contains("moving");
   let state = initialAssistant(t0);
@@ -424,12 +424,31 @@ test("the dots move while the agent works (thinking or a tool call) and stand st
   state = applyEvent(state, { type: "thinking_delta", text: "hm" }, t0);
   rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
   expect(moving()).toBe(true);
-  state = applyEvent(state, { type: "tool_use", id: "t", name: "search_paper", input: {} }, t0);
+  state = applyEvent(state, { type: "text_delta", text: "Let me look at the paper." }, t0);
   rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
-  expect(moving()).toBe(true); // waiting for a tool is still work, never a frozen dot
-  state = applyEvent(state, { type: "text_delta", text: "Answer" }, t0);
+  expect(moving()).toBe(true); // text came, but the agent is not done
+  state = applyEvent(state, { type: "tool_use", id: "t", name: "write_report", input: {} }, t0);
   rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
-  expect(moving()).toBe(false);
+  expect(moving()).toBe(true); // a long tool call is still work, never a frozen dot
+});
+
+test("the dots stand still while the agent waits for your answer, and stop when it is done", () => {
+  const t0 = 1_000;
+  const moving = () => document.querySelector(".thinking-dots")?.classList.contains("moving");
+  let state = initialAssistant(t0);
+  state = applyEvent(
+    state,
+    { type: "ask_user", id: "a", question: "Who is it for?", options: [], timeout_s: 120 },
+    t0,
+  );
+  const { rerender } = render(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(moving()).toBe(false); // waiting for you is not working
+  state = applyEvent(state, { type: "ask_resolved", id: "a", status: "answered", answer: "x" }, t0);
+  rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(moving()).toBe(true);
+  state = applyEvent(state, { type: "done", duration_ms: 5 }, t0);
+  rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(document.querySelector(".thinking-dots")).toBeNull();
 });
 
 test("the dots come before the label; the timer belongs to the whole message, not to Thinking", () => {
