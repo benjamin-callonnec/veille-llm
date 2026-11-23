@@ -279,7 +279,15 @@ def validate_quiz(raw: object, pages: list[str], outline: list[tuple[str, int]])
     _KIND_CHECKS[kind](raw, spec, question)
     spec["explanation"] = _text(raw.get("explanation"), "explanation", MAX_EXPLANATION)
     spec["topic"] = _text(raw.get("topic"), "topic", MAX_TOPIC)
-    page, quote = raw.get("page"), _text(raw.get("quote"), "quote", MAX_QUOTE_CHARS)
+    quoted = raw.get("quote")  # a quote copied across a line break keeps no newline
+    page, quote = (
+        raw.get("page"),
+        _text(
+            " ".join(quoted.split()) if isinstance(quoted, str) else quoted,
+            "quote",
+            MAX_QUOTE_CHARS,
+        ),
+    )
     if isinstance(page, bool) or not isinstance(page, int):
         raise QuizError("page must be a number")
     verdict = _verify(pages, outline, [Citation(page, quote, 0, 0)])[0]

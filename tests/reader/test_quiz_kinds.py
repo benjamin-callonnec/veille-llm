@@ -475,3 +475,11 @@ def test_the_quiz_route_accepts_only_known_kinds(tmp_path):
         client.post(f"/api/items/a1/conversations/{cid}/quizzes", json={"kind": "any"}).status_code
         == 201
     )
+
+
+def test_a_quote_copied_across_a_line_break_is_accepted_but_other_control_characters_are_not():
+    assert check({**MULTI, "quote": "each head attend\nto a different   subspace"})["quote"] == (
+        "each head attend to a different subspace"
+    )
+    with pytest.raises(QuizError):
+        check({**MULTI, "quote": "each head attend\x00to a different subspace"})
