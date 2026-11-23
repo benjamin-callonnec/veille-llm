@@ -6,6 +6,7 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 ## [Unreleased]
 
 ### Fixed
+- Dictation: a phrase the browser delivers after the message was sent (or after you typed) is ignored, so it no longer reappears in the composer or marks the next typed message as dictated.
 - Memory panel: a failed load message disappears after a later successful load, and an older, slower response can no longer overwrite a newer one.
 - Regenerate also drops, in the open conversation, the question cards and note lines that sat just before the replaced answer (as the server does).
 - Auto read aloud: the start is idempotent, so React StrictMode's double mount no longer stops a reading that began while the answer streamed.
