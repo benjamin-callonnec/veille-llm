@@ -13,6 +13,7 @@ import { type OnCite, toSuggestions } from "./events";
 import { QuizCard } from "./QuizCard";
 import { httpQuizApi, type QuizApi } from "./quizApi";
 import { SessionTools } from "./SessionTools";
+import { fetchSkills, type SkillInfo } from "./skillsApi";
 import { UserMessage } from "./UserMessage";
 import type { useChat } from "./useChat";
 
@@ -48,6 +49,14 @@ export function ChatPane({
 }) {
   // the paper is the chat's own: the prop is only an override (a card must never post with no id)
   const itemId = itemProp || chat.itemId;
+  const [skills, setSkills] = useState<SkillInfo[]>([]);
+  useEffect(() => {
+    let live = true;
+    fetchSkills().then((list) => live && setSkills(list));
+    return () => {
+      live = false;
+    };
+  }, []);
   const [quizBusy, setQuizBusy] = useState(false);
   const [quizError, setQuizError] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -82,7 +91,7 @@ export function ChatPane({
   const [fill, setFill] = useState<{ text: string; n: number } | null>(null);
   // the answer to a dictated message is read aloud, the answer to a typed one is not
   const [voiceReply, setVoiceReply] = useState(false);
-  const send = async (text: string, files: File[] = [], voice = false) => {
+  const send = async (text: string, files: File[] = [], voice = false, skill?: string) => {
     setVoiceReply(voice);
     setAttachError(null);
     let images: Awaited<ReturnType<typeof toPayload>>[];
@@ -92,7 +101,12 @@ export function ChatPane({
       setAttachError(e instanceof Error ? e.message : "An image could not be sent.");
       return;
     }
-    await chat.send({ kind: "text", text, ...(images.length ? { images } : {}) });
+    await chat.send({
+      kind: "text",
+      text,
+      ...(images.length ? { images } : {}),
+      ...(skill ? { skill } : {}),
+    });
   };
   // the follow-up questions of the last answer, until you type or send something or a quiz starts
   const last = chat.messages.at(-1);
@@ -250,7 +264,8 @@ export function ChatPane({
         fill={fill}
         tabFill={suggestions[0]}
         onDirty={setDirty}
-        onSend={(text, files, voice) => void send(text, files, voice)}
+        onSend={(text, files, voice, skill) => void send(text, files, voice, skill)}
+        skills={skills}
       />
     </div>
   );

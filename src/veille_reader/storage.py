@@ -118,7 +118,25 @@ MIGRATIONS: list[str] = [
         extracted_at TEXT NOT NULL
     );
     """,
+    """
+    CREATE TABLE reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );
+    CREATE INDEX reports_item ON reports (item_id);
+    CREATE TABLE report_versions (
+        report_id INTEGER NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        html TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (report_id, version)
+    );
+    """,
 ]
+MAX_VERSIONS = 50  # versions kept per report; older ones are purged
+MAX_HTML_CHARS = 400_000
 
 
 _SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}")
@@ -655,3 +673,92 @@ class ReaderStore:
 
     def close(self) -> None:
         self._con.close()
+
+    # --- reports: HTML documents written by the tutor, one row per version -----------------
+    def _owns_report(self, item_id: str, report_id: int) -> bool:
+        return (
+            self._con.execute(
+                "SELECT 1 FROM reports WHERE id = ? AND item_id = ?", (report_id, item_id)
+            ).fetchone()
+            is not None
+        )
+
+    def save_report(
+        self, item_id: str, title: str, html: str, report_id: int | None = None
+    ) -> dict:
+        """Add a version (a new report without `report_id`). KeyError for another item's report."""
+        if len(html) > MAX_HTML_CHARS:
+            raise ValueError(f"a report is {MAX_HTML_CHARS} characters at most")
+        now = self._now()
+        with self._con:
+            if report_id is None:
+                report_id = self._con.execute(
+                    "INSERT INTO reports (item_id, created_at) VALUES (?, ?)", (item_id, now)
+                ).lastrowid
+            elif not self._owns_report(item_id, report_id):
+                raise KeyError(report_id)
+            version = self._con.execute(
+                "SELECT COALESCE(MAX(version), 0) + 1 FROM report_versions WHERE report_id = ?",
+                (report_id,),
+            ).fetchone()[0]
+            self._con.execute(
+                "INSERT INTO report_versions (report_id, version, title, html, created_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (report_id, version, title, html, now),
+            )
+            self._con.execute(
+                "DELETE FROM report_versions WHERE report_id = ? AND version <= ?",
+                (report_id, version - MAX_VERSIONS),
+            )
+        return {"id": int(report_id), "version": int(version), "title": title}
+
+    def reports(self, item_id: str) -> list[dict]:
+        rows = self._con.execute(
+            "SELECT r.id, v.title, v.version, v.created_at FROM reports r JOIN report_versions v"
+            " ON v.report_id = r.id AND v.version = (SELECT MAX(version) FROM report_versions"
+            " WHERE report_id = r.id) WHERE r.item_id = ? ORDER BY v.created_at DESC, r.id DESC",
+            (item_id,),
+        ).fetchall()
+        return [{"id": r[0], "title": r[1], "version": r[2], "updated_at": r[3]} for r in rows]
+
+    def report(self, item_id: str, report_id: int, version: int | None = None) -> dict | None:
+        if not self._owns_report(item_id, report_id):
+            return None
+        versions = [
+            {"version": v, "created_at": c}
+            for v, c in self._con.execute(
+                "SELECT version, created_at FROM report_versions WHERE report_id = ?"
+                " ORDER BY version",
+                (report_id,),
+            )
+        ]
+        if not versions:
+            return None
+        wanted = versions[-1]["version"] if version is None else version
+        row = self._con.execute(
+            "SELECT title, html FROM report_versions WHERE report_id = ? AND version = ?",
+            (report_id, wanted),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": report_id,
+            "title": row[0],
+            "version": wanted,
+            "versions": versions,
+            "html": row[1],
+        }
+
+    def restore_report(self, item_id: str, report_id: int, version: int) -> dict | None:
+        """Copy an old version as the newest one; no version is lost."""
+        old = self.report(item_id, report_id, version)
+        if old is None:
+            return None
+        return self.save_report(item_id, old["title"], old["html"], report_id)
+
+    def delete_report(self, item_id: str, report_id: int) -> bool:
+        with self._con:
+            cursor = self._con.execute(
+                "DELETE FROM reports WHERE id = ? AND item_id = ?", (report_id, item_id)
+            )
+        return cursor.rowcount > 0

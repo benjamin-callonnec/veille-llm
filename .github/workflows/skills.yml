@@ -1,0 +1,59 @@
+name: skills
+
+# Validate the agent skills (skills/*.md) and publish them as skills.zip on the release tagged
+# `skills`: the local reader pulls that one file. Only push to main and manual runs; no secret.
+on:
+  push:
+    branches: [main]
+    paths: ["skills/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skills
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # the job that runs repo code holds no write token
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - name: Every skill must be valid (a broken one is never published)
+        run: uv run python -m veille_reader.skills skills
+      - run: cd skills && zip -q -j ../skills.zip ./*.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skills-zip
+          path: skills.zip
+          retention-days: 1
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # only to move the `skills` release asset; no repo code runs here
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: skills-zip
+      - name: Create the release once, then replace the asset
+        run: |
+          if ! gh release view skills -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create skills -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Skills" --notes "Agent skills of the reader (skills.zip), rebuilt from skills/ on main." \
+              --latest=false
+          fi
+          gh release upload skills skills.zip -R "$GITHUB_REPOSITORY" --clobber

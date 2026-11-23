@@ -39,6 +39,10 @@ from veille_reader.quiz import (
     view_of,
     with_results,
 )
+from veille_reader.reports import ReportTools, export_name, with_csp
+from veille_reader.skills import load_skills
+from veille_reader.skills_sync import default_fetcher as default_skills_fetcher
+from veille_reader.skills_sync import sync_skills
 from veille_reader.storage import ReaderStore
 from veille_reader.structure import load_structure
 from veille_reader.tools import PaperTools
@@ -70,6 +74,10 @@ class ImageIn(BaseModel):
     data: str = Field(max_length=8_000_000)  # base64, checked again once decoded
 
 
+class RestoreIn(BaseModel):
+    version: int = Field(ge=1)
+
+
 class MessageIn(BaseModel):
     kind: Literal["text", "ask_agent"]
     text: str | None = Field(default=None, max_length=8000)
@@ -77,6 +85,7 @@ class MessageIn(BaseModel):
     quote: QuoteIn | None = None
     question: str | None = Field(default=None, max_length=8000)
     images: list[ImageIn] = Field(default_factory=list, max_length=20)
+    skill: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9-]{0,39}$")
 
     @model_validator(mode="after")
     def complete(self) -> Self:
@@ -187,6 +196,8 @@ def create_app(
     grader: Grader | None = None,
     voice_engine: VoiceEngine | None = None,
     ask_timeout: float = ASK_TIMEOUT,
+    skills_dir: Path | None = None,
+    skills_fetch: Fetcher | None = None,
 ) -> FastAPI:
     loaded = {"items": _load_items(catalogue_path), "mtime": catalogue_path.stat().st_mtime_ns}
 
@@ -201,6 +212,7 @@ def create_app(
         return loaded["items"]
 
     store = ReaderStore(data_dir)
+    skills_cache = skills_dir or data_dir / "skills"
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.state.streaming = set()
     app.state.store = store
@@ -314,6 +326,40 @@ def create_app(
             return unknown("unknown_highlight")
         return Response(status_code=204)
 
+    @app.get("/api/items/{item_id}/reports")
+    def list_reports(item_id: str):  # noqa: ANN202
+        if item_id not in current_items():
+            return unknown()
+        return store.reports(item_id)
+
+    @app.get("/api/items/{item_id}/reports/{report_id}")
+    def get_report(item_id: str, report_id: int, version: int | None = None):  # noqa: ANN202
+        view = store.report(item_id, report_id, version)
+        return view if view is not None else unknown("unknown_report")
+
+    @app.post("/api/items/{item_id}/reports/{report_id}/restore", status_code=201)
+    def restore_report(item_id: str, report_id: int, body: RestoreIn):  # noqa: ANN202
+        saved = store.restore_report(item_id, report_id, body.version)
+        return saved if saved is not None else unknown("unknown_report")
+
+    @app.delete("/api/items/{item_id}/reports/{report_id}")
+    def delete_report(item_id: str, report_id: int):  # noqa: ANN202
+        if not store.delete_report(item_id, report_id):
+            return unknown("unknown_report")
+        return Response(status_code=204)
+
+    @app.get("/api/items/{item_id}/reports/{report_id}/export")
+    def export_report(item_id: str, report_id: int, version: int | None = None):  # noqa: ANN202
+        view = store.report(item_id, report_id, version)
+        if view is None:
+            return unknown("unknown_report")
+        name = export_name(view["title"])
+        return Response(
+            with_csp(view["html"]),
+            media_type="text/html; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{name}"'},
+        )
+
     @app.get("/api/items/{item_id}/conversations")
     def list_conversations(item_id: str):  # noqa: ANN202
         if item_id not in current_items():
@@ -391,12 +437,18 @@ def create_app(
         return PaperTools(paper, store.highlights(item_id), StoreMemory(store, item_id)), notes
 
     async def run_turn(  # noqa: ANN202
-        item_id: str, cid: int, kind: str | None, content: dict | None, raise_limit: bool = False
+        item_id: str,
+        cid: int,
+        kind: str | None,
+        content: dict | None,
+        raise_limit: bool = False,
+        skill_name: str | None = None,
     ):
         streaming: set[int] = app.state.streaming
         streaming.add(cid)
 
         item = current_items()[item_id]
+        catalogue_skills = load_skills(skills_cache)
 
         async def body():  # noqa: ANN202
             try:
@@ -433,6 +485,9 @@ def create_app(
                     after_turn=after_turn,
                     asks=app.state.asks,
                     ask_timeout=ask_timeout,
+                    skills=catalogue_skills,
+                    reports=ReportTools(store, item_id),
+                    skill=next((s for s in catalogue_skills if s.name == skill_name), None),
                 ):
                     yield line
             finally:
@@ -452,6 +507,8 @@ def create_app(
             content = {"quote": body.quote.model_dump(), "question": body.question}
         else:
             content = {"text": body.text or ""}
+            if body.skill:
+                content["skill"] = body.skill  # remembered, so Regenerate runs it again
             try:
                 images = decode_images([i.model_dump() for i in body.images])
             except ImageError as exc:
@@ -464,7 +521,7 @@ def create_app(
                     {"id": i.id, "mime": i.mime, **({"name": i.name} if i.name else {})}
                     for i in images
                 ]
-        return await run_turn(item_id, cid, body.kind, content, body.raise_limit)
+        return await run_turn(item_id, cid, body.kind, content, body.raise_limit, body.skill)
 
     @app.post("/api/items/{item_id}/conversations/{cid}/regenerate")
     async def regenerate(item_id: str, cid: int, body: RegenerateIn | None = None):  # noqa: ANN202
@@ -476,7 +533,9 @@ def create_app(
         spoken = [m for m in store.messages(cid) if m["role"] in ("user", "assistant")]
         if not spoken or spoken[-1]["role"] != "user":
             return JSONResponse({"reason": "nothing_to_regenerate"}, status_code=400)
-        return await run_turn(item_id, cid, None, None, bool(body and body.raise_limit))
+        last_user = next((m for m in reversed(spoken) if m["role"] == "user"), None)
+        skill = (last_user or {}).get("content", {}).get("skill")
+        return await run_turn(item_id, cid, None, None, bool(body and body.raise_limit), skill)
 
     @app.post("/api/items/{item_id}/conversations/{cid}/quizzes", status_code=201)
     async def start_quiz(item_id: str, cid: int, body: QuizIn):  # noqa: ANN202
@@ -579,6 +638,20 @@ def create_app(
         if not store.delete_memory_note(item_id, note_id):
             return unknown("unknown_note")
         return Response(status_code=204)
+
+    @app.get("/api/skills")
+    def list_skills() -> list[dict]:
+        return [
+            {"name": s.name, "description": s.description, "tools": list(s.tools)}
+            for s in load_skills(skills_cache)
+        ]
+
+    @app.post("/api/skills/sync")
+    async def sync_skills_now() -> dict:
+        count = await asyncio.to_thread(
+            sync_skills, skills_cache, skills_fetch or default_skills_fetcher
+        )
+        return {"count": count}
 
     @app.get("/catalogue.json")
     def catalogue() -> FileResponse:

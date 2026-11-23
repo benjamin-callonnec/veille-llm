@@ -248,6 +248,9 @@ async def stream_turn(
     after_turn: Callable[[str], Awaitable[None]] | None = None,
     asks: AskBroker | None = None,
     ask_timeout: float = ASK_TIMEOUT,
+    skills: list | None = None,
+    skill: object = None,
+    reports: object = None,
 ) -> AsyncIterator[str]:
     """Stream one turn. With `kind` None the last user message is run again (regenerate)."""
     if kind is not None and content is not None:
@@ -287,6 +290,9 @@ async def stream_turn(
             tool_limits=tool_limits,
             agent_limits=limits,
             images=load_images(store, str(item.get("id", "")), messages),
+            skills=list(skills or []),
+            skill=skill,
+            reports=reports,
         )
         events_stream = source = runner(request)
         if asks is not None:  # the tutor may pause the turn to ask the user something

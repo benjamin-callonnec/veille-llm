@@ -27,6 +27,8 @@ from veille_reader.asking import (
 from veille_reader.events import RunRequest
 from veille_reader.limits import AgentLimits
 from veille_reader.quiz import QUIZ_PROMPT
+from veille_reader.reports import ReportTools
+from veille_reader.skills import SkillSession
 from veille_reader.suggestions import with_rule
 from veille_reader.tools import KINDS, Limits, PaperTools, ToolBudget, ToolError
 
@@ -202,7 +204,13 @@ def _result(text: str, error: bool = False) -> dict:
     return result
 
 
-def build_sdk_tools(tools: PaperTools, budget: ToolBudget, ask: Callable | None = None) -> list:
+def build_sdk_tools(
+    tools: PaperTools,
+    budget: ToolBudget,
+    ask: Callable | None = None,
+    session: SkillSession | None = None,
+    reports: ReportTools | None = None,
+) -> list:
     """The tools as SDK tools. Errors and limits are answers to the model, never crashes."""
     from claude_agent_sdk import tool
 
@@ -265,8 +273,68 @@ def build_sdk_tools(tools: PaperTools, budget: ToolBudget, ask: Callable | None 
         wanted = pick(args, "action", "text", "id")
         return await run("session_memory", lambda: tools.session_memory(**wanted))
 
+    built = [load_artifact, search_paper, session_memory]
+    if session is not None and session.catalogue:
+
+        @tool(
+            "use_skill",
+            "Load a skill by name: returns its instructions and unlocks its tools.",
+            {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        )
+        async def use_skill(args: dict) -> dict:
+            return await run("use_skill", lambda: session.use(str(args.get("name", ""))))
+
+        built.append(use_skill)
+
+    if reports is not None:
+
+        async def gated(name: str, fn) -> dict:  # noqa: ANN001
+            if session is None or not session.allows(name):
+                return _result(
+                    f"{name} is only available once a skill that uses it is loaded: call "
+                    "use_skill first.",
+                    error=True,
+                )
+            return await run(name, fn)
+
+        @tool(
+            "write_report",
+            "Save an HTML report (one self-contained file) as a new version; give report_id to "
+            "change an existing report. No external URL: inline CSS, JavaScript and images.",
+            {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "html": {"type": "string"},
+                    "report_id": {"type": "integer"},
+                },
+                "required": ["title", "html"],
+            },
+        )
+        async def write_report(args: dict) -> dict:
+            wanted = pick(args, "title", "html", "report_id")
+            return await gated("write_report", lambda: reports.write(**wanted))
+
+        @tool(
+            "read_report",
+            "Read the HTML of a saved report (its latest version) to change it.",
+            {
+                "type": "object",
+                "properties": {"report_id": {"type": "integer"}},
+                "required": ["report_id"],
+            },
+        )
+        async def read_report(args: dict) -> dict:
+            return await gated("read_report", lambda: reports.read(args.get("report_id")))
+
+        built += [write_report, read_report]
+
     if ask is None:
-        return [load_artifact, search_paper, session_memory]
+        return built
 
     @tool(
         "ask_user",
@@ -293,7 +361,7 @@ def build_sdk_tools(tools: PaperTools, budget: ToolBudget, ask: Callable | None 
         except ToolError as exc:
             return _result(str(exc), error=True)
 
-    return [load_artifact, search_paper, session_memory, ask_user]
+    return [*built, ask_user]
 
 
 SUMMARY_MODEL = "claude-haiku-5-5"
@@ -362,12 +430,18 @@ async def sdk_runner(request: RunRequest, query: Callable | None = None) -> Asyn
         from claude_agent_sdk import create_sdk_mcp_server
 
         budget = ToolBudget(request.tool_limits or Limits())
-        sdk_tools = build_sdk_tools(request.paper_tools, budget, request.ask)
+        session = SkillSession(request.skills, request.skill)
+        sdk_tools = build_sdk_tools(
+            request.paper_tools, budget, request.ask, session, request.reports
+        )
         extra = {
             "mcp_servers": {"paper": create_sdk_mcp_server("paper", tools=sdk_tools)},
             "allowed_tools": [f"{TOOL_PREFIX}{t.name}" for t in sdk_tools],
             "system_prompt": with_rule(
-                SYSTEM_PROMPT_TOOLS + QUIZ_PROMPT + (ASK_PROMPT if request.ask else "")
+                SYSTEM_PROMPT_TOOLS
+                + QUIZ_PROMPT
+                + (ASK_PROMPT if request.ask else "")
+                + session.system_prompt()
             ),
             "max_turns": limits.max_turns,
             "max_budget_usd": limits.max_message_usd,

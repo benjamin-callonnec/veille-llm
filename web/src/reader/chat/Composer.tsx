@@ -5,10 +5,12 @@ import { browserStt, type SttEngine } from "../voice/stt";
 import { joinText, useDictation } from "../voice/useDictation";
 import { imagesOf, pickImages } from "./attachments";
 import { loadDraft, saveDraft } from "./drafts";
+import { SkillMenu } from "./SkillMenu";
+import { type SkillInfo, slashQuery, splitSkill } from "./skillsApi";
 
 interface Props {
   /** `voice` is true when the message was (at least partly) dictated: the answer is then read aloud. */
-  onSend(text: string, images?: File[], voice?: boolean): void;
+  onSend(text: string, images?: File[], voice?: boolean, skill?: string): void;
   onStop(): void;
   streaming: boolean;
   /** The model that answers, shown quietly under the input. */
@@ -23,6 +25,8 @@ interface Props {
   onDirty?(dirty: boolean): void;
   /** The dictation engine; by default the browser's, absent where it is not supported. */
   speech?: SttEngine | null;
+  /** The skills behind the slash menu; with none, a slash is plain text. */
+  skills?: SkillInfo[];
 }
 
 interface Attached {
@@ -45,12 +49,15 @@ export function Composer({
   tabFill,
   onDirty,
   speech,
+  skills = [],
 }: Props) {
   const [text, setText] = useState(() => loadDraft(draftKey));
   const [images, setImages] = useState<Attached[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [guided, setGuided] = useState(false); // Tab walks through the [placeholders]
   const [selectTick, setSelectTick] = useState(0);
+  const [menuIndex, setMenuIndex] = useState(0);
+  const [menuClosed, setMenuClosed] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const pending = useRef<{ start: number; end: number } | null>(null);
   const shownKey = useRef(draftKey);
@@ -76,6 +83,15 @@ export function Composer({
   const shown = joinText(text, dictation.interim);
 
   const ready = shown.trim().length > 0 || images.length > 0;
+
+  const query = slashQuery(shown);
+  const matches = query === null ? [] : skills.filter((s) => s.name.startsWith(query));
+  const menuOpen = matches.length > 0 && !menuClosed;
+  const active = Math.min(menuIndex, Math.max(matches.length - 1, 0));
+  const choose = (name: string) => {
+    edit(`/${name} `);
+    area.current?.focus();
+  };
 
   useEffect(() => {
     if (shownKey.current === draftKey) return;
@@ -140,6 +156,8 @@ export function Composer({
   };
 
   const edit = (value: string) => {
+    setMenuIndex(0);
+    setMenuClosed(false);
     setText(value);
     saveDraft(draftKey, value);
     if (guided && placeholders(value).length === 0) setGuided(false);
@@ -151,7 +169,9 @@ export function Composer({
     const voice = dictated.current;
     dictated.current = false;
     const files = images.map((i) => i.file);
-    if (voice) onSend(value, files.length ? files : undefined, true);
+    const invoked = splitSkill(value, skills);
+    if (invoked) onSend(invoked.text, files.length ? files : undefined, voice, invoked.skill);
+    else if (voice) onSend(value, files.length ? files : undefined, true);
     else if (files.length) onSend(value, files);
     else onSend(value);
     dictation.abandon();
@@ -165,6 +185,7 @@ export function Composer({
 
   return (
     <div className="composer-wrap">
+      {menuOpen && <SkillMenu skills={matches} active={active} onPick={choose} />}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: a drop zone, the textarea stays the control */}
       <div
         className="composer"
@@ -215,6 +236,26 @@ export function Composer({
               attach(files);
             }}
             onKeyDown={(e) => {
+              if (menuOpen && !e.nativeEvent.isComposing) {
+                const move = (to: number) => {
+                  e.preventDefault();
+                  setMenuIndex((to + matches.length) % matches.length);
+                };
+                if (e.key === "ArrowDown") return move(active + 1);
+                if (e.key === "ArrowUp") return move(active - 1);
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  return setMenuClosed(true);
+                }
+                const exact = matches.some((m) => `/${m.name}` === text.trim());
+                if (
+                  (e.key === "Enter" && !e.shiftKey && !exact) ||
+                  (e.key === "Tab" && !e.shiftKey)
+                ) {
+                  e.preventDefault();
+                  return choose(matches[active]?.name ?? "");
+                }
+              }
               if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 submit();

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isTyping } from "../lib/platform";
 import { formatModel } from "../lib/time";
 import { type ChatApi, httpChatApi } from "./chat/api";
 import { ChatPane } from "./chat/ChatPane";
@@ -14,6 +15,9 @@ import { PdfOpenError, type PdfSource } from "./pdf/source";
 import { SelectionBox } from "./SelectionBox";
 import { type Caption, fetchCaptions, findCaption } from "./structureApi";
 import { type HighlightsApi, httpApi, useHighlights } from "./useHighlights";
+import { FileViewer } from "./viewer/FileViewer";
+import { listReports, type ReportMeta } from "./viewer/reportsApi";
+import { useReports } from "./viewer/useReports";
 
 export interface ReaderItem {
   id: string;
@@ -59,6 +63,8 @@ interface Props {
   captionsApi?(item: string): Promise<Caption[]>;
   /** Where the model that answers is read from (the API health route by default). */
   health?: () => Promise<{ model?: string }>;
+  /** Where the reports the tutor wrote come from (the API by default). */
+  reportsApi?(item: string): Promise<ReportMeta[]>;
 }
 
 export function ReaderPage({
@@ -69,6 +75,7 @@ export function ReaderPage({
   chatApi = httpChatApi,
   captionsApi = fetchCaptions,
   health = fetchHealth,
+  reportsApi = listReports,
 }: Props) {
   const [item, setItem] = useState<ReaderItem | null>(null);
   const [error, setError] = useState<string | null>(
@@ -80,8 +87,27 @@ export function ReaderPage({
   const [target, setTarget] = useState<Target | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const { highlights, add, remove, error: saveError } = useHighlights(itemId, api);
-  const chat = useChat(itemId, chatApi);
+  const { reports, reload } = useReports(itemId, reportsApi);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [reportId, setReportId] = useState<number | null>(null);
+  const onReport = useCallback(async () => {
+    const found = await reload();
+    if (found[0]) setReportId(found[0].id);
+    setViewerOpen(true);
+  }, [reload]);
+  const chat = useChat(itemId, chatApi, undefined, onReport);
   const [model, setModel] = useState("");
+
+  // V opens or closes the viewer, unless you are typing or holding a modifier (like H, home)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const other = e.altKey || e.ctrlKey || e.metaKey || e.repeat || e.defaultPrevented;
+      if (e.key.toLowerCase() !== "v" || other || isTyping(e.target)) return;
+      setViewerOpen((open) => !open);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     let current = true;
@@ -233,6 +259,16 @@ export function ReaderPage({
         pdf={pdfPane}
         chat={<ChatPane chat={chat} onGo={goToRects} onCite={cite} model={model} itemId={itemId} />}
       />
+      {viewerOpen && (
+        <FileViewer
+          itemId={itemId}
+          reports={reports}
+          selectedId={reportId ?? reports[0]?.id ?? null}
+          onSelect={setReportId}
+          onClose={() => setViewerOpen(false)}
+          onChanged={() => void reload()}
+        />
+      )}
       {selection && (
         <SelectionBox
           quote={selection.quote}

@@ -854,3 +854,44 @@
   font-size: 0.8rem;
   overflow-wrap: anywhere;
 }
+
+/* The / menu of the composer: the skills, read only. */
+.composer-wrap {
+  position: relative;
+}
+.skill-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  max-height: 260px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--composer);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  z-index: 5;
+}
+.skill-menu [role="option"] {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.skill-menu [role="option"].active,
+.skill-menu [role="option"]:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.15));
+}
+.skill-desc {
+  min-width: 0;
+}
+.skill-tools {
+  grid-column: 2;
+  font-size: 12px;
+  opacity: 0.7;
+}
