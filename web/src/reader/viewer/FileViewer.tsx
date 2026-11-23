@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Icon, IconButton } from "../../components/Icon";
+import { IconButton } from "../../components/Icon";
 import { rendererFor } from "./registry";
 import {
   exportUrl,
@@ -96,14 +96,8 @@ export function FileViewer({ itemId, reports, selectedId, onSelect, onClose, onC
           </button>
         )}
         {view && selectedId !== null && (
-          <a
-            className="icon-btn"
-            href={exportUrl(itemId, selectedId, shown)}
-            download
-            aria-label="Export"
-            title="Export"
-          >
-            <Icon name="download" />
+          <a className="viewer-export" href={exportUrl(itemId, selectedId, shown)} download>
+            Export
           </a>
         )}
         <button type="button" aria-pressed={fullscreen} onClick={() => setFullscreen((f) => !f)}>
