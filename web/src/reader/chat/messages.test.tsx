@@ -1,11 +1,11 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { AssistantMessage, StoredAssistantMessage } from "./AssistantMessage";
 import type { StoredMessage } from "./api";
 import { Composer } from "./Composer";
 import { resetDrafts } from "./drafts";
-import { initialAssistant } from "./reducer";
+import { applyEvent, initialAssistant } from "./reducer";
 import { UserMessage } from "./UserMessage";
 
 const writeText = vi.fn(async () => {});
@@ -392,4 +392,56 @@ test("Tab does nothing special when there is no suggestion", async () => {
   box().focus();
   await userEvent.tab();
   expect((box() as HTMLTextAreaElement).value).toBe("");
+});
+
+// --- the timer and the dots of an answer being produced ----------------------------------
+
+const timerText = () => screen.queryByLabelText("Elapsed time")?.textContent ?? null;
+
+test("a timer runs under the whole answer, even when thinking is folded and the text arrives", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-23T10:00:00Z"));
+  const start = Date.now();
+  let state = initialAssistant(start);
+  state = applyEvent(state, { type: "thinking_delta", text: "hm" }, start);
+  state = applyEvent(state, { type: "text_delta", text: "The answer starts" }, start); // folds thinking
+  expect(state.thinkingOpen).toBe(false);
+  render(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(timerText()).toBe("0:00");
+  act(() => {
+    vi.advanceTimersByTime(9000);
+  });
+  expect(timerText()).toBe("0:09");
+  vi.useRealTimers();
+});
+
+test("the dots move while thinking tokens arrive, and stand still during a tool call or the text", () => {
+  const t0 = 1_000;
+  const moving = () => document.querySelector(".thinking-dots")?.classList.contains("moving");
+  let state = initialAssistant(t0);
+  state = applyEvent(state, { type: "thinking_delta", text: "hm" }, t0);
+  const { rerender } = render(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(moving()).toBe(true);
+  state = applyEvent(state, { type: "tool_use", id: "t", name: "search_paper", input: {} }, t0);
+  rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(moving()).toBe(false);
+  state = applyEvent(state, { type: "thinking_delta", text: "more" }, t0);
+  rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(moving()).toBe(true);
+  state = applyEvent(state, { type: "text_delta", text: "Answer" }, t0);
+  rerender(<AssistantMessage state={state} onToggleThinking={() => {}} />);
+  expect(moving()).toBe(false);
+});
+
+test("a stored answer shows how long it took, with the quiet actions, and no timer ticks", () => {
+  vi.useFakeTimers();
+  render(<StoredAssistantMessage content={{ answer: "Done.", blocks: [], duration_ms: 65_000 }} />);
+  expect(timerText()).toBe("1:05");
+  expect(vi.getTimerCount()).toBe(0);
+  vi.useRealTimers();
+});
+
+test("a stored answer without a duration shows nothing", () => {
+  render(<StoredAssistantMessage content={{ answer: "Done.", blocks: [] }} />);
+  expect(timerText()).toBeNull();
 });

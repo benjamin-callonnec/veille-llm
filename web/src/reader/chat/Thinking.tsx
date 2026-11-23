@@ -5,12 +5,14 @@ interface Props {
   blocks: Block[];
   open: boolean;
   working: boolean;
+  /** Thinking tokens are arriving right now: the dots move (they stand still otherwise). */
+  active?: boolean;
   durationMs: number | null;
   onToggle(): void;
 }
 
 /** The reasoning and tool activity of an answer: discreet, no box, foldable at any time. */
-export function Thinking({ blocks, open, working, durationMs, onToggle }: Props) {
+export function Thinking({ blocks, open, working, active = false, durationMs, onToggle }: Props) {
   if (!working && blocks.length === 0) return null;
   const seconds = Math.max(1, Math.round((durationMs ?? 0) / 1000));
   const label = working ? "Thinking" : `Thought for ${seconds}s`;
@@ -18,6 +20,13 @@ export function Thinking({ blocks, open, working, durationMs, onToggle }: Props)
     <div className="thinking">
       <button type="button" className="thinking-toggle" aria-expanded={open} onClick={onToggle}>
         {label}
+        {working && (
+          <span className={active ? "thinking-dots moving" : "thinking-dots"} aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+        )}
         <span className="chevron">
           <Icon name="chevron" size={14} />
         </span>

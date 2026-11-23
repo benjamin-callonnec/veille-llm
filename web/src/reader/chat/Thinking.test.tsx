@@ -99,3 +99,26 @@ test("while working with nothing yet, it still shows Thinking", () => {
   setup({ blocks: [] });
   expect(screen.getByRole("button", { name: /Thinking/ })).toBeTruthy();
 });
+
+test("three dots follow the label while working, and they move only while thinking", () => {
+  setup({ active: true });
+  const dots = document.querySelector(".thinking-dots");
+  expect(dots?.querySelectorAll("span")).toHaveLength(3);
+  expect(dots?.classList.contains("moving")).toBe(true);
+  cleanup();
+  setup({ active: false });
+  const still = document.querySelector(".thinking-dots");
+  expect(still).not.toBeNull();
+  expect(still?.classList.contains("moving")).toBe(false);
+});
+
+test("no dots once the answer is done", () => {
+  setup({ working: false, durationMs: 4000, active: true });
+  expect(document.querySelector(".thinking-dots")).toBeNull();
+  expect(screen.getByRole("button", { name: /Thought for 4s/ })).toBeTruthy();
+});
+
+test("the dots are decoration: not read by screen readers", () => {
+  setup({ active: true });
+  expect(document.querySelector(".thinking-dots")?.getAttribute("aria-hidden")).toBe("true");
+});
