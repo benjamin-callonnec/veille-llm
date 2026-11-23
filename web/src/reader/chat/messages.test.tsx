@@ -1,6 +1,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { TIPS } from "../lib/tips";
 import { AssistantMessage, StoredAssistantMessage } from "./AssistantMessage";
 import type { StoredMessage } from "./api";
 import { Composer } from "./Composer";
@@ -273,7 +274,9 @@ const box = () => screen.getByRole("textbox", { name: "Message" });
 
 test("an empty composer shows only its placeholder: no send icon", () => {
   composer();
-  expect(box().getAttribute("placeholder")).toBe("Ask about the paper…");
+  // the placeholder is the invitation or a tip, drawn at random: any of them is fine
+  const known = ["Ask about the paper…", ...TIPS.map((t) => t.text)];
+  expect(known).toContain(box().getAttribute("placeholder"));
   expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
 });

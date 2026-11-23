@@ -533,36 +533,42 @@ test("tips about reports and dictation show only when they exist", () => {
   vi.useRealTimers();
 });
 
-test("the tips are not always in the same order: each opening, and each round, is drawn again", () => {
+test("the composer does not always open on the same text: each opening is drawn again", () => {
   vi.useFakeTimers();
   stubMotion(false);
-  const random = vi.spyOn(Math, "random").mockReturnValue(0.99); // written order
+  const random = vi.spyOn(Math, "random").mockReturnValue(0.99); // written order: the invitation
   const first = setup({ speech: null });
-  next();
-  const written = placeholder();
+  expect(placeholder()).toBe(FIRST_HINT);
   first.view.unmount();
-  random.mockReturnValue(0); // another draw: another order
+  random.mockReturnValue(0); // another draw: another order, so another first text
   const second = setup({ speech: null });
-  next();
-  const drawn = placeholder();
-  expect(drawn).not.toBe(written);
+  expect(placeholder()).not.toBe(FIRST_HINT);
   second.view.unmount();
   vi.useRealTimers();
 });
 
-test("a new round of tips is drawn again when the last one is done", () => {
+test("a new round is drawn again, and never starts with the text that ended the last one", () => {
   vi.useFakeTimers();
   stubMotion(false);
   const random = vi.spyOn(Math, "random").mockReturnValue(0.99); // the first round: written order
   setup({ speech: null });
-  next();
-  const firstRound = placeholder();
   const roundLength = 1 + TIPS.filter((t) => !t.needs).length;
+  const round = () => {
+    const seen = [placeholder()];
+    for (let i = 1; i < roundLength; i++) {
+      next();
+      seen.push(placeholder());
+    }
+    return seen;
+  };
+  const one = round();
   random.mockReturnValue(0); // the next round is drawn with another draw
-  for (let i = 1; i < roundLength; i++) next(); // the round is over: the invitation is back
-  expect(placeholder()).toBe(FIRST_HINT);
-  next();
-  expect(placeholder()).not.toBe(firstRound);
+  next(); // the first text of the second round
+  const two = [placeholder(), ...round().slice(1)];
+  expect(one).toHaveLength(roundLength);
+  expect(two).not.toEqual(one);
+  expect(two[0]).not.toBe(one.at(-1));
+  expect(new Set(two).size).toBe(roundLength); // still every text once in the round
   vi.useRealTimers();
 });
 
