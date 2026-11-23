@@ -177,3 +177,30 @@ test("a refusal that can be raised offers one icon to continue", async () => {
   );
   expect(screen.queryByRole("button", { name: "Continue with a raised limit" })).toBeNull();
 });
+
+test("a failed load is forgotten once a later load succeeds", async () => {
+  const notes = vi.fn(async () => [mine]).mockRejectedValueOnce(new Error("down"));
+  const a = api({ notes });
+  const { rerender } = render(<MemoryPanel itemId="a1" api={a} version={0} />);
+  await screen.findByText("The notes could not be loaded.");
+  rerender(<MemoryPanel itemId="a1" api={a} version={1} />);
+  await screen.findByText("wants proofs");
+  expect(screen.queryByText("The notes could not be loaded.")).toBeNull();
+});
+
+test("a slow older load never overwrites a newer one", async () => {
+  let release: (notes: Note[]) => void = () => {};
+  const slow = new Promise<Note[]>((r) => {
+    release = r;
+  });
+  const notes = vi.fn(async () => [tutors]).mockReturnValueOnce(slow);
+  const a = api({ notes });
+  const { rerender } = render(<MemoryPanel itemId="a1" api={a} version={0} />);
+  rerender(<MemoryPanel itemId="a1" api={a} version={1} />);
+  await screen.findByText("knows RNNs");
+  release([mine]); // the first request answers last
+  await waitFor(() => expect(notes).toHaveBeenCalledTimes(2));
+  await new Promise((r) => setTimeout(r, 20));
+  expect(screen.getByText("knows RNNs")).toBeTruthy();
+  expect(screen.queryByText("wants proofs")).toBeNull();
+});

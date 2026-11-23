@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon, IconButton } from "../../components/Icon";
 import { MAX_NOTE, MAX_NOTES, type Note, type SessionApi, SessionApiError } from "./sessionApi";
 
@@ -20,12 +20,17 @@ export function MemoryPanel({
   const [editing, setEditing] = useState<{ id: number; text: string } | null>(null);
   const [draft, setDraft] = useState("");
 
+  const latest = useRef(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` only forces a new read
   const load = useCallback(async () => {
+    const mine = ++latest.current; // only the newest read may apply its answer
     try {
-      setNotes(await api.notes(itemId));
+      const read = await api.notes(itemId);
+      if (mine !== latest.current) return;
+      setNotes(read);
+      setFailure(null);
     } catch {
-      setFailure("The notes could not be loaded.");
+      if (mine === latest.current) setFailure("The notes could not be loaded.");
     }
   }, [api, itemId, version]);
   useEffect(() => {

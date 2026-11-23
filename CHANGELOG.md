@@ -5,6 +5,18 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-24
+
+### Fixed
+- Read aloud while streaming: text is held back while a link, image, inline math or inline code is still open, so stripping the markdown when it closes can no longer shift the reading position (no repeated or skipped sentences).
+- Read aloud: the browser utterance is kept referenced until it ends, so Chrome can no longer collect it mid-sentence and leave the reading stuck.
+- Dictation: a phrase the browser delivers after the message was sent (or after you typed) is ignored, so it no longer reappears in the composer or marks the next typed message as dictated.
+- Memory panel: a failed load message disappears after a later successful load, and an older, slower response can no longer overwrite a newer one.
+- Regenerate also drops, in the open conversation, the question cards and note lines that sat just before the replaced answer (as the server does).
+- Auto read aloud: the start is idempotent, so React StrictMode's double mount no longer stops a reading that began while the answer streamed.
+- `make reader`: the ports are variables (`READER_PORT`, `FRONT_PORT`) shared by the port check and the commands, and the front URL follows `FRONT_PORT`.
+- Voice socket: a speech replaced by another with the same id no longer unregisters its replacement (cancel works), synthesis runs off the event loop and an engine crash sends an error frame instead of a lost task error, and an over-long utterance no longer floods the client with errors.
+
 ## [0.13.0] - 2026-11-23
 
 ### Added

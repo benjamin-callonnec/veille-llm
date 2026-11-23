@@ -105,3 +105,32 @@ test("the browser voice speaks at the chosen speed", async () => {
   vi.unstubAllGlobals();
   expect(spoken.map((u) => u.rate)).toEqual([0.8, 1.3]);
 });
+
+test("the browser voice keeps its utterance referenced until it ended, failed or was cancelled", async () => {
+  type U = { onend: (() => void) | null; onerror: ((e: { error: string }) => void) | null };
+  const made: U[] = [];
+  class Utterance {
+    rate = 1;
+    onend: (() => void) | null = null;
+    onerror: ((e: { error: string }) => void) | null = null;
+    constructor(public text: string) {
+      made.push(this);
+    }
+  }
+  vi.stubGlobal("SpeechSynthesisUtterance", Utterance);
+  vi.stubGlobal("speechSynthesis", { speak: vi.fn(), cancel: vi.fn() });
+  const { browserSynth, liveUtterances } = await import("./tts");
+  const synth = browserSynth();
+  synth?.cancel(); // other tests left utterances that never ended
+  synth?.speak("One.", () => {});
+  expect(liveUtterances()).toBe(1); // Chrome may collect a bare local one mid-speech
+  made[0]?.onend?.();
+  expect(liveUtterances()).toBe(0);
+  synth?.speak("Two.", () => {});
+  made[1]?.onerror?.({ error: "synthesis-failed" });
+  expect(liveUtterances()).toBe(0);
+  synth?.speak("Three.", () => {});
+  synth?.cancel();
+  expect(liveUtterances()).toBe(0);
+  vi.unstubAllGlobals();
+});

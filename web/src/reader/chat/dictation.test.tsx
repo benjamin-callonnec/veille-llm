@@ -136,3 +136,28 @@ test("a message that was dictated is sent as a voice message, a typed one is not
   await userEvent.type(box(), "and a layer?{Enter}");
   expect(onSend).toHaveBeenLastCalledWith("and a layer?");
 });
+
+test("a phrase delivered after the message was sent is ignored", async () => {
+  let handlers: SttHandlers | null = null;
+  const engine: SttEngine = {
+    start: vi.fn((h) => {
+      handlers = h;
+    }),
+    stop: vi.fn(), // like a browser: the last result may still come after stop()
+  };
+  const { onSend } = setup(engine);
+  await userEvent.click(screen.getByRole("button", { name: "Dictate" }));
+  const h = () => handlers as unknown as SttHandlers;
+  act(() => h().onFinal("send me"));
+  await userEvent.keyboard("{Enter}");
+  await userEvent.click(box());
+  await userEvent.keyboard("{Enter}");
+  expect(onSend).toHaveBeenCalledWith("send me", undefined, true);
+  act(() => h().onFinal("late words"));
+  act(() => h().onPartial("later"));
+  act(() => h().onEnd());
+  expect(box().value).toBe("");
+  await userEvent.type(box(), "typed");
+  await userEvent.keyboard("{Enter}");
+  expect(onSend).toHaveBeenLastCalledWith("typed"); // not marked as dictated
+});

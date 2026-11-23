@@ -21,6 +21,7 @@ export function useDictation(
   const [interim, setInterim] = useState("");
   const interimRef = useRef("");
   const on = useRef(false);
+  const abandoned = useRef(false); // set by abandon, until the next start: late results are dropped
 
   const clear = useCallback(() => {
     interimRef.current = "";
@@ -30,13 +31,16 @@ export function useDictation(
   const start = useCallback(() => {
     if (!engine || on.current) return;
     on.current = true;
+    abandoned.current = false;
     setListening(true);
     engine.start({
       onPartial: (t) => {
+        if (abandoned.current) return;
         interimRef.current = t;
         setInterim(t);
       },
       onFinal: (t) => {
+        if (abandoned.current) return;
         clear();
         if (t) onText(t);
       },
@@ -56,7 +60,10 @@ export function useDictation(
   /** Stop and drop the phrase in progress (it is already in the text the user is editing). */
   const abandon = useCallback(() => {
     clear();
-    if (on.current) engine?.stop();
+    if (on.current) {
+      abandoned.current = true;
+      engine?.stop();
+    }
   }, [engine, clear]);
 
   // leaving the page never leaves the microphone on
