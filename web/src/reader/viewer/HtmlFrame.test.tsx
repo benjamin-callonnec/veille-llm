@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
-import { CSP, KEY_BRIDGE } from "./csp";
+import { CSP, FRAME_BRIDGE } from "./csp";
 import { HtmlFrame } from "./HtmlFrame";
 
 afterEach(cleanup);
@@ -29,7 +29,7 @@ test("the page carries the key bridge, and V or Escape typed inside reach the pa
   const onKey = vi.fn();
   render(<HtmlFrame content="<p>hi</p>" title="Deck" onKey={onKey} />);
   const frame = screen.getByTitle("Deck") as HTMLIFrameElement;
-  expect(frame.getAttribute("srcdoc")).toContain(KEY_BRIDGE);
+  expect(frame.getAttribute("srcdoc")).toContain(FRAME_BRIDGE);
   tell(frame.contentWindow, { veilleKey: "v" });
   tell(frame.contentWindow, { veilleKey: "Escape" });
   expect(onKey.mock.calls).toEqual([["v"], ["Escape"]]);
@@ -45,4 +45,16 @@ test("messages from elsewhere or with another shape are ignored", () => {
   tell(frame.contentWindow, "v");
   tell(frame.contentWindow, null);
   expect(onKey).not.toHaveBeenCalled();
+});
+
+test("a citation message of the page reaches onCite, raw; other messages do not", () => {
+  const onCite = vi.fn();
+  render(<HtmlFrame content="<p>hi</p>" title="Deck" onCite={onCite} />);
+  const frame = screen.getByTitle("Deck") as HTMLIFrameElement;
+  tell(frame.contentWindow, { veilleCite: { page: 4 } });
+  tell(frame.contentWindow, { veilleCite: null });
+  tell(window, { veilleCite: { page: 4 } }); // not from the frame
+  tell(frame.contentWindow, { other: 1 });
+  tell(frame.contentWindow, "x");
+  expect(onCite.mock.calls).toEqual([[{ veilleCite: { page: 4 } }], [{ veilleCite: null }]]);
 });

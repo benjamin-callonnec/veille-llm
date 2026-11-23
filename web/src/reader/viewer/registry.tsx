@@ -8,6 +8,8 @@ export interface ViewerProps {
   title: string;
   /** The viewer is shown (it was hidden while closed, the page keeps its state). */
   active?: boolean;
+  /** A citation clicked in the file (the raw message, to be validated by the app). */
+  onCite?: (raw: unknown) => void;
   /** A key typed inside the file that the app wants (V, Escape). */
   onKey?: (key: string) => void;
 }

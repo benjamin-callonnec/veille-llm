@@ -1,5 +1,5 @@
-import { expect, test } from "vitest";
-import { CSP, KEY_BRIDGE, withCsp } from "./csp";
+import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
+import { CSP, FRAME_BRIDGE, withCsp } from "./csp";
 
 const META = `<meta http-equiv="Content-Security-Policy" content="${CSP}">`;
 
@@ -33,13 +33,95 @@ test("extra head content goes right after the policy, never before it", () => {
   );
 });
 
-const bridge = /<script>([\s\S]*)<\/script>/.exec(KEY_BRIDGE)?.[1] ?? "";
+const bridge = /<script>([\s\S]*)<\/script>/.exec(FRAME_BRIDGE)?.[1] ?? "";
 
-test("the key bridge tells the parent about V and Escape only, outside fields and modifiers", () => {
-  const seen: unknown[] = [];
-  const listen = (e: MessageEvent) => seen.push(e.data);
+// The bridge installs listeners on the window for good: install it once, on one fixed page.
+const seen: unknown[] = [];
+const listen = (e: MessageEvent) => seen.push(e.data);
+const flush = () => new Promise<void>((done) => setTimeout(done, 10));
+
+beforeAll(() => {
+  document.body.innerHTML = `
+    <p id="text">A [p.4] B [p.5 "an exact quote here"] C [p.6 Figure 2] D [p.7 Table 1.2] E [p.8 Fig. 3] F [p.9 \u201ccurly quote\u201d]</p>
+    <p id="plain">No citation here, just [p.x] and [brackets].</p>
+    <textarea id="area">[p.9]</textarea>
+    <style>/* [p.9] */</style>
+    <script type="text/plain">[p.9]</script>`;
   window.addEventListener("message", listen);
   new Function(bridge)();
+});
+afterAll(() => window.removeEventListener("message", listen));
+beforeEach(() => {
+  seen.length = 0;
+});
+
+const chip = (text: string) =>
+  [...document.querySelectorAll<HTMLElement>(".veille-cite")].find((e) => e.textContent === text);
+
+test("every citation form becomes a button with its data", () => {
+  const chips = [...document.querySelectorAll<HTMLElement>(".veille-cite")];
+  expect(chips.map((c) => c.textContent)).toEqual([
+    "[p.4]",
+    '[p.5 "an exact quote here"]',
+    "[p.6 Figure 2]",
+    "[p.7 Table 1.2]",
+    "[p.8 Fig. 3]",
+    "[p.9 \u201ccurly quote\u201d]",
+  ]);
+  expect(chips.every((c) => c.getAttribute("role") === "button" && c.tabIndex === 0)).toBe(true);
+  expect(chip('[p.5 "an exact quote here"]')?.dataset.q).toBe("an exact quote here");
+  expect(chip("[p.6 Figure 2]")?.dataset).toMatchObject({ p: "6", k: "figure", n: "2" });
+  expect(chip("[p.7 Table 1.2]")?.dataset).toMatchObject({ p: "7", k: "table", n: "1.2" });
+  expect(chip("[p.8 Fig. 3]")?.dataset).toMatchObject({ p: "8", k: "figure", n: "3" });
+  expect(chip("[p.9 \u201ccurly quote\u201d]")?.dataset.q).toBe("curly quote");
+});
+
+test("the text around a citation is kept, and other brackets are left alone", () => {
+  expect(document.getElementById("text")?.textContent).toContain("A [p.4] B ");
+  expect(document.getElementById("plain")?.querySelector(".veille-cite")).toBeNull();
+});
+
+test("nothing is wrapped in a textarea, a style or a script", () => {
+  expect(document.getElementById("area")?.querySelector(".veille-cite")).toBeNull();
+  expect(document.querySelector("style")?.querySelector(".veille-cite")).toBeNull();
+  expect(document.querySelector("script")?.querySelector(".veille-cite")).toBeNull();
+});
+
+test("a click on a citation tells the parent and does not turn the slide", async () => {
+  const bubbled: Event[] = [];
+  const onBubble = (e: Event) => bubbled.push(e);
+  document.addEventListener("click", onBubble);
+  chip('[p.5 "an exact quote here"]')?.click();
+  chip("[p.6 Figure 2]")?.click();
+  chip("[p.4]")?.click();
+  await flush();
+  document.removeEventListener("click", onBubble);
+  expect(seen).toEqual([
+    { veilleCite: { page: 5, quote: "an exact quote here" } },
+    { veilleCite: { page: 6, kind: "figure", number: "2" } },
+    { veilleCite: { page: 4 } },
+  ]);
+  expect(bubbled).toEqual([]);
+});
+
+test("Enter on a focused citation does the same as a click", async () => {
+  chip("[p.4]")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await flush();
+  expect(seen).toEqual([{ veilleCite: { page: 4 } }]);
+});
+
+test("a click anywhere else asks the parent to close the preview, and still reaches the page", async () => {
+  const bubbled: Event[] = [];
+  const onBubble = (e: Event) => bubbled.push(e);
+  document.addEventListener("click", onBubble);
+  document.getElementById("plain")?.click();
+  await flush();
+  document.removeEventListener("click", onBubble);
+  expect(seen).toEqual([{ veilleCite: null }]);
+  expect(bubbled).toHaveLength(1);
+});
+
+test("the key bridge tells the parent about V and Escape only, outside fields and modifiers", async () => {
   const press = (init: KeyboardEventInit, target: EventTarget = window) =>
     target.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, ...init }));
   press({ key: "v" });
@@ -49,14 +131,15 @@ test("the key bridge tells the parent about V and Escape only, outside fields an
   press({ key: "v", metaKey: true });
   press({ key: "v", ctrlKey: true });
   press({ key: "v", repeat: true });
-  const field = document.body.appendChild(document.createElement("input"));
-  press({ key: "v" }, field);
-  field.remove();
-  return new Promise<void>((done) =>
-    setTimeout(() => {
-      window.removeEventListener("message", listen);
-      expect(seen).toEqual([{ veilleKey: "v" }, { veilleKey: "V" }, { veilleKey: "Escape" }]);
-      done();
-    }, 20),
-  );
+  press({ key: "v" }, document.getElementById("area") as HTMLElement);
+  await flush();
+  expect(seen).toEqual([{ veilleKey: "v" }, { veilleKey: "V" }, { veilleKey: "Escape" }]);
+});
+
+test("installing it twice in the same page changes nothing", async () => {
+  new Function(bridge)();
+  chip("[p.4]")?.click();
+  await flush();
+  expect(seen).toEqual([{ veilleCite: { page: 4 } }]);
+  expect(document.querySelectorAll(".veille-cite")).toHaveLength(6);
 });

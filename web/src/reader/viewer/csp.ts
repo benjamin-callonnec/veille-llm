@@ -16,9 +16,40 @@ export function withCsp(html: string, head = ""): string {
 }
 
 /**
- * The page has the keyboard focus (so the arrows work at once), so V and Escape never reach the
- * app: this tiny script, injected after the policy, passes those two keys up and nothing else.
- * Not while typing in a field, not with a modifier (Cmd+V is a paste).
+ * The script injected into every report, right after the policy. It does two jobs and sends the
+ * app nothing else (never HTML, only a page, an extract, a figure or a key):
+ * - the page has the keyboard focus, so V and Escape never reach the app: they are passed up
+ *   (not in a field, not with a modifier: Cmd+V is a paste);
+ * - the citations `[p.4]`, `[p.4 "extract"]`, `[p.4 Figure 2]` of the text become buttons; a click
+ *   or Enter sends the citation up, a click anywhere else tells the app to close its preview.
+ * Hand-written JavaScript in a string on purpose: a stringified function would not survive the build.
  */
-export const KEY_BRIDGE =
-  '<script>(function(){addEventListener("keydown",function(e){if(e.ctrlKey||e.metaKey||e.altKey||e.repeat)return;var k=e.key;if(k!=="v"&&k!=="V"&&k!=="Escape")return;var t=e.target;if(t&&t.closest&&t.closest("input,textarea,select,[contenteditable]"))return;parent.postMessage({veilleKey:k},"*")},true)})();</script>';
+const BRIDGE_JS = String.raw`(function(){
+if(window.__veilleBridge)return;window.__veilleBridge=1;
+function post(m){parent.postMessage(m,"*")}
+var RE=/\[p\.(\d{1,4})(?:\s+(?:["\u201c]([^"\u201d]{3,300})["\u201d]|(Figure|Table|Fig\.?)\s+(\d+(?:\.\d+)?)))?\s*\]/g;
+function cite(s){var m={page:+s.getAttribute("data-p")},q=s.getAttribute("data-q"),k=s.getAttribute("data-k");
+if(q)m.quote=q;if(k){m.kind=k;m.number=s.getAttribute("data-n")}post({veilleCite:m})}
+function wrap(){
+var st=document.createElement("style");st.textContent=".veille-cite{text-decoration:underline dotted;cursor:pointer}";
+(document.head||document.documentElement).appendChild(st);
+var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT),nodes=[],n;
+while((n=w.nextNode())){var p=n.parentNode&&n.parentNode.nodeName;
+if(p==="SCRIPT"||p==="STYLE"||p==="TEXTAREA")continue;if(n.nodeValue.indexOf("[p.")>-1)nodes.push(n)}
+nodes.forEach(function(t){var text=t.nodeValue,last=0,frag=document.createDocumentFragment(),m;RE.lastIndex=0;
+while((m=RE.exec(text))){frag.appendChild(document.createTextNode(text.slice(last,m.index)));
+var s=document.createElement("span");s.className="veille-cite";s.tabIndex=0;s.setAttribute("role","button");
+s.setAttribute("data-p",m[1]);if(m[2])s.setAttribute("data-q",m[2]);
+if(m[3]){s.setAttribute("data-k",m[3].charAt(0).toLowerCase()==="t"?"table":"figure");s.setAttribute("data-n",m[4])}
+s.textContent=m[0];frag.appendChild(s);last=RE.lastIndex}
+if(last){frag.appendChild(document.createTextNode(text.slice(last)));t.parentNode.replaceChild(frag,t)}})}
+document.addEventListener("click",function(e){var s=e.target.closest&&e.target.closest(".veille-cite");
+if(s){e.stopPropagation();e.preventDefault();cite(s)}else post({veilleCite:null})},true);
+addEventListener("keydown",function(e){var t=e.target;
+if(e.key==="Enter"&&t&&t.classList&&t.classList.contains("veille-cite")){e.preventDefault();cite(t);return}
+if(e.ctrlKey||e.metaKey||e.altKey||e.repeat)return;var k=e.key;if(k!=="v"&&k!=="V"&&k!=="Escape")return;
+if(t&&t.closest&&t.closest("input,textarea,select,[contenteditable]"))return;post({veilleKey:k})},true);
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",wrap);else wrap()
+})();`;
+
+export const FRAME_BRIDGE = `<script>${BRIDGE_JS}</script>`;
