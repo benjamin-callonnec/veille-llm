@@ -1,11 +1,10 @@
 name: weekly
 
 # Send the weekly newsletter (one mail per subscriber), once per ISO week, then persist the
-# delivery counters in veille.db on the `data` branch. Triggers: schedule and manual only
-# (this workflow holds secrets: never PR/issue triggers).
+# delivery counters in veille.db on the `data` branch. Trigger: workflow_dispatch only (this workflow
+# holds secrets: never PR/issue triggers). The Cloudflare Worker `veille-llm-scheduler` dispatches it on
+# main every Monday at 08:00 UTC, two hours after the daily run (GitHub's own cron started hours late).
 on:
-  schedule:
-    - cron: "0 8 * * 1" # Monday 08:00 UTC, after the 06:00 daily run
   workflow_dispatch:
 
 permissions:
