@@ -47,6 +47,29 @@ def suggestions(items: list[str]) -> dict:
     return {"type": "suggestions", "items": items}
 
 
+def ask_user(id: str, question: str, options: list[str], timeout: float) -> dict:
+    """The tutor waits for an answer; the stream is paused until `ask_resolved`."""
+    return {
+        "type": "ask_user",
+        "id": id,
+        "question": question,
+        "options": options,
+        "timeout_s": int(timeout),
+    }
+
+
+def ask_resolved(id: str, status: str, answer: str | None = None) -> dict:
+    event = {"type": "ask_resolved", "id": id, "status": status}
+    if answer is not None:
+        event["answer"] = answer
+    return event
+
+
+def memory_note(action: str, text: str) -> dict:
+    """The tutor saved or deleted a note of its session memory (shown as a quiet line)."""
+    return {"type": "memory_note", "action": action, "text": text}
+
+
 def compaction(replaced: int) -> dict:
     return {"type": "compaction", "replaced": replaced}
 
@@ -66,6 +89,8 @@ class RunRequest:
     agent_limits: AgentLimits | None = None
     # the images attached to the question being asked, as validated `veille_reader.images.Image`
     images: list[Any] = field(default_factory=list)
+    # `ask_user`: an async function (question, options) -> the user's reply, None if none came
+    ask: Any = None
 
 
 AgentRunner = Callable[[RunRequest], AsyncIterator[dict]]

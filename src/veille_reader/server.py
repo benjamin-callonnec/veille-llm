@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 
 from veille_reader import events
+from veille_reader.asking import ASK_TIMEOUT, MAX_REPLY, AskBroker
 from veille_reader.chat import stream_turn
 from veille_reader.compaction import Summarizer
 from veille_reader.events import AgentRunner
@@ -115,6 +116,17 @@ class QuizAnswerIn(BaseModel):
     order: list[int] | None = Field(default=None, max_length=5)
 
 
+class AskAnswerIn(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_REPLY)
+
+    @model_validator(mode="after")
+    def not_blank(self) -> Self:
+        if not self.text.strip():
+            raise ValueError("an answer cannot be blank")
+        self.text = self.text.strip()
+        return self
+
+
 class HighlightIn(BaseModel):
     page: int = Field(ge=1)
     color: Literal["yellow", "green", "red"]
@@ -166,6 +178,7 @@ def create_app(
     summarizer: Summarizer | None = None,
     quiz_maker: QuizMaker | None = None,
     grader: Grader | None = None,
+    ask_timeout: float = ASK_TIMEOUT,
 ) -> FastAPI:
     loaded = {"items": _load_items(catalogue_path), "mtime": catalogue_path.stat().st_mtime_ns}
 
@@ -184,6 +197,7 @@ def create_app(
     app.state.streaming = set()
     app.state.store = store
     app.state.runner = runner or _no_agent
+    app.state.asks = AskBroker()
 
     @app.middleware("http")
     async def local_only(request: Request, call_next):  # noqa: ANN001, ANN202
@@ -296,7 +310,28 @@ def create_app(
     def conversation_messages(item_id: str, cid: int):  # noqa: ANN202
         if store.conversation(item_id, cid) is None:
             return unknown("unknown_conversation")
-        return with_results(store, item_id, store.messages(cid))
+        return with_results(store, item_id, _asks_shown(store.messages(cid), cid))
+
+    def _asks_shown(messages: list[dict], cid: int) -> list[dict]:
+        """A card still pending that no live turn waits for (server restarted) shows as expired."""
+        for m in messages:
+            card = m["content"]
+            if (
+                m["kind"] == "ask"
+                and card.get("status") == "pending"
+                and not app.state.asks.is_open(cid, str(card.get("id")))
+            ):
+                m["content"] = {**card, "status": "expired"}
+        return messages
+
+    @app.post("/api/items/{item_id}/conversations/{cid}/asks/{ask_id}/answer")
+    async def answer_ask(item_id: str, cid: int, ask_id: str, body: AskAnswerIn):  # noqa: ANN202
+        """The user's reply to a question of the tutor; the paused turn goes on with it."""
+        if store.conversation(item_id, cid) is None:
+            return unknown("unknown_conversation")
+        if app.state.asks.answer(cid, ask_id, body.text) != "ok":
+            return unknown("unknown_ask")
+        return Response(status_code=204)
 
     @app.get("/api/items/{item_id}/conversations/{cid}/trace")
     def conversation_trace(item_id: str, cid: int):  # noqa: ANN202
@@ -362,6 +397,8 @@ def create_app(
                     raise_limit=raise_limit,
                     summarizer=summarizer,
                     after_turn=after_turn,
+                    asks=app.state.asks,
+                    ask_timeout=ask_timeout,
                 ):
                     yield line
             finally:

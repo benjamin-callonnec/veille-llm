@@ -10,6 +10,7 @@ import anyio
 
 from veille_llm.llm import redact
 from veille_reader import events
+from veille_reader.asking import ASK_TIMEOUT, AskBroker, Asker
 from veille_reader.citations import parse_citations, verify_citations
 from veille_reader.compaction import Summarizer, compact, current_history, needs_compaction
 from veille_reader.events import AgentRunner, RunRequest
@@ -159,6 +160,39 @@ def _refusal_runner(message: str) -> AgentRunner:
     return runner
 
 
+_END = object()
+
+
+async def _pumped(source: AsyncIterator[dict], side: asyncio.Queue) -> AsyncIterator[dict]:
+    """The runner's events merged with the ones the tools push on `side` (a card to show).
+
+    The runner runs in one task of its own from start to end (its SDK stream must not hop between
+    tasks), and this generator only reads the queue.
+    """
+
+    async def pump() -> None:
+        try:
+            async for event in source:
+                side.put_nowait(event)
+            side.put_nowait(_END)
+        except Exception as exc:  # noqa: BLE001 - re-raised on the reading side
+            side.put_nowait(exc)
+
+    task = asyncio.create_task(pump())
+    try:
+        while True:
+            item = await side.get()
+            if item is _END:
+                return
+            if isinstance(item, Exception):
+                raise item
+            yield item
+    finally:
+        task.cancel()
+        with anyio.move_on_after(5, shield=True):
+            await asyncio.gather(task, return_exceptions=True)
+
+
 async def stream_turn(
     store: ReaderStore,
     runner: AgentRunner,
@@ -175,13 +209,15 @@ async def stream_turn(
     raise_limit: bool = False,
     summarizer: Summarizer | None = None,
     after_turn: Callable[[str], Awaitable[None]] | None = None,
+    asks: AskBroker | None = None,
+    ask_timeout: float = ASK_TIMEOUT,
 ) -> AsyncIterator[str]:
     """Stream one turn. With `kind` None the last user message is run again (regenerate)."""
     if kind is not None and content is not None:
         store.add_message(cid, "user", kind, content)
     answer = _Answer()
     stopped = True
-    events_stream = None
+    events_stream = source = None
     # Everything from here is inside the try: Stop pressed while the old turns are being summarised
     # must still leave a stopped answer, not an orphan question.
     try:
@@ -214,10 +250,14 @@ async def stream_turn(
             agent_limits=limits,
             images=load_images(store, str(item.get("id", "")), messages),
         )
-        events_stream = runner(request)
+        events_stream = source = runner(request)
+        if asks is not None:  # the tutor may pause the turn to ask the user something
+            side: asyncio.Queue = asyncio.Queue()
+            request.ask = Asker(asks, store, cid, side.put_nowait, ask_timeout)
+            source = _pumped(events_stream, side)
         hider = SuggestionFilter()
         try:
-            async for event in events_stream:
+            async for event in source:
                 if event.get("type") == "text_delta":
                     event = {**event, "text": hider.feed(event["text"])}
                     if not event["text"]:
@@ -272,12 +312,13 @@ async def stream_turn(
             )
         except sqlite3.IntegrityError:
             pass  # the conversation was deleted while the answer was being produced
-        aclose = getattr(events_stream, "aclose", None) if events_stream is not None else None
-        if aclose is not None:
-            with anyio.move_on_after(5, shield=True):
-                try:
-                    await aclose()
-                except Exception:  # noqa: BLE001, S110 - closing a finished generator is best effort
-                    pass
+        for stream in (source, events_stream):
+            aclose = getattr(stream, "aclose", None) if stream is not None else None
+            if aclose is not None:
+                with anyio.move_on_after(5, shield=True):
+                    try:
+                        await aclose()
+                    except Exception:  # noqa: BLE001, S110 - closing a finished generator is best effort
+                        pass
     if after_turn is not None and not stopped and answer.error is None:
         await after_turn(answer.answer)  # after the answer is stored: a card goes after it

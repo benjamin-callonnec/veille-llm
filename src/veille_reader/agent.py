@@ -16,6 +16,14 @@ from veille_llm.llm import (
     redact,
 )
 from veille_reader import events
+from veille_reader.asking import (
+    ASK_PROMPT,
+    MAX_OPTION,
+    MAX_OPTIONS,
+    MAX_QUESTION,
+    reply_as_data,
+    validate_ask,
+)
 from veille_reader.events import RunRequest
 from veille_reader.limits import AgentLimits
 from veille_reader.quiz import QUIZ_PROMPT
@@ -192,8 +200,8 @@ def _result(text: str, error: bool = False) -> dict:
     return result
 
 
-def build_sdk_tools(tools: PaperTools, budget: ToolBudget) -> list:
-    """The three tools as SDK tools. Errors and limits are answers to the model, never crashes."""
+def build_sdk_tools(tools: PaperTools, budget: ToolBudget, ask: Callable | None = None) -> list:
+    """The tools as SDK tools. Errors and limits are answers to the model, never crashes."""
     from claude_agent_sdk import tool
 
     async def run(name: str, fn) -> dict:  # noqa: ANN001
@@ -255,7 +263,35 @@ def build_sdk_tools(tools: PaperTools, budget: ToolBudget) -> list:
         wanted = pick(args, "action", "text", "id")
         return await run("session_memory", lambda: tools.session_memory(**wanted))
 
-    return [load_artifact, search_paper, session_memory]
+    if ask is None:
+        return [load_artifact, search_paper, session_memory]
+
+    @tool(
+        "ask_user",
+        "Pause and ask the user one short question when the request is ambiguous in a way that "
+        "changes the answer; optionally with a few short options. Waits for the reply.",
+        {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string", "maxLength": MAX_QUESTION},
+                "options": {
+                    "type": "array",
+                    "items": {"type": "string", "maxLength": MAX_OPTION},
+                    "maxItems": MAX_OPTIONS,
+                },
+            },
+            "required": ["question"],
+        },
+    )
+    async def ask_user(args: dict) -> dict:
+        # the input is untrusted model output: validated, never trusted
+        try:
+            question, options = validate_ask(args)
+            return _result(reply_as_data(await ask(question, options)))
+        except ToolError as exc:
+            return _result(str(exc), error=True)
+
+    return [load_artifact, search_paper, session_memory, ask_user]
 
 
 SUMMARY_MODEL = "claude-haiku-5-5"
@@ -324,11 +360,13 @@ async def sdk_runner(request: RunRequest, query: Callable | None = None) -> Asyn
         from claude_agent_sdk import create_sdk_mcp_server
 
         budget = ToolBudget(request.tool_limits or Limits())
-        sdk_tools = build_sdk_tools(request.paper_tools, budget)
+        sdk_tools = build_sdk_tools(request.paper_tools, budget, request.ask)
         extra = {
             "mcp_servers": {"paper": create_sdk_mcp_server("paper", tools=sdk_tools)},
             "allowed_tools": [f"{TOOL_PREFIX}{t.name}" for t in sdk_tools],
-            "system_prompt": with_rule(SYSTEM_PROMPT_TOOLS + QUIZ_PROMPT),
+            "system_prompt": with_rule(
+                SYSTEM_PROMPT_TOOLS + QUIZ_PROMPT + (ASK_PROMPT if request.ask else "")
+            ),
             "max_turns": limits.max_turns,
             "max_budget_usd": limits.max_message_usd,
         }
