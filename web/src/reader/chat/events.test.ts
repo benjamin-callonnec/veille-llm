@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { parseSse } from "./events";
+import { parseSse, toCitations } from "./events";
 
 async function* chunks(...parts: string[]) {
   for (const p of parts) yield p;
@@ -150,5 +150,17 @@ test("drops a malformed ask, keeps only plain options, and keeps the raisable fl
   expect(out).toEqual([
     { type: "ask_user", id: "b", question: "Q", options: ["ok"], timeout_s: 0 },
     { type: "error", kind: "budget", message: "m", raisable: true },
+  ]);
+});
+
+test("a citation keeps its figure or table label, and only when it is a string", () => {
+  expect(
+    toCitations([
+      { page: 4, quote: null, status: "page_only", section: null, label: "figure 2" },
+      { page: 5, quote: null, status: "page_only", section: null, label: 5 },
+    ]),
+  ).toEqual([
+    { page: 4, quote: null, status: "page_only", section: null, label: "figure 2" },
+    { page: 5, quote: null, status: "page_only", section: null },
   ]);
 });

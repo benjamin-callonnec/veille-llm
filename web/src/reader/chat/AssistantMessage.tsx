@@ -6,7 +6,7 @@ import { ReadAloudButton } from "../voice/ReadAloudButton";
 import { defaultSynth } from "../voice/useReadAloud";
 import { AskCard, type AskCardData } from "./AskCard";
 import { CopyButton } from "./CopyButton";
-import { type Citation, toCitations } from "./events";
+import { type Citation, type OnCite, toCitations } from "./events";
 import { Markdown } from "./Markdown";
 import type { AssistantState, Block, NoteLine } from "./reducer";
 import { Thinking } from "./Thinking";
@@ -29,7 +29,7 @@ interface BodyProps {
   /** Continue with the raised limit (only offered when the refusal says it can be raised). */
   onRaise?(): void;
   onToggle(): void;
-  onCite?(page: number, quote?: string): void;
+  onCite?: OnCite;
   /** Shown as a quiet row of icons on hover, only for a finished answer that has text. */
   actions?: { text: string; time: string };
 }
@@ -103,7 +103,7 @@ export function AssistantMessage({
 }: {
   state: AssistantState;
   onToggleThinking(): void;
-  onCite?(page: number, quote?: string): void;
+  onCite?: OnCite;
   onAnswerAsk?(id: string, text: string): Promise<void>;
   autoRead?: boolean;
 }) {
@@ -147,7 +147,7 @@ export function StoredAssistantMessage({
   content: StoredAssistant;
   createdAt?: string;
   now?: number;
-  onCite?(page: number, quote?: string): void;
+  onCite?: OnCite;
   onRaise?(): void;
 }) {
   const [open, setOpen] = useState(false);

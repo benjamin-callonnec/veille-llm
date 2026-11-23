@@ -159,3 +159,19 @@ test("a hostile quote is never rendered as HTML", () => {
   expect(document.querySelector("img,b,i")).toBeNull();
   expect(chip("p.4").getAttribute("title")).toContain("</b>");
 });
+
+test("a figure or table reference is a citation button that names its place", async () => {
+  const onCite = show("See [p.4 Figure 2] and [p.5 table 1] and [p.6 fig. 3].");
+  await userEvent.click(screen.getByRole("button", { name: "p.4" }));
+  expect(onCite).toHaveBeenLastCalledWith(4, undefined, { kind: "figure", number: 2 });
+  await userEvent.click(screen.getByRole("button", { name: "p.5" }));
+  expect(onCite).toHaveBeenLastCalledWith(5, undefined, { kind: "table", number: 1 });
+  await userEvent.click(screen.getByRole("button", { name: "p.6" }));
+  expect(onCite).toHaveBeenLastCalledWith(6, undefined, { kind: "figure", number: 3 });
+});
+
+test("a quote citation still passes its quote and nothing else", async () => {
+  const onCite = show('It says [p.3 "some exact quote here"].');
+  await userEvent.click(screen.getByRole("button", { name: "p.3" }));
+  expect(onCite).toHaveBeenCalledWith(3, "some exact quote here");
+});

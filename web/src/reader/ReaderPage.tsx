@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { formatModel } from "../lib/time";
 import { type ChatApi, httpChatApi } from "./chat/api";
 import { ChatPane } from "./chat/ChatPane";
+import type { Label } from "./chat/events";
 import { useChat } from "./chat/useChat";
 import { HighlightsStrip } from "./HighlightsStrip";
 import { parseHash, writeHash } from "./lib/anchor";
@@ -11,6 +12,7 @@ import { PdfViewer, type Selection, type Target } from "./PdfViewer";
 import { openPdf } from "./pdf/pdfjsSource";
 import { PdfOpenError, type PdfSource } from "./pdf/source";
 import { SelectionBox } from "./SelectionBox";
+import { type Caption, fetchCaptions, findCaption } from "./structureApi";
 import { type HighlightsApi, httpApi, useHighlights } from "./useHighlights";
 
 export interface ReaderItem {
@@ -53,6 +55,8 @@ interface Props {
   open?: (url: string) => Promise<PdfSource>;
   api?: HighlightsApi;
   chatApi?: ChatApi;
+  /** Where the captions of figures and tables come from (the structure of the paper). */
+  captionsApi?(item: string): Promise<Caption[]>;
   /** Where the model that answers is read from (the API health route by default). */
   health?: () => Promise<{ model?: string }>;
 }
@@ -63,6 +67,7 @@ export function ReaderPage({
   open = openPdf,
   api = httpApi,
   chatApi = httpChatApi,
+  captionsApi = fetchCaptions,
   health = fetchHealth,
 }: Props) {
   const [item, setItem] = useState<ReaderItem | null>(null);
@@ -139,7 +144,26 @@ export function ReaderPage({
     },
     [changePage],
   );
-  const cite = useCallback((p: number, quote?: string) => goTo(p, { quote }), [goTo]);
+  // A figure or a table is placed from the structure of the paper, asked for on the first need.
+  const captions = useRef<Promise<Caption[]> | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new paper has its own captions
+  useEffect(() => {
+    captions.current = null;
+  }, [itemId]);
+  const cite = useCallback(
+    (p: number, quote?: string, label?: Label) => {
+      goTo(p, { quote });
+      if (!label) return;
+      captions.current ??= captionsApi(itemId);
+      const asked = captions.current;
+      void asked.then((all) => {
+        if (!all.length) captions.current = null; // not available now: ask again next time
+        const found = findCaption(all, label, p);
+        if (found) goTo(found.page, { rects: [found.rect] });
+      });
+    },
+    [goTo, itemId, captionsApi],
+  );
   const goToRects = useCallback((p: number, rects?: Rect[]) => goTo(p, { rects }), [goTo]);
 
   const closeBox = () => {

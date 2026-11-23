@@ -12,7 +12,18 @@ export interface Citation {
   status: CitationStatus;
   section: string | null;
   found_page?: number;
+  /** "figure 2" or "table 1": the place the tutor named instead of quoting. */
+  label?: string;
 }
+
+/** A figure or a table named by a citation. */
+export interface Label {
+  kind: "figure" | "table";
+  number: number;
+}
+
+/** A click on a citation chip: the page, then the quote or the label when it has one. */
+export type OnCite = (page: number, quote?: string, label?: Label) => void;
 
 const STATUSES: readonly string[] = [
   "verified",
@@ -39,6 +50,7 @@ export function toCitations(raw: unknown): Citation[] {
     };
     if (typeof r.found_page === "number" && Number.isInteger(r.found_page))
       citation.found_page = r.found_page;
+    if (typeof r.label === "string") citation.label = r.label;
     out.push(citation);
   }
   return out;

@@ -9,7 +9,7 @@ import { toPayload } from "./attachments";
 import { CompactionNote } from "./CompactionNote";
 import { Composer } from "./Composer";
 import { ConversationMenu } from "./ConversationMenu";
-import { toSuggestions } from "./events";
+import { type OnCite, toSuggestions } from "./events";
 import { QuizCard } from "./QuizCard";
 import { httpQuizApi, type QuizApi } from "./quizApi";
 import { SessionTools } from "./SessionTools";
@@ -38,7 +38,7 @@ export function ChatPane({
   /** The quote arrow of a user message (with the rects of the quote when it has them). */
   onGo(page: number, rects?: Rect[]): void;
   /** A citation chip of an answer, with the quote it carries (default: just go to the page). */
-  onCite?(page: number, quote?: string): void;
+  onCite?: OnCite;
   /** The model that answers, shown quietly under the composer. */
   model?: string;
   /** The paper, for the quiz routes. */
