@@ -586,3 +586,40 @@ def test_the_system_prompt_is_unchanged_without_skills(monkeypatch):
     collect(request(paper_tools=paper_tools()), query)
     assert "use_skill" not in " ".join(query.calls[0].options.allowed_tools)
     assert "Skills" not in query.calls[0].options.system_prompt
+
+
+def test_an_invoked_skill_gets_more_room_than_a_plain_answer(monkeypatch):
+    from veille_reader.agent import SKILL_LIMITS, SKILL_TOOL_LIMITS
+    from veille_reader.skills import Skill
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    present = Skill("present", "Make slides.", "Ask then write.", ())
+    query = fake_query(ResultMessage())
+    collect(request(paper_tools=paper_tools(), skills=[present], skill=present), query)
+    options = query.calls[0].options
+    assert options.max_turns == SKILL_LIMITS.max_turns > AgentLimits().max_turns
+    assert options.max_budget_usd == SKILL_LIMITS.max_message_usd > AgentLimits().max_message_usd
+    assert SKILL_TOOL_LIMITS.max_calls > Limits().max_calls
+    assert SKILL_TOOL_LIMITS.max_per_tool > Limits().max_per_tool
+
+
+def test_a_plain_answer_or_a_skill_the_agent_picks_keeps_the_normal_limits(monkeypatch):
+    from veille_reader.skills import Skill
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    present = Skill("present", "Make slides.", "Ask then write.", ())
+    query = fake_query(ResultMessage())
+    collect(request(paper_tools=paper_tools(), skills=[present]), query)
+    assert query.calls[0].options.max_turns == AgentLimits().max_turns
+
+
+def test_a_larger_configured_limit_is_never_lowered_by_a_skill(monkeypatch):
+    from veille_reader.skills import Skill
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    present = Skill("present", "Make slides.", "Ask then write.", ())
+    big = AgentLimits(max_turns=99, max_message_usd=5.0, max_session_usd=9.0)
+    query = fake_query(ResultMessage())
+    collect(request(paper_tools=paper_tools(), skill=present, agent_limits=big), query)
+    assert query.calls[0].options.max_turns == 99
+    assert query.calls[0].options.max_budget_usd == 5.0
