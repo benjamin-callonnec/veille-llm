@@ -46,7 +46,7 @@ export interface ImageRef {
 }
 
 export type SendBody =
-  | { kind: "text"; text: string; images?: ImagePayload[] }
+  | { kind: "text"; text: string; images?: ImagePayload[]; skill?: string }
   | { kind: "ask_agent"; quote: Quote; question: string };
 
 export interface ChatApi {

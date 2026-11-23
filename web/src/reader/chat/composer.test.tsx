@@ -339,3 +339,64 @@ test("older answers show no suggestions", async () => {
   await screen.findAllByText("Because.");
   expect(screen.queryByRole("button", { name: "Old one?" })).toBeNull();
 });
+
+// --- the / menu --------------------------------------------------------------------------
+
+const SKILLS = [
+  { name: "present", description: "Make slides.", tools: ["write_report"] },
+  { name: "quiz-me", description: "Quiz.", tools: [] },
+];
+
+test("typing / opens the menu with every skill, /pre filters it", async () => {
+  setup({ skills: SKILLS });
+  await userEvent.type(box(), "/");
+  expect(screen.getAllByRole("option")).toHaveLength(2);
+  await userEvent.type(box(), "pre");
+  expect(screen.getAllByRole("option")).toHaveLength(1);
+});
+
+test("arrows and Enter choose a skill: the name is put in the box, nothing is sent", async () => {
+  const { onSend } = setup({ skills: SKILLS });
+  await userEvent.type(box(), "/");
+  await userEvent.keyboard("{ArrowDown}{Enter}");
+  expect(box().value).toBe("/quiz-me ");
+  expect(onSend).not.toHaveBeenCalled();
+  expect(screen.queryByRole("listbox")).toBeNull();
+});
+
+test("Tab chooses the first skill; Esc closes the menu and keeps the text", async () => {
+  setup({ skills: SKILLS });
+  await userEvent.type(box(), "/");
+  await userEvent.keyboard("{Tab}");
+  expect(box().value).toBe("/present ");
+  await userEvent.clear(box());
+  await userEvent.type(box(), "/q");
+  await userEvent.keyboard("{Escape}");
+  expect(screen.queryByRole("listbox")).toBeNull();
+  expect(box().value).toBe("/q");
+});
+
+test("sending /present with text sends the text and the skill", async () => {
+  const { onSend } = setup({ skills: SKILLS });
+  await userEvent.type(box(), "/present about the model{Enter}");
+  expect(onSend).toHaveBeenCalledWith("about the model", undefined, false, "present");
+});
+
+test("an unknown /name is sent as plain text", async () => {
+  const { onSend } = setup({ skills: SKILLS });
+  await userEvent.type(box(), "/nope hello{Enter}");
+  expect(onSend).toHaveBeenCalledWith("/nope hello");
+});
+
+test("without skills / is plain text: no menu, Enter sends", async () => {
+  const { onSend } = setup({ skills: [] });
+  await userEvent.type(box(), "/{Enter}");
+  expect(screen.queryByRole("listbox")).toBeNull();
+  expect(onSend).toHaveBeenCalledWith("/");
+});
+
+test("a /query with no match closes the menu, so Enter sends", async () => {
+  const { onSend } = setup({ skills: SKILLS });
+  await userEvent.type(box(), "/zzz{Enter}");
+  expect(onSend).toHaveBeenCalledWith("/zzz");
+});
