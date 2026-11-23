@@ -1,4 +1,4 @@
-.PHONY: scheduler-install scheduler-check scheduler-deploy scheduler-secret catalogue reader reader-build reader-token subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
+.PHONY: tf-init tf-validate tf-plan tf-apply tf-apply-ci scheduler-install scheduler-check scheduler-deploy scheduler-secret catalogue reader reader-build reader-token subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
 
 install:
 	uv sync --locked
@@ -118,3 +118,23 @@ scheduler-deploy:
 
 scheduler-secret:
 	cd scheduler && npx wrangler secret put GITHUB_TOKEN
+
+# Terraform of the scheduler (iac/): crons and state. CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID
+# come from the environment (never from a file in git); AWS_* carry the R2 keys of the state bucket.
+export TF_VAR_cloudflare_api_token := $(CLOUDFLARE_API_TOKEN)
+export TF_VAR_cloudflare_account_id := $(CLOUDFLARE_ACCOUNT_ID)
+
+tf-init:
+	cd iac && terraform init -backend-config="endpoints={s3=\"https://$(CLOUDFLARE_ACCOUNT_ID).r2.cloudflarestorage.com\"}"
+
+tf-validate:
+	cd iac && terraform init -backend=false && terraform validate && terraform fmt -check
+
+tf-plan:
+	cd iac && terraform plan
+
+tf-apply:
+	cd iac && terraform apply
+
+tf-apply-ci:
+	cd iac && terraform apply -auto-approve

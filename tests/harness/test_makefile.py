@@ -83,3 +83,12 @@ def test_gitignore_blocks_scheduler_and_terraform_local_files():
         "*.tfstate*",
     ):
         assert wanted in lines, wanted
+
+
+def test_terraform_targets():
+    assert "-backend=false" in _recipe("tf-validate")
+    assert "validate" in _recipe("tf-validate")
+    assert "fmt -check" in _recipe("tf-validate")
+    assert "-backend-config" in _recipe("tf-init")
+    assert "-auto-approve" in _recipe("tf-apply-ci")
+    assert "-auto-approve" not in _recipe("tf-apply")
