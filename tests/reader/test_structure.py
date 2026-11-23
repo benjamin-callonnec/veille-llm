@@ -148,3 +148,23 @@ def test_a_stored_copy_that_does_not_fit_is_extracted_again(tmp_path):
     store.save_paper_structure("a1", EXTRACTOR, {"extractor": EXTRACTOR, "pages": "garbage"})
     result = load_structure(store, "a1", pdf)
     assert result is not None and [c.number for c in result.captions] == [1]
+
+
+def test_a_line_of_spaces_is_not_a_block(tmp_path):
+    (page,) = extract_pages_structure(write(tmp_path, ["First line\n   \nLast line"]))
+    assert [b.text for b in page.blocks] == ["First line", "Last line"]
+
+
+def test_a_dotted_figure_number_is_not_mistaken_for_its_integer_part(tmp_path):
+    page = f"{BODY}\nFigure 3.1: A sub-numbered figure\nFigure 3: The real one"
+    captions = extract_structure(write(tmp_path, [page])).captions
+    assert [(c.number, c.text) for c in captions] == [(3, "Figure 3: The real one")]
+
+
+def test_outline_sections_take_their_level_from_their_numbering(tmp_path):
+    pdf = write(
+        tmp_path,
+        ["1 Intro\n1.1 Setup\nRelated work"],
+        outline=[("1 Intro", 1), ("1.1 Setup", 1), ("Related work", 1)],
+    )
+    assert [s.level for s in extract_structure(pdf).sections] == [1, 2, 1]

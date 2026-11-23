@@ -136,6 +136,15 @@ def _clamp(value: float) -> float:
     return min(1.0, max(0.0, value))
 
 
+def _lines(layout):  # noqa: ANN001, ANN202
+    """The text lines of a page: pdfminer groups most into boxes and leaves some on their own."""
+    for element in layout:
+        if isinstance(element, LTTextLine):
+            yield element
+        elif isinstance(element, LTTextContainer):
+            yield from (line for line in element if isinstance(line, LTTextLine))
+
+
 def extract_pages_structure(pdf_path: Path) -> list[PageStructure]:
     """The text lines of each page (the first MAX_PAGES), in reading order, with their place."""
     try:
@@ -143,21 +152,16 @@ def extract_pages_structure(pdf_path: Path) -> list[PageStructure]:
         for layout in extract_pages(pdf_path, maxpages=MAX_PAGES):
             width, height = layout.width, layout.height
             blocks: list[Block] = []
-            for element in layout:
-                if not isinstance(element, LTTextContainer):
+            for line in _lines(layout):
+                text = line.get_text().strip()
+                sizes = [c.size for c in line if isinstance(c, LTChar)]
+                if not text or not sizes or width <= 0 or height <= 0:
                     continue
-                for line in element:
-                    if not isinstance(line, LTTextLine):
-                        continue
-                    text = line.get_text().strip()
-                    sizes = [c.size for c in line if isinstance(c, LTChar)]
-                    if not text or not sizes or width <= 0 or height <= 0:
-                        continue
-                    x = _clamp((line.x0 - layout.x0) / width)
-                    y = _clamp(1 - (line.y1 - layout.y0) / height)
-                    w = _clamp((line.x1 - layout.x0) / width) - x
-                    h = _clamp(1 - (line.y0 - layout.y0) / height) - y
-                    blocks.append(Block(text, (x, y, w, h), float(median(sizes))))
+                x = _clamp((line.x0 - layout.x0) / width)
+                y = _clamp(1 - (line.y1 - layout.y0) / height)
+                w = _clamp((line.x1 - layout.x0) / width) - x
+                h = _clamp(1 - (line.y0 - layout.y0) / height) - y
+                blocks.append(Block(text, (x, y, w, h), float(median(sizes))))
             pages.append(PageStructure(float(width), float(height), blocks))
         return pages
     except (PDFException, PSException, OSError, ValueError, KeyError, TypeError, RecursionError):
@@ -167,7 +171,8 @@ def extract_pages_structure(pdf_path: Path) -> list[PageStructure]:
 # shortcut: font size 1.15x the body or a numbered title; calibrate on real papers (plan, task 10)
 _HEADING_RATIO = 1.15
 _NUMBERED = re.compile(r"^(\d+(?:\.\d+){0,2})\.?\s+[A-Z]")
-_CAPTION = re.compile(r"^(figure|fig\.?|table)\s*(\d+)\s*[:.]", re.IGNORECASE)
+# "Figure 3.1:" belongs to a numbering we do not follow: it is not "Figure 3"
+_CAPTION = re.compile(r"^(figure|fig\.?|table)\s*(\d+)(?:\s*:|\.(?!\d))", re.IGNORECASE)
 MAX_HEADING_CHARS = 120
 MAX_NUMBERED_CHARS = 80
 
@@ -197,7 +202,9 @@ def _outline_sections(pages: list[PageStructure], outline: list[tuple[str, int]]
         wanted = normalise(title)
         blocks = pages[number - 1].blocks if 1 <= number <= len(pages) else []
         rect = next((b.rect for b in blocks if wanted and wanted in normalise(b.text)), None)
-        sections.append(Heading(title, number, rect, 1))
+        numbered = _NUMBERED.match(title)
+        level = numbered.group(1).count(".") + 1 if numbered else 1
+        sections.append(Heading(title, number, rect, level))
     return sections
 
 
