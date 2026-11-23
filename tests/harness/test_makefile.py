@@ -94,11 +94,16 @@ def test_terraform_targets():
     assert "-auto-approve" not in _recipe("tf-apply")
 
 
-def _tf_env() -> str:
+def _definition(name: str) -> str:
     makefile = (ROOT / "Makefile").read_text()
-    match = re.search(r"^TF_ENV = (.*?)\n\n", makefile, re.MULTILINE | re.DOTALL)
-    assert match, "TF_ENV is not defined"
+    match = re.search(rf"^{name} = (.*?)\n\n", makefile, re.MULTILINE | re.DOTALL)
+    assert match, f"{name} is not defined"
     return match.group(1)
+
+
+def _tf_env() -> str:
+    """What `$(TF_ENV)` runs, with `$(CF_ENV)` expanded."""
+    return _definition("TF_ENV").replace("$(CF_ENV)", _definition("CF_ENV"))
 
 
 def test_terraform_targets_load_the_env_file_and_stop_early_when_it_is_incomplete():
@@ -128,3 +133,20 @@ def test_the_r2_keys_keep_their_names_and_are_mapped_to_terraform_s_in_the_shell
     for name in ("R2_STATE_ACCESS_KEY_ID", "R2_STATE_SECRET_ACCESS_KEY", ".env.cloudflare"):
         assert name in readme, name
     assert "export AWS_" not in readme
+
+
+def test_wrangler_targets_load_the_env_file_and_ask_for_the_cloudflare_variables():
+    for target in ("scheduler-deploy", "scheduler-secret"):
+        assert "$(CF_ENV)" in _recipe(target), target
+    env = _definition("CF_ENV")
+    assert ". ./.env.cloudflare" in env and "[ -f .env.cloudflare ]" in env
+    assert "CLOUDFLARE_API_TOKEN" in env and "CLOUDFLARE_ACCOUNT_ID" in env
+    assert "R2_STATE" not in env  # wrangler does not need the state keys (CI does not give them)
+    assert "$(CF_ENV)" in _definition("TF_ENV")
+
+
+def test_scheduler_dev_runs_the_pinned_wrangler_and_needs_the_dev_vars_file():
+    recipe = _recipe("scheduler-dev")
+    assert "npx wrangler dev --test-scheduled" in recipe  # npx = the version pinned in package.json
+    assert "scheduler/.dev.vars" in recipe and "exit 1" in recipe
+    assert "Monday" in recipe  # the warning about the cron that sends the newsletter

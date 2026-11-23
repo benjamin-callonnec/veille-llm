@@ -32,7 +32,7 @@ R2_STATE_SECRET_ACCESS_KEY=...    # étape 2
 chmod 600 .env.cloudflare
 ```
 
-`make tf-*` charge ce fichier lui-même (`. ./.env.cloudflare`, rien à `source` à la main ; en CI il n'y a
+`make scheduler-deploy`, `make scheduler-secret` et `make tf-*` chargent ce fichier eux-mêmes (`. ./.env.cloudflare`, rien à `source` à la main ; en CI il n'y a
 pas de fichier, les variables viennent des secrets). Il passe avant les variables déjà exportées dans le terminal.
 Il s'arrête en nommant la variable manquante. Le Makefile range lui-même les clés R2 sous les noms
 `AWS_*` que Terraform exige : n'exportez pas ceux-là.
@@ -83,6 +83,10 @@ Les crons sont à Terraform, le code à `wrangler` (`scheduler/wrangler.toml` n'
 dans *Workers > veille-llm-scheduler > Settings > Triggers* qu'un second `make scheduler-deploy` ne les efface
 pas.
 
-Voir les journaux : `cd scheduler && npx wrangler tail`. Test local : `npx wrangler dev --test-scheduled` puis
-`curl "http://localhost:8787/__scheduled?cron=0+6+*+*+*"` (avec un `scheduler/.dev.vars`, ignoré par git,
-qui porte `GITHUB_TOKEN`).
+Voir les journaux : `cd scheduler && npx wrangler tail`.
+
+Test local : `make scheduler-dev` (il utilise le `wrangler` épinglé dans `scheduler/package.json` : un `wrangler`
+global trop ancien refuse la `compatibility_date`), puis dans un autre terminal
+`curl "http://localhost:8787/__scheduled?cron=0+6+*+*+*"`. Il faut un `scheduler/.dev.vars` (ignoré par git)
+qui porte `GITHUB_TOKEN=...`. **Avec un vrai token, cela lance un vrai `daily` sur `main`** ; ne jamais
+simuler le cron du lundi (`0+8+*+*+1`), qui envoie la newsletter.

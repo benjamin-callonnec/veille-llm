@@ -1,4 +1,4 @@
-.PHONY: tf-init tf-validate tf-plan tf-apply tf-apply-ci scheduler-install scheduler-check scheduler-deploy scheduler-secret catalogue reader reader-build reader-token subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
+.PHONY: scheduler-dev tf-init tf-validate tf-plan tf-apply tf-apply-ci scheduler-install scheduler-check scheduler-deploy scheduler-secret catalogue reader reader-build reader-token subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
 
 install:
 	uv sync --locked
@@ -113,19 +113,30 @@ scheduler-install:
 scheduler-check:
 	cd scheduler && npm run check
 
+# $(CF_ENV) starts every command that talks to Cloudflare, in the same shell: it loads
+# .env.cloudflare when it exists (CI has no file, its variables are already set; make runs /bin/sh,
+# hence `.` and not `source`) and stops at once naming the first variable that is missing.
+CF_ENV = set -a; if [ -f .env.cloudflare ]; then . ./.env.cloudflare; fi; set +a; \
+	for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do \
+		eval "value=\$$$$name"; \
+		test -n "$$value" || { echo "$$name is not set: see setup/README.md"; exit 1; }; \
+	done;
+
 scheduler-deploy:
-	cd scheduler && npx wrangler deploy
+	$(CF_ENV) cd scheduler && npx wrangler deploy
 
 scheduler-secret:
-	cd scheduler && npx wrangler secret put GITHUB_TOKEN
+	$(CF_ENV) cd scheduler && npx wrangler secret put GITHUB_TOKEN
 
-# Terraform of the scheduler (iac/): crons and state. $(TF_ENV) starts every command that needs the
-# credentials, in the same shell: it loads .env.cloudflare when it exists (CI has no file, its
-# variables are already set; make runs /bin/sh, hence `.` and not `source`), stops at once naming
-# the first variable that is missing, and maps the R2_STATE_* keys to the AWS_* names that
-# Terraform's S3 backend requires. See setup/README.md.
-TF_ENV = set -a; if [ -f .env.cloudflare ]; then . ./.env.cloudflare; fi; set +a; \
-	for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID R2_STATE_ACCESS_KEY_ID R2_STATE_SECRET_ACCESS_KEY; do \
+# Local run with the wrangler pinned in scheduler/package.json (a global wrangler may be too old).
+scheduler-dev:
+	@test -f scheduler/.dev.vars || { echo "scheduler/.dev.vars is missing: put GITHUB_TOKEN=... in it (git ignores it). A real token starts a real daily run, and the Monday cron sends the newsletter: never fire that one."; exit 1; }
+	cd scheduler && npx wrangler dev --test-scheduled --local
+
+# Terraform of the scheduler (iac/): crons and state. $(TF_ENV) is $(CF_ENV) plus the R2_STATE_* keys
+# of the state bucket, which it maps to the AWS_* names that Terraform's S3 backend requires.
+TF_ENV = $(CF_ENV) \
+	for name in R2_STATE_ACCESS_KEY_ID R2_STATE_SECRET_ACCESS_KEY; do \
 		eval "value=\$$$$name"; \
 		test -n "$$value" || { echo "$$name is not set: see setup/README.md"; exit 1; }; \
 	done; \
