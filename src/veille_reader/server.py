@@ -1,6 +1,9 @@
 """Local reader server: item metadata, cached arXiv PDFs and the reader front. Loopback only."""
 
+import asyncio
 import json
+import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
@@ -12,10 +15,32 @@ from pydantic import BaseModel, Field, model_validator
 
 from veille_reader import events
 from veille_reader.chat import stream_turn
+from veille_reader.compaction import Summarizer
 from veille_reader.events import AgentRunner
+from veille_reader.images import IMAGE_ID, ImageError, decode_images
+from veille_reader.limits import AgentLimits
+from veille_reader.memory import MAX_NOTES, StoreMemory
+from veille_reader.paper import PaperError, load_paper
 from veille_reader.pdf import Fetcher, PdfError, arxiv_id, default_fetcher, ensure_pdf
+from veille_reader.quiz import (
+    MAX_ANSWER,
+    MAX_FOCUS,
+    MAX_GIVEN,
+    AnswerError,
+    Grader,
+    QuizError,
+    QuizMaker,
+    answer_quiz,
+    create_quiz,
+    quiz_after_turn,
+    recent_turns,
+    view_of,
+    with_results,
+)
 from veille_reader.storage import ReaderStore
+from veille_reader.tools import PaperTools
 
+TOOLS_TIMEOUT = 45.0  # seconds to get the paper ready (PDF download and text extraction)
 LOCAL_HOSTS = {"127.0.0.1", "localhost"}
 
 
@@ -36,16 +61,25 @@ class QuoteIn(BaseModel):
     rects: list[list[float]] = Field(default_factory=list, max_length=200)
 
 
+class ImageIn(BaseModel):
+    name: str | None = Field(default=None, max_length=200)
+    data: str = Field(max_length=8_000_000)  # base64, checked again once decoded
+
+
 class MessageIn(BaseModel):
     kind: Literal["text", "ask_agent"]
     text: str | None = Field(default=None, max_length=8000)
+    raise_limit: bool = False
     quote: QuoteIn | None = None
     question: str | None = Field(default=None, max_length=8000)
+    images: list[ImageIn] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def complete(self) -> Self:
-        if self.kind == "text" and not (self.text or "").strip():
+        if self.kind == "text" and not ((self.text or "").strip() or self.images):
             raise ValueError("text is required")
+        if self.kind == "ask_agent" and self.images:
+            raise ValueError("images go with a plain message")
         if self.kind == "ask_agent" and not (self.quote and (self.question or "").strip()):
             raise ValueError("quote and question are required")
         return self
@@ -53,6 +87,32 @@ class MessageIn(BaseModel):
 
 async def _no_agent(request):  # noqa: ANN001, ANN202
     yield events.error("failed", "no agent is configured")
+
+
+class NoteIn(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def not_blank(self) -> Self:
+        if not self.text.strip():
+            raise ValueError("a note cannot be blank")
+        self.text = self.text.strip()
+        return self
+
+
+class QuizIn(BaseModel):
+    kind: Literal["any", "choice", "multi", "truefalse", "cloze", "order", "free"] = "any"
+    focus: str = Field(default="", max_length=MAX_FOCUS)
+
+
+class QuizAnswerIn(BaseModel):
+    choice: int | None = Field(default=None, ge=0, le=3)
+    text: str | None = Field(default=None, max_length=MAX_ANSWER)
+    choices: list[int] | None = Field(default=None, max_length=5)
+    words: list[Annotated[str, Field(max_length=MAX_GIVEN)]] | None = Field(
+        default=None, max_length=2
+    )
+    order: list[int] | None = Field(default=None, max_length=5)
 
 
 class HighlightIn(BaseModel):
@@ -101,6 +161,11 @@ def create_app(
     dev_origins: set[str] | frozenset[str] = frozenset(),
     dev_front: str | None = None,
     model: str | None = None,
+    agent_limits: AgentLimits | None = None,
+    tools_factory: Callable[[str, dict], tuple[PaperTools | None, list[str]]] | None = None,
+    summarizer: Summarizer | None = None,
+    quiz_maker: QuizMaker | None = None,
+    grader: Grader | None = None,
 ) -> FastAPI:
     loaded = {"items": _load_items(catalogue_path), "mtime": catalogue_path.stat().st_mtime_ns}
 
@@ -117,6 +182,7 @@ def create_app(
     store = ReaderStore(data_dir)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.state.streaming = set()
+    app.state.store = store
     app.state.runner = runner or _no_agent
 
     @app.middleware("http")
@@ -130,6 +196,9 @@ def create_app(
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         return response
 
+    def unknown(reason: str = "unknown_item") -> JSONResponse:
+        return JSONResponse({"reason": reason}, status_code=404)
+
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok", **({"model": model} if model else {})}
@@ -138,7 +207,7 @@ def create_app(
     def item(item_id: str):  # noqa: ANN202
         found = current_items().get(item_id)
         if found is None:
-            return JSONResponse({"reason": "unknown_item"}, status_code=404)
+            return unknown()
         return {
             "id": item_id,
             "title": str(found.get("title", "")),
@@ -152,7 +221,7 @@ def create_app(
     def item_pdf(item_id: str):  # noqa: ANN202
         found = current_items().get(item_id)
         if found is None:
-            return JSONResponse({"reason": "unknown_item"}, status_code=404)
+            return unknown()
         try:
             path = ensure_pdf(store, item_id, str(found.get("url", "")), fetch)
         except PdfError as exc:
@@ -160,27 +229,42 @@ def create_app(
             return JSONResponse({"reason": exc.reason}, status_code=status)
         return FileResponse(path, media_type="application/pdf")
 
+    @app.get("/api/items/{item_id}/images/{image_id}")
+    def item_image(item_id: str, image_id: str):  # noqa: ANN202
+        if item_id not in current_items() or not IMAGE_ID.fullmatch(image_id):
+            return unknown()
+        stored = store.image(item_id, image_id)
+        if stored is None:
+            return unknown()
+        data, mime = stored
+        return Response(
+            data,
+            media_type=mime,
+            headers={
+                "X-Content-Type-Options": "nosniff",
+                "Content-Disposition": "inline",
+                "Cache-Control": "private, max-age=31536000, immutable",
+            },
+        )
+
     @app.get("/api/items/{item_id}/highlights")
     def list_highlights(item_id: str):  # noqa: ANN202
         if item_id not in current_items():
-            return JSONResponse({"reason": "unknown_item"}, status_code=404)
+            return unknown()
         return store.highlights(item_id)
 
     @app.post("/api/items/{item_id}/highlights", status_code=201)
     def add_highlight(item_id: str, body: HighlightIn):  # noqa: ANN202
         if item_id not in current_items():
-            return JSONResponse({"reason": "unknown_item"}, status_code=404)
+            return unknown()
         hid = store.add_highlight(item_id, body.page, body.color, body.text, body.rects)
         return next(h for h in store.highlights(item_id) if h["id"] == hid)
 
     @app.delete("/api/items/{item_id}/highlights/{highlight_id}")
     def delete_highlight(item_id: str, highlight_id: int):  # noqa: ANN202
         if not store.delete_highlight(item_id, highlight_id):
-            return JSONResponse({"reason": "unknown_highlight"}, status_code=404)
+            return unknown("unknown_highlight")
         return Response(status_code=204)
-
-    def unknown(reason: str = "unknown_item") -> JSONResponse:
-        return JSONResponse({"reason": reason}, status_code=404)
 
     @app.get("/api/items/{item_id}/conversations")
     def list_conversations(item_id: str):  # noqa: ANN202
@@ -212,7 +296,13 @@ def create_app(
     def conversation_messages(item_id: str, cid: int):  # noqa: ANN202
         if store.conversation(item_id, cid) is None:
             return unknown("unknown_conversation")
-        return store.messages(cid)
+        return with_results(store, item_id, store.messages(cid))
+
+    @app.get("/api/items/{item_id}/conversations/{cid}/trace")
+    def conversation_trace(item_id: str, cid: int):  # noqa: ANN202
+        if store.conversation(item_id, cid) is None:
+            return unknown("unknown_conversation")
+        return store.traces(cid)
 
     @app.get("/api/items/{item_id}/conversations/{cid}/export")
     def export_conversation(item_id: str, cid: int):  # noqa: ANN202
@@ -221,14 +311,57 @@ def create_app(
             return unknown("unknown_conversation")
         return Response(markdown, media_type="text/markdown; charset=utf-8")
 
-    async def run_turn(item_id: str, cid: int, kind: str | None, content: dict | None):  # noqa: ANN202
+    def default_tools(item_id: str, item: dict) -> tuple[PaperTools | None, list[str]]:
+        """The tutor's tools for this paper (from the cached PDF) and its pinned notes."""
+        notes = [n["text"] for n in store.memory_notes(item_id)]
+        try:
+            path = ensure_pdf(store, item_id, str(item.get("url", "")), fetch)
+            paper = load_paper(store, item_id, path)
+        except (PdfError, PaperError):
+            return None, notes
+        return PaperTools(paper, store.highlights(item_id), StoreMemory(store, item_id)), notes
+
+    async def run_turn(  # noqa: ANN202
+        item_id: str, cid: int, kind: str | None, content: dict | None, raise_limit: bool = False
+    ):
         streaming: set[int] = app.state.streaming
         streaming.add(cid)
 
+        item = current_items()[item_id]
+
         async def body():  # noqa: ANN202
             try:
+                try:
+                    tools, notes = await asyncio.wait_for(
+                        asyncio.to_thread(tools_factory or default_tools, item_id, item),
+                        TOOLS_TIMEOUT,
+                    )
+                except Exception:  # noqa: BLE001 - the chat still works from the summary
+                    tools, notes = None, []
+
+                async def after_turn(text: str) -> None:
+                    try:
+                        await quiz_after_turn(
+                            store, quiz_maker, item_id, item, cid,
+                            getattr(tools, "paper", None), text,
+                        )  # fmt: skip
+                    except sqlite3.IntegrityError:
+                        pass  # the conversation was deleted meanwhile
+
                 async for line in stream_turn(
-                    store, app.state.runner, current_items()[item_id], cid, kind, content
+                    store,
+                    app.state.runner,
+                    item,
+                    cid,
+                    kind,
+                    content,
+                    tools=tools,
+                    notes=notes,
+                    agent_limits=agent_limits,
+                    model=model or "",
+                    raise_limit=raise_limit,
+                    summarizer=summarizer,
+                    after_turn=after_turn,
                 ):
                     yield line
             finally:
@@ -247,8 +380,20 @@ def create_app(
         if body.kind == "ask_agent":
             content = {"quote": body.quote.model_dump(), "question": body.question}
         else:
-            content = {"text": body.text}
-        return await run_turn(item_id, cid, body.kind, content)
+            content = {"text": body.text or ""}
+            try:
+                images = decode_images([i.model_dump() for i in body.images])
+            except ImageError as exc:
+                status = 413 if exc.reason == "image_too_large" else 400
+                return JSONResponse({"reason": exc.reason, "message": str(exc)}, status_code=status)
+            if images:
+                for image in images:
+                    store.save_image(item_id, image)
+                content["images"] = [
+                    {"id": i.id, "mime": i.mime, **({"name": i.name} if i.name else {})}
+                    for i in images
+                ]
+        return await run_turn(item_id, cid, body.kind, content, body.raise_limit)
 
     @app.post("/api/items/{item_id}/conversations/{cid}/regenerate")
     async def regenerate(item_id: str, cid: int):  # noqa: ANN202
@@ -257,10 +402,111 @@ def create_app(
         if cid in app.state.streaming:
             return JSONResponse({"reason": "busy"}, status_code=409)
         store.replace_last_assistant(cid)
-        messages = store.messages(cid)
-        if not messages or messages[-1]["role"] != "user":
+        spoken = [m for m in store.messages(cid) if m["role"] in ("user", "assistant")]
+        if not spoken or spoken[-1]["role"] != "user":
             return JSONResponse({"reason": "nothing_to_regenerate"}, status_code=400)
         return await run_turn(item_id, cid, None, None)
+
+    @app.post("/api/items/{item_id}/conversations/{cid}/quizzes", status_code=201)
+    async def start_quiz(item_id: str, cid: int, body: QuizIn):  # noqa: ANN202
+        """Make a quiz on the paper (or the part just discussed); the card is added to the chat."""
+        if store.conversation(item_id, cid) is None:
+            return unknown("unknown_conversation")
+        if quiz_maker is None:
+            return JSONResponse({"reason": "no_quiz_agent"}, status_code=503)
+        if cid in app.state.streaming:
+            return JSONResponse({"reason": "busy"}, status_code=409)
+        item = current_items()[item_id]
+        app.state.streaming.add(cid)  # before any await: one quiz at a time, none during an answer
+        try:
+            try:
+                tools, _ = await asyncio.wait_for(
+                    asyncio.to_thread(tools_factory or default_tools, item_id, item),
+                    TOOLS_TIMEOUT,
+                )
+            except Exception:  # noqa: BLE001 - reported as "no paper"
+                tools = None
+            paper = getattr(tools, "paper", None)
+            if paper is None:
+                return JSONResponse({"reason": "no_paper"}, status_code=422)
+            message = await create_quiz(
+                store, quiz_maker, item_id, item, cid, paper, body.kind, body.focus.strip(),
+                recent_turns(store, cid),
+            )  # fmt: skip
+        except QuizError as exc:
+            return JSONResponse({"reason": "quiz_failed", "message": str(exc)}, status_code=502)
+        finally:
+            app.state.streaming.discard(cid)
+        return with_results(store, item_id, [message])[0]
+
+    @app.get("/api/items/{item_id}/quizzes")
+    def quiz_history(item_id: str, conversation: int | None = None):  # noqa: ANN202
+        """Answered quizzes of the paper (newest first) and the score, per paper and session."""
+        if item_id not in current_items():
+            return unknown()
+        return {
+            "history": store.quiz_history(item_id),
+            "score": {
+                "paper": store.quiz_score(item_id),
+                "session": store.quiz_score(item_id, conversation)
+                if conversation is not None
+                else None,
+            },
+        }
+
+    @app.get("/api/items/{item_id}/quizzes/{quiz_id}")
+    def get_quiz(item_id: str, quiz_id: int):  # noqa: ANN202
+        quiz = store.quiz(item_id, quiz_id)
+        if quiz is None:
+            return unknown("unknown_quiz")
+        return view_of(store, quiz)
+
+    @app.post("/api/items/{item_id}/quizzes/{quiz_id}/answer")
+    async def answer(item_id: str, quiz_id: int, body: QuizAnswerIn):  # noqa: ANN202
+        quiz = store.quiz(item_id, quiz_id)
+        if quiz is None or item_id not in current_items():
+            return unknown("unknown_quiz")
+        try:
+            return await answer_quiz(
+                store,
+                grader,
+                current_items()[item_id],
+                quiz,
+                body.choice,
+                body.text,
+                choices=body.choices,
+                words=body.words,
+                order=body.order,
+            )
+        except AnswerError as exc:
+            status = {"bad_answer": 422, "already_answered": 409, "no_grader": 503}
+            return JSONResponse({"reason": exc.reason}, status_code=status.get(exc.reason, 502))
+
+    @app.get("/api/items/{item_id}/memory")
+    def list_notes(item_id: str):  # noqa: ANN202
+        if item_id not in current_items():
+            return unknown()
+        return store.memory_notes(item_id)
+
+    @app.post("/api/items/{item_id}/memory", status_code=201)
+    def add_note(item_id: str, body: NoteIn):  # noqa: ANN202
+        if item_id not in current_items():
+            return unknown()
+        if len(store.memory_notes(item_id)) >= MAX_NOTES:
+            return JSONResponse({"reason": "memory_full"}, status_code=409)
+        return store.add_memory_note(item_id, body.text)
+
+    @app.put("/api/items/{item_id}/memory/{note_id}")
+    def edit_note(item_id: str, note_id: int, body: NoteIn):  # noqa: ANN202
+        if not store.update_memory_note(item_id, note_id, body.text):
+            return unknown("unknown_note")
+        return next(n for n in store.memory_notes(item_id) if n["id"] == note_id)
+
+    @app.delete("/api/items/{item_id}/memory/{note_id}")
+    def delete_note(item_id: str, note_id: int):  # noqa: ANN202
+        if not store.delete_memory_note(item_id, note_id):
+            return unknown("unknown_note")
+        return Response(status_code=204)
 
     @app.get("/catalogue.json")
     def catalogue() -> FileResponse:

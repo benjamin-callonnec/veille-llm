@@ -4,11 +4,15 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { AssistantMessage, StoredAssistantMessage } from "./AssistantMessage";
 import type { StoredMessage } from "./api";
 import { Composer } from "./Composer";
+import { resetDrafts } from "./drafts";
+import { initialAssistant } from "./reducer";
 import { UserMessage } from "./UserMessage";
 
 const writeText = vi.fn(async () => {});
 
 beforeEach(() => {
+  sessionStorage.clear();
+  resetDrafts(); // an earlier test may have left an unsent draft
   writeText.mockClear();
   vi.stubGlobal("navigator", { clipboard: { writeText } });
 });
@@ -142,6 +146,24 @@ test("an answer with no text has nothing to copy", () => {
   expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
 });
 
+test("a budget error shows the server's own message, not the subscription text", () => {
+  render(
+    <StoredAssistantMessage
+      content={{
+        answer: "",
+        blocks: [],
+        duration_ms: 1,
+        stopped: false,
+        error: { kind: "budget", message: "This conversation reached its budget." },
+      }}
+      onCite={() => {}}
+    />,
+  );
+  const alert = screen.getByRole("alert").textContent ?? "";
+  expect(alert).toBe("This conversation reached its budget.");
+  expect(alert).not.toMatch(/subscription/i);
+});
+
 test("limit and failure errors read clearly and keep the partial answer", () => {
   const { rerender } = render(
     <StoredAssistantMessage
@@ -227,7 +249,7 @@ test("a live answer follows the open state it is given and has no action yet", (
 // --- composer -------------------------------------------------------------------------------
 
 const composer = (over: Partial<Parameters<typeof Composer>[0]> = {}) => {
-  const props = { onSend: vi.fn(), onStop: vi.fn(), onNew: vi.fn(), streaming: false, ...over };
+  const props = { onSend: vi.fn(), onStop: vi.fn(), streaming: false, ...over };
   render(<Composer {...props} />);
   return props;
 };
@@ -273,15 +295,10 @@ test("while the answer streams the stop icon replaces send, and Enter sends noth
   expect(p.onStop).toHaveBeenCalled();
 });
 
-test("a plus icon starts a new conversation, except while answering", async () => {
-  const p = composer();
-  await userEvent.click(screen.getByRole("button", { name: "New conversation" }));
-  expect(p.onNew).toHaveBeenCalledTimes(1);
-  cleanup();
-  composer({ streaming: true });
-  expect(
-    (screen.getByRole("button", { name: "New conversation" }) as HTMLButtonElement).disabled,
-  ).toBe(true);
+test("the composer has no plus: that control is kept for attachments and audio", () => {
+  composer();
+  expect(screen.queryByRole("button", { name: "New conversation" })).toBeNull();
+  expect(document.querySelector(".composer-new")).toBeNull();
 });
 
 test("the model is shown quietly under the composer", () => {
@@ -290,4 +307,73 @@ test("the model is shown quietly under the composer", () => {
   cleanup();
   const { container } = render(<Composer onSend={() => {}} onStop={() => {}} streaming={false} />);
   expect(container.querySelector(".composer-status")).toBeNull();
+});
+
+test("stored citations mark a doubtful chip, and malformed ones are ignored", () => {
+  render(
+    <StoredAssistantMessage
+      content={{
+        answer: 'See [p.2 "not in the paper"] and [p.3]',
+        citations: [
+          { page: 2, quote: "not in the paper", status: "unverified", section: null },
+          { page: "x" },
+        ] as never,
+      }}
+      onCite={() => {}}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "p.2" }).className).toContain("cite-doubt");
+  expect(screen.getByRole("button", { name: "p.3" }).className).toBe("cite");
+});
+
+test("a live answer uses the citations event of the stream", async () => {
+  const onCite = vi.fn();
+  const state = {
+    ...initialAssistant(0),
+    answer: 'See [p.2 "a stated quote"]',
+    citations: [
+      {
+        page: 2,
+        quote: "a stated quote",
+        status: "wrong_page" as const,
+        section: null,
+        found_page: 6,
+      },
+    ],
+  };
+  render(<AssistantMessage state={state} onToggleThinking={() => {}} onCite={onCite} />);
+  await userEvent.click(screen.getByRole("button", { name: "p.2" }));
+  expect(onCite).toHaveBeenCalledWith(6, "a stated quote");
+});
+
+test("Tab on an empty composer fills it with the suggested prompt, and Enter sends it", async () => {
+  const props = composer({ tabFill: "Why divide by the square root of d_k?" });
+  box().focus();
+  await userEvent.tab();
+  expect((box() as HTMLTextAreaElement).value).toBe("Why divide by the square root of d_k?");
+  expect(document.activeElement).toBe(box()); // focus stays in the composer
+  await userEvent.keyboard("{Enter}");
+  expect(props.onSend).toHaveBeenCalledWith("Why divide by the square root of d_k?");
+});
+
+test("Tab selects the first [placeholder] of a suggestion it fills", async () => {
+  composer({ tabFill: "Explain the intuition behind [equation]" });
+  box().focus();
+  await userEvent.tab();
+  const area = box() as HTMLTextAreaElement;
+  expect(area.value.slice(area.selectionStart, area.selectionEnd)).toBe("[equation]");
+});
+
+test("Tab does nothing special once something is typed", async () => {
+  composer({ tabFill: "A suggestion" });
+  await userEvent.type(box(), "my own");
+  await userEvent.tab();
+  expect((box() as HTMLTextAreaElement).value).toBe("my own");
+});
+
+test("Tab does nothing special when there is no suggestion", async () => {
+  composer();
+  box().focus();
+  await userEvent.tab();
+  expect((box() as HTMLTextAreaElement).value).toBe("");
 });

@@ -1,9 +1,16 @@
 """Local storage of the reader: one SQLite file and a PDF cache, all under one data dir."""
 
+import functools
+import hashlib
+import inspect
 import json
+import re
 import sqlite3
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
+
+from veille_reader.images import EXTENSIONS, IMAGE_ID, Image
 
 MIGRATIONS: list[str] = [
     """
@@ -45,15 +52,98 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX messages_conversation ON messages (conversation_id, seq);
     """,
+    """
+    CREATE TABLE paper_text (
+        item_id TEXT PRIMARY KEY,
+        pages TEXT NOT NULL,
+        outline TEXT NOT NULL,
+        extracted_at TEXT NOT NULL
+    );
+    """,
+    """
+    CREATE TABLE memory_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );
+    CREATE INDEX memory_notes_item ON memory_notes (item_id);
+    """,
+    """
+    ALTER TABLE conversations ADD COLUMN limit_raised INTEGER NOT NULL DEFAULT 0;
+    CREATE TABLE traces (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        tools TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        cost_usd REAL NOT NULL,
+        model TEXT NOT NULL,
+        stopped INTEGER NOT NULL,
+        error_kind TEXT NOT NULL
+    );
+    CREATE INDEX traces_conversation ON traces (conversation_id);
+    """,
+    """
+    ALTER TABLE memory_notes ADD COLUMN source TEXT NOT NULL DEFAULT 'user';
+    """,
+    """
+    CREATE TABLE quizzes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id TEXT NOT NULL,
+        conversation_id INTEGER,
+        created_at TEXT NOT NULL,
+        spec TEXT NOT NULL
+    );
+    CREATE INDEX quizzes_item ON quizzes (item_id);
+    CREATE TABLE quiz_answers (
+        quiz_id INTEGER PRIMARY KEY REFERENCES quizzes(id) ON DELETE CASCADE,
+        answered_at TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        correct INTEGER NOT NULL,
+        reasoning TEXT NOT NULL
+    );
+    """,
 ]
+
+
+_SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}")
+
+
+def _safe_name(item_id: str) -> str:
+    """A folder name for an item: the id itself when harmless, else a hash (no path tricks)."""
+    if _SAFE_NAME.fullmatch(item_id):
+        return item_id
+    return hashlib.sha256(item_id.encode()).hexdigest()
 
 
 class StorageError(Exception):
     pass
 
 
+def _locked(method):  # noqa: ANN001, ANN202
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
+
+
+def _synchronised(cls):  # noqa: ANN001, ANN202
+    """One SQLite connection is shared by the event loop and worker threads: serialise every use."""
+    for name, member in list(vars(cls).items()):
+        if not name.startswith("__") and inspect.isfunction(member):
+            setattr(cls, name, _locked(member))
+    return cls
+
+
+@_synchronised
 class ReaderStore:
     def __init__(self, data_dir: Path) -> None:
+        self._lock = threading.RLock()
         self.data_dir = data_dir
         self.pdfs_dir = data_dir / "pdfs"
         self.pdfs_dir.mkdir(parents=True, exist_ok=True)
@@ -75,6 +165,26 @@ class ReaderStore:
 
     def schema_version(self) -> int:
         return self._con.execute("PRAGMA user_version").fetchone()[0]
+
+    def save_image(self, item_id: str, image: Image) -> None:
+        """Keep an image, content addressed: <data>/images/<item>/<sha256>.<ext>. Never deleted
+        with the conversation (a conversation can share an image with another one)."""
+        folder = self.data_dir / "images" / _safe_name(item_id)
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{image.id}.{EXTENSIONS[image.mime]}"
+        if not path.exists():
+            path.write_bytes(image.data)
+
+    def image(self, item_id: str, image_id: str) -> tuple[bytes, str] | None:
+        """The bytes and MIME type of a stored image, None if unknown (or a malformed id)."""
+        if not IMAGE_ID.fullmatch(image_id):
+            return None
+        folder = self.data_dir / "images" / _safe_name(item_id)
+        for mime, ext in EXTENSIONS.items():
+            path = folder / f"{image_id}.{ext}"
+            if path.is_file():
+                return path.read_bytes(), mime
+        return None
 
     def record_pdf(self, item_id: str, pdf_file: str) -> None:
         with self._con:
@@ -228,13 +338,22 @@ class ReaderStore:
         ]
 
     def replace_last_assistant(self, conversation_id: int) -> None:
-        """Drop the trailing assistant message (regenerate); anything else stays."""
+        """Drop the last answer (regenerate) and the quiz cards and notices that follow it."""
         with self._con:
-            self._con.execute(
-                "DELETE FROM messages WHERE id = (SELECT id FROM messages WHERE conversation_id = ?"
-                " ORDER BY seq DESC LIMIT 1) AND role = 'assistant'",
+            rows = self._con.execute(
+                "SELECT id, role, kind FROM messages WHERE conversation_id = ? ORDER BY seq DESC",
                 (conversation_id,),
-            )
+            ).fetchall()
+            trailing = []
+            for message_id, role, kind in rows:
+                trailing.append(message_id)
+                if role == "assistant":
+                    self._con.executemany(
+                        "DELETE FROM messages WHERE id = ?", [(i,) for i in trailing]
+                    )
+                    return
+                if not (role == "system" and kind in ("quiz", "notice")):
+                    return
 
     def export_markdown(self, item_id: str, conversation_id: int) -> str | None:
         conversation = self.conversation(item_id, conversation_id)
@@ -248,10 +367,230 @@ class ReaderStore:
                 lines += [f"> {quote.get('text', '')} (p. {quote.get('page', '?')})", ""]
                 lines += [f"**You:** {content.get('question', '')}", ""]
             elif message["role"] == "user":
-                lines += [f"**You:** {content.get('text', '')}", ""]
-            else:
+                notes = "".join(" [image]" for _ in content.get("images") or [])
+                lines += [f"**You:** {content.get('text', '')}{notes}", ""]
+            elif message["role"] == "assistant":
                 lines += [content.get("answer", ""), ""]
         return "\n".join(lines)
+
+    def memory_notes(self, item_id: str) -> list[dict]:
+        rows = self._con.execute(
+            "SELECT id, text, created_at, source FROM memory_notes WHERE item_id = ? ORDER BY id",
+            (item_id,),
+        ).fetchall()
+        return [{"id": r[0], "text": r[1], "created_at": r[2], "source": r[3]} for r in rows]
+
+    def add_memory_note(self, item_id: str, text: str, source: str = "user") -> dict:
+        now = self._now()
+        with self._con:
+            cursor = self._con.execute(
+                "INSERT INTO memory_notes (item_id, text, created_at, source) VALUES (?, ?, ?, ?)",
+                (item_id, text, now, source),
+            )
+        return {"id": int(cursor.lastrowid), "text": text, "created_at": now, "source": source}
+
+    def update_memory_note(self, item_id: str, note_id: int, text: str) -> bool:
+        with self._con:
+            cursor = self._con.execute(
+                "UPDATE memory_notes SET text = ? WHERE id = ? AND item_id = ?",
+                (text, note_id, item_id),
+            )
+        return cursor.rowcount > 0
+
+    def delete_memory_note(self, item_id: str, note_id: int) -> bool:
+        with self._con:
+            cursor = self._con.execute(
+                "DELETE FROM memory_notes WHERE id = ? AND item_id = ?", (note_id, item_id)
+            )
+        return cursor.rowcount > 0
+
+    def limit_raised(self, conversation_id: int) -> bool:
+        row = self._con.execute(
+            "SELECT limit_raised FROM conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()
+        return bool(row and row[0])
+
+    def mark_limit_raised(self, conversation_id: int) -> None:
+        with self._con:
+            self._con.execute(
+                "UPDATE conversations SET limit_raised = 1 WHERE id = ?", (conversation_id,)
+            )
+
+    def add_trace(
+        self,
+        conversation_id: int,
+        *,
+        duration_ms: int,
+        tools: list[dict],
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float,
+        model: str,
+        stopped: bool,
+        error_kind: str,
+    ) -> None:
+        """What a turn did (tools, tokens, time), never what was said or read."""
+        with self._con:
+            self._con.execute(
+                "INSERT INTO traces (conversation_id, created_at, duration_ms, tools, input_tokens,"
+                " output_tokens, cost_usd, model, stopped, error_kind)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    conversation_id,
+                    self._now(),
+                    duration_ms,
+                    json.dumps(tools),
+                    input_tokens,
+                    output_tokens,
+                    cost_usd,
+                    model,
+                    int(stopped),
+                    error_kind,
+                ),
+            )
+
+    def session_cost(self, conversation_id: int) -> float:
+        """What the conversation cost so far: the traces, which regenerating never deletes."""
+        row = self._con.execute(
+            "SELECT COALESCE(SUM(cost_usd), 0) FROM traces WHERE conversation_id = ?",
+            (conversation_id,),
+        ).fetchone()
+        return float(row[0])
+
+    def traces(self, conversation_id: int) -> list[dict]:
+        rows = self._con.execute(
+            "SELECT created_at, duration_ms, tools, input_tokens, output_tokens, cost_usd, model,"
+            " stopped, error_kind FROM traces WHERE conversation_id = ? ORDER BY id",
+            (conversation_id,),
+        ).fetchall()
+        return [
+            {
+                "created_at": r[0],
+                "duration_ms": r[1],
+                "tools": json.loads(r[2]),
+                "input_tokens": r[3],
+                "output_tokens": r[4],
+                "cost_usd": r[5],
+                "model": r[6],
+                "stopped": bool(r[7]),
+                "error_kind": r[8],
+            }
+            for r in rows
+        ]
+
+    def paper_text(self, item_id: str) -> dict | None:
+        row = self._con.execute(
+            "SELECT pages, outline FROM paper_text WHERE item_id = ?", (item_id,)
+        ).fetchone()
+        return {"pages": json.loads(row[0]), "outline": json.loads(row[1])} if row else None
+
+    def save_paper_text(
+        self, item_id: str, pages: list[str], outline: list[tuple[str, int]]
+    ) -> None:
+        with self._con:
+            self._con.execute(
+                "INSERT OR REPLACE INTO paper_text (item_id, pages, outline, extracted_at)"
+                " VALUES (?, ?, ?, ?)",
+                (item_id, json.dumps(pages), json.dumps(outline), self._now()),
+            )
+
+    def add_quiz(self, item_id: str, conversation_id: int | None, spec: dict) -> int:
+        """Keep a quiz with its answer on the server side; `spec` is the validated full quiz."""
+        with self._con:
+            cursor = self._con.execute(
+                "INSERT INTO quizzes (item_id, conversation_id, created_at, spec)"
+                " VALUES (?, ?, ?, ?)",
+                (item_id, conversation_id, self._now(), json.dumps(spec)),
+            )
+        return int(cursor.lastrowid)
+
+    def quiz(self, item_id: str, quiz_id: int) -> dict | None:
+        """The quiz with its private spec and its answer (None while unanswered)."""
+        row = self._con.execute(
+            "SELECT q.id, q.item_id, q.conversation_id, q.created_at, q.spec,"
+            " a.answered_at, a.answer, a.correct, a.reasoning"
+            " FROM quizzes q LEFT JOIN quiz_answers a ON a.quiz_id = q.id"
+            " WHERE q.id = ? AND q.item_id = ?",
+            (quiz_id, item_id),
+        ).fetchone()
+        if row is None:
+            return None
+        answered = row[5] is not None
+        return {
+            "id": row[0],
+            "item_id": row[1],
+            "conversation_id": row[2],
+            "created_at": row[3],
+            "spec": json.loads(row[4]),
+            "answer": (
+                {
+                    "answered_at": row[5],
+                    "answer": row[6],
+                    "correct": bool(row[7]),
+                    "reasoning": row[8],
+                }
+                if answered
+                else None
+            ),
+        }
+
+    def add_quiz_answer(self, quiz_id: int, answer: str, correct: bool, reasoning: str) -> bool:
+        """Record the one answer of a quiz; False when it was already answered."""
+        try:
+            with self._con:
+                self._con.execute(
+                    "INSERT INTO quiz_answers (quiz_id, answered_at, answer, correct, reasoning)"
+                    " VALUES (?, ?, ?, ?, ?)",
+                    (quiz_id, self._now(), answer, int(correct), reasoning),
+                )
+        except sqlite3.IntegrityError:
+            return False
+        return True
+
+    def quiz_questions(self, item_id: str, limit: int = 10) -> list[str]:
+        """The questions of the latest quizzes of a paper, answered or not, newest first."""
+        rows = self._con.execute(
+            "SELECT spec FROM quizzes WHERE item_id = ? ORDER BY id DESC LIMIT ?", (item_id, limit)
+        ).fetchall()
+        return [json.loads(r[0])["question"] for r in rows]
+
+    def quiz_history(self, item_id: str) -> list[dict]:
+        """Answered quizzes of a paper, newest first (question and verdict, never the key)."""
+        rows = self._con.execute(
+            "SELECT q.id, q.conversation_id, q.spec, a.answered_at, a.correct"
+            " FROM quizzes q JOIN quiz_answers a ON a.quiz_id = q.id"
+            " WHERE q.item_id = ? ORDER BY a.answered_at DESC, q.id DESC",
+            (item_id,),
+        ).fetchall()
+        history = []
+        for qid, cid, spec, at, correct in rows:
+            spec = json.loads(spec)
+            history.append(
+                {
+                    "id": qid,
+                    "conversation_id": cid,
+                    "question": spec["question"],
+                    "kind": spec["kind"],
+                    "topic": spec["topic"],
+                    "page": spec["page"],
+                    "answered_at": at,
+                    "correct": bool(correct),
+                }
+            )
+        return history
+
+    def quiz_score(self, item_id: str, conversation_id: int | None = None) -> dict:
+        """Answers and right answers for a paper, or for one conversation (a session)."""
+        sql = (
+            "SELECT COUNT(*), COALESCE(SUM(a.correct), 0) FROM quiz_answers a"
+            " JOIN quizzes q ON q.id = a.quiz_id WHERE q.item_id = ?"
+        )
+        args: list = [item_id]
+        if conversation_id is not None:
+            sql += " AND q.conversation_id = ?"
+            args.append(conversation_id)
+        total, correct = self._con.execute(sql, args).fetchone()
+        return {"total": int(total), "correct": int(correct)}
 
     def close(self) -> None:
         self._con.close()

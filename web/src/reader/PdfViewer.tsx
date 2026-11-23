@@ -7,6 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { IconButton } from "../components/Icon";
+import { locateQuote } from "./lib/locate";
 import { pageOffsets, visibleWindow } from "./lib/pages";
 import { type Quote, type Rect, toQuote } from "./lib/quote";
 import { OutlineMenu } from "./OutlineMenu";
@@ -31,6 +33,17 @@ interface Props {
   onPageChange(page: number): void;
   onSelection(selection: Selection | null): void;
   highlights: ViewerHighlight[];
+  /** A cited quote to flash on its page for a moment; a new nonce restarts it. */
+  flash?: Flash;
+  onFlashDone?(): void;
+  /** How long the flash stays, in ms. */
+  flashMs?: number;
+}
+
+export interface Flash {
+  page: number;
+  quote: string;
+  nonce: number;
 }
 
 const GAP = 12;
@@ -59,6 +72,9 @@ function PageView({
   size,
   highlights,
   query,
+  flash,
+  flashMs,
+  onFlashDone,
 }: {
   source: PdfSource;
   page: number;
@@ -66,7 +82,13 @@ function PageView({
   size: PageInfo;
   highlights: ViewerHighlight[];
   query: string;
+  flash?: Flash;
+  flashMs: number;
+  onFlashDone?(): void;
 }) {
+  const [flashRects, setFlashRects] = useState<Rect[]>([]);
+  const done = useRef(onFlashDone);
+  done.current = onFlashDone;
   const canvas = useRef<HTMLCanvasElement>(null);
   const [boxes, setBoxes] = useState<TextBox[]>([]);
   const needle = query.trim().toLowerCase();
@@ -111,6 +133,28 @@ function PageView({
     };
   }, [source, page]);
 
+  // Once the text of the cited page is known, show where the quote is for a moment.
+  const quote = flash?.quote;
+  const nonce = flash?.nonce;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new nonce restarts the flash
+  useEffect(() => {
+    if (quote === undefined || !boxes.length) return;
+    const rects = locateQuote(boxes, quote, size);
+    if (!rects) {
+      done.current?.();
+      return;
+    }
+    setFlashRects(rects);
+    const timer = setTimeout(() => {
+      setFlashRects([]);
+      done.current?.();
+    }, flashMs);
+    return () => {
+      clearTimeout(timer);
+      setFlashRects([]);
+    };
+  }, [boxes, quote, nonce, size, flashMs]);
+
   return (
     <div className="pdf-text" style={{ width: size.width * scale, height: size.height * scale }}>
       <canvas ref={canvas} />
@@ -147,11 +191,35 @@ function PageView({
           />
         )),
       )}
+      {flashRects.map(([x, y, w, ht], i) => (
+        <div
+          // biome-ignore lint/suspicious/noArrayIndexKey: rects of one flash are fixed
+          key={`${nonce}-${i}`}
+          data-flash=""
+          className="hl-flash"
+          style={{
+            left: `${x * 100}%`,
+            top: `${y * 100}%`,
+            width: `${w * 100}%`,
+            height: `${ht * 100}%`,
+            animationDuration: `${flashMs}ms`,
+          }}
+        />
+      ))}
     </div>
   );
 }
 
-export function PdfViewer({ source, page, onPageChange, onSelection, highlights }: Props) {
+export function PdfViewer({
+  source,
+  page,
+  onPageChange,
+  onSelection,
+  highlights,
+  flash,
+  onFlashDone,
+  flashMs = 3500,
+}: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(loadZoom);
   const [sizes, setSizes] = useState<Record<number, PageInfo>>({});
@@ -294,6 +362,9 @@ export function PdfViewer({ source, page, onPageChange, onSelection, highlights 
           size={size}
           highlights={highlights.filter((h) => h.page === p)}
           query={query}
+          flash={flash?.page === p ? flash : undefined}
+          flashMs={flashMs}
+          onFlashDone={onFlashDone}
         />
       </div>,
     );
@@ -325,9 +396,7 @@ export function PdfViewer({ source, page, onPageChange, onSelection, highlights 
         <button type="button" aria-label="Zoom in" onClick={() => zoom(ZOOM_STEP)}>
           +
         </button>
-        <button type="button" onClick={() => setSearching(true)}>
-          Search
-        </button>
+        <IconButton icon="search" label="Search" onClick={() => setSearching(true)} />
         <OutlineMenu source={source} onGo={goto} />
       </div>
       {searching && (

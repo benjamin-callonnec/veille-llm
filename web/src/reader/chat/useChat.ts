@@ -18,6 +18,20 @@ import {
 const titleOf = (body: SendBody) =>
   (body.kind === "text" ? body.text : body.question).trim().slice(0, 50) || "New conversation";
 
+const TRAILING = new Set(["quiz", "notice"]);
+
+/** What regenerate drops, as the server does: the last answer and the quiz cards after it. */
+function withoutLastAnswer(messages: StoredMessage[]): StoredMessage[] {
+  let end = messages.length;
+  while (
+    end > 0 &&
+    messages[end - 1]?.role === "system" &&
+    TRAILING.has(messages[end - 1]?.kind ?? "")
+  )
+    end--;
+  return messages[end - 1]?.role === "assistant" ? messages.slice(0, end - 1) : messages;
+}
+
 export function useChat(
   itemId: string,
   api: ChatApi = httpChatApi,
@@ -141,7 +155,19 @@ export function useChat(
           kind: body.kind,
           content:
             body.kind === "text"
-              ? { text: body.text }
+              ? {
+                  text: body.text,
+                  ...(body.images?.length
+                    ? {
+                        images: body.images.map((i) => ({
+                          id: "",
+                          mime: i.mime,
+                          name: i.name,
+                          url: `data:${i.mime};base64,${i.data}`,
+                        })),
+                      }
+                    : {}),
+                }
               : { quote: body.quote, question: body.question },
           created_at: "",
         },
@@ -158,7 +184,7 @@ export function useChat(
     setError(false);
     const ctrl = new AbortController();
     controller.current = ctrl;
-    setMessages((m) => (m.at(-1)?.role === "assistant" ? m.slice(0, -1) : m));
+    setMessages(withoutLastAnswer);
     await run(id, api.regenerate(itemId, id, ctrl.signal), ctrl);
   }, [api, itemId, run]);
 
@@ -178,8 +204,8 @@ export function useChat(
     [loadMessages],
   );
 
-  const create = useCallback(async () => {
-    if (busy.current) return;
+  const create = useCallback(async (): Promise<number | null> => {
+    if (busy.current) return null;
     try {
       setError(false);
       const made = await api.createConversation(itemId, "New conversation");
@@ -187,10 +213,17 @@ export function useChat(
       setCurrentId(made.id);
       currentRef.current = made.id;
       setMessages([]);
+      return made.id;
     } catch {
       setError(true);
+      return null;
     }
   }, [api, itemId]);
+
+  /** Load the current conversation again (a card was added by another route). */
+  const refresh = useCallback(async () => {
+    if (currentRef.current !== null) await loadMessages(currentRef.current);
+  }, [loadMessages]);
 
   const rename = useCallback(
     async (id: number, title: string) => {
@@ -240,6 +273,7 @@ export function useChat(
     streaming,
     error,
     ready,
+    itemId,
     send,
     stop,
     regenerate,
@@ -248,6 +282,7 @@ export function useChat(
     rename,
     remove,
     exportMarkdown,
+    refresh,
     toggleThinking: toggle,
   };
 }

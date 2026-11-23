@@ -5,6 +5,41 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-23
+
+### Added
+- The tutor can read the paper (#23, part of #17): three local read-only tools, `load_artifact` (pages, a section, the references, a figure or a table, your highlights), `search_paper` and `session_memory`, served through the Agent SDK with the built-in tools off. The PDF text is extracted with `pypdf` and cached; everything a tool returns is an escaped data block.
+- Session memory per paper: short notes (30 at most, 500 characters each) the tutor writes and always sees, which you can list, add, edit and delete through the API.
+- Limiters: per answer 12 tool calls (6 per tool, 15 s each), 8 model turns and 0.50 USD; per conversation 3.00 USD, raisable once. A limit shows as a clear message, a tool that fails or times out is reported to the model and never stops the answer.
+- Compaction: a long conversation has its old turns summarised (small model, no tool) while the last 4 exchanges and the notes are kept, never cutting an exchange in half; a quiet note in the chat says so.
+- The session budget counts what every answer cost, taken from the trace: an answer that hits a limit still counts and regenerating cannot erase it. Notes record who wrote them (you or the tutor).
+- A local trace of every turn (tools with their duration and errors, tokens, cost, model; never the text), readable through the API.
+- Grounded citations (#31): the tutor cites `[p.N "short exact quote"]`; each quote is verified against the page text (verified, found on another page, not found, page only) with its section, sent with the answer and stored. Chips show doubtful citations dashed with a tooltip, and a click goes to the page and flashes the quote in the PDF.
+- `search_paper` is a local ranked search (BM25 over section-aware passages, exact phrases first) instead of an exact substring match.
+- `make eval-reader`: 10 questions on two papers run through the real tutor, with page precision and recall, verified quotes, facts, abstention, tool calls, cost and time.
+- The ask-the-agent box next to a selection is one quiet pill with three real-coloured dots (visible in the dark theme), copy and send icons, and it stays on screen. Copy is an icon.
+- A new conversation has its own compose icon in the chat corner; the composer's "+" is kept for attachments and audio.
+- Composer (#24): paste or drop images and screenshots (up to 4 per message, 5 MB each, PNG, JPEG, WebP or GIF checked by content) with removable thumbnails, large images scaled down in the browser, shown in your message (click opens the full image). Images are stored locally, served only to the local reader, and sent to the tutor as image blocks; text inside an image is treated as data.
+- After each answer the tutor offers up to 3 suggested follow-up questions (validated, one click to send); suggestions containing `[placeholders]` fill the composer and Tab jumps from one placeholder to the next. Drafts are kept per conversation.
+- Eval: page recall counts a case as found when any of its valid pages is cited; the tutor now says so, without citing, when the paper does not answer.
+- The highlights drawn on the page keep their light colours in the dark theme.
+- Quizzes (#25): a "Quiz me" icon (or just ask the tutor) makes a question from the paper, multiple choice or free answer. Each question is validated, grounded in a verified quote and page, and the right answer and explanation stay on the server until you reply. A free answer is graded against the paper with the reasoning shown. Scores are kept per paper and per quiz, and a wrong answer leaves a note in the session memory so the tutor revisits it.
+- The highlights list is redone in the chat's quiet style (#35): a discreet highlighter icon with the count, then plain rows (colour dot, page, passage in the normal text colour, readable in both themes) with copy and delete icons on hover. Clicking a row still goes to the top of its page; going to the exact place waits for the bounding-box work (#30).
+- Suggested prompts: the first one is the composer's placeholder (Tab fills it in, Enter sends), the others stay buttons in the chat. A quiz card always answers for the paper of the chat.
+- Quiz formats: single choice and true/false answer on click, multiple choice has checkboxes and a right-arrow icon that appears once something is ticked, fill-in-the-blank and put-in-order are graded on the server without the model, and the free answer stays graded by the model. "Quiz me" mixes the formats. Answer failures now say why (already answered shows the result).
+
+### Changed
+- Icons instead of text for the PDF search, the outline, the pane controls and the settings gear (#27). On narrow screens (under 640 px) the PDF and the chat stack and long words wrap. The colour dots are darker in the Papier theme (contrast of at least 3:1).
+- A budget refusal (per answer or per conversation) shows its own message instead of the subscription-limit text. A failed quiz start leaves a quiet note, not a tutor message.
+- Images over 5 MB are accepted when scaling brings them under the limit; the cap applies to what is sent.
+- The search index of a paper is built once and reused across turns; citations are checked once per answer, off the event loop.
+
+### Fixed
+- Retry works after a quiz card or a failed quiz; two quiz starts at once make one quiz.
+- Quotes from pages with `&`, `<` or `>` are verified (the text the tutor sees is escaped, the quote is unescaped before the check).
+- Dropping a non-image file on the composer no longer opens the file over the app.
+- Suggested prompts are hidden while a quiz starts; the quiz maker avoids every earlier question of the paper, answered or not; `load_artifact` for a figure or a table without a number says a number is needed.
+
 ## [0.11.0] - 2026-11-22
 
 ### Added
@@ -12,7 +47,7 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 - Selection box next to a selected passage: a question field (Enter), three highlight colours (yellow, green, red) and Copy. Highlights are stored per paper in the local database (routes `GET/POST/DELETE /api/items/{id}/highlights`, migration 2) and listed under the PDF with jump-to and filter.
 - Two panes, PDF | chat, resizable by dragging or with the arrow keys and collapsible: a small cross collapses a pane (a thin "+" rail brings it back) and **Cmd/Ctrl+B** and **Cmd/Ctrl+J** toggle the PDF and the chat (B and J are not taken by Chrome; the variants with Shift or Alt are left alone). The layout is remembered.
 - Reader chat core (#22): a streaming chat with the tutor. Answers stream token by token (stop and regenerate), your questions about a passage appear as a quote with its page and a "p.N" link back to the PDF, `[p.N]` citations in answers scroll the PDF, Markdown and math are rendered safely (raw HTML as text, only http(s) links, no remote images). Conversations are kept per paper (new, rename, delete, export to Markdown).
-- The chat looks like Claude's own: your question in a quiet neutral bubble, the answer as plain text across the pane (inline code, bullets, blue links), and every control is an icon with a tooltip instead of a text button. At rest nothing shows under the messages; hovering your question shows its day, retry and copy, hovering an answer shows copy and how long ago it was written. The composer is one big rounded pill: a plus (new conversation), then a send arrow only once you have typed something, or a stop square while it answers; the model that answers is shown quietly under it. The conversations (switch, rename, export, delete) sit behind one "⋯" icon in the corner, and everything shares one icon set.
+- The chat looks like Claude's own: your question in a quiet neutral bubble, the answer as plain text across the pane (inline code, bullets, blue links), and every control is an icon with a tooltip instead of a text button. At rest nothing shows under the messages; hovering your question shows its day, retry and copy, hovering an answer shows copy and how long ago it was written. The composer is one big rounded pill: the text, then a send arrow only once you have typed something, or a stop square while it answers; the model that answers is shown quietly under it. The conversations (switch, rename, export, delete) sit behind one "⋯" icon in the corner, and everything shares one icon set.
 - A discreet "Thinking" line above each answer (no box, transparent): open while the agent works, folded automatically when the answer starts, reopenable at any time, also from history. It shows the reasoning and, later, the tools with their inputs.
 - Server side of the chat: conversations and messages (migration 3), a streaming endpoint (SSE) with a pluggable agent runner, and a Claude Agent SDK runner on your subscription (no API key, no tools, summarized thinking, Sonnet by default, `VEILLE_READER_MODEL` to change). Stopping keeps the partial answer. The tutor only sees the title, summary and selected passage until #23 adds tools.
 - A long-lived Claude token for the chat: `make reader-token` saves the token from `claude setup-token` to `.env` (git-ignored, mode 600, hidden input, never printed); the reader loads `CLAUDE_CODE_OAUTH_TOKEN` from the environment or from that file (only that key, never a variable that bills per token). `make reader` states which login it uses, a permissive `.env` triggers a warning, and an expired session shows a clear message in the chat.

@@ -73,6 +73,11 @@ reader-build:
 	cd web && VITE_READER_URL=http://127.0.0.1:8765 npx vite build --mode reader
 	env $(READER_NO_BILLING) uv run veille-reader serve
 
+# Citation evaluation of the reader's tutor (#31): real PDFs, real tutor, on the subscription.
+# Example: make eval-reader ARGS="--limit 3". Results go to evals/results/ (git ignores them).
+eval-reader:
+	env $(READER_NO_BILLING) uv run python scripts/eval_reader.py $(ARGS)
+
 # Subscribers: local subscribers.txt (gitignored), pushed to the SUBSCRIBERS secret.
 subs-add:
 	@test -n "$(EMAIL)" || { echo "usage: make subs-add EMAIL=someone@example.org"; exit 1; }

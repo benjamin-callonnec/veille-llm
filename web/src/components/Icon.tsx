@@ -11,7 +11,17 @@ export type IconName =
   | "edit"
   | "download"
   | "trash"
-  | "chevron";
+  | "chevron"
+  | "compose"
+  | "close"
+  | "quiz"
+  | "highlighter"
+  | "arrow-right"
+  | "arrow-up"
+  | "arrow-down"
+  | "search"
+  | "outline"
+  | "settings";
 
 /** One line style for every icon of the app: 24px grid, round caps, drawn in the current colour. */
 const SHAPES: Record<IconName, ReactNode> = {
@@ -21,14 +31,38 @@ const SHAPES: Record<IconName, ReactNode> = {
       <path d="M9 10l-4 4 4 4" />
     </>
   ),
+  "arrow-right": <path d="M5 12h14M13 6l6 6-6 6" />,
+  "arrow-up": <path d="M12 19V5M6 11l6-6 6 6" />,
+  "arrow-down": <path d="M12 5v14M6 13l6 6 6-6" />,
   stop: <rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor" stroke="none" />,
   plus: <path d="M12 5v14M5 12h14" />,
+  highlighter: (
+    <>
+      <path d="M14 5l5 5-7 7-5-5z" />
+      <path d="M7 12l-2.5 5.5L10 15" />
+      <path d="M4 20h9" />
+    </>
+  ),
+  compose: (
+    <>
+      <path d="M12 5H7.5A2.5 2.5 0 0 0 5 7.5v9A2.5 2.5 0 0 0 7.5 19h9a2.5 2.5 0 0 0 2.5-2.5V12" />
+      <path d="M17.5 4.5a1.8 1.8 0 0 1 2.5 2.5L12 15l-3.5 1 1-3.5z" />
+    </>
+  ),
+  quiz: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M9.6 9.5a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.2 1-1.2 1.8" />
+      <circle cx="12" cy="16.6" r="0.6" fill="currentColor" />
+    </>
+  ),
   copy: (
     <>
       <rect x="9" y="9" width="11" height="11" rx="2.5" />
       <path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15" />
     </>
   ),
+  close: <path d="M6 6l12 12M18 6L6 18" />,
   check: <path d="M5 12.5l4.5 4.5L19 7" />,
   retry: (
     <>
@@ -47,6 +81,19 @@ const SHAPES: Record<IconName, ReactNode> = {
   download: <path d="M12 4v11M7 11l5 5 5-5M5 20h14" />,
   trash: <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />,
   chevron: <path d="M9 6l6 6-6 6" />,
+  search: (
+    <>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="M16 16l4.5 4.5" />
+    </>
+  ),
+  outline: <path d="M4 6h16M4 12h16M4 18h10" />,
+  settings: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+    </>
+  ),
 };
 
 export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {

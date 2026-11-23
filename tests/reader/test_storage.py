@@ -158,3 +158,31 @@ def test_export_markdown(tmp_path):
     assert "because [p.4]" in md
     assert "SECRET REASONING" not in md
     assert store.export_markdown("b", cid) is None
+
+
+def test_the_store_can_be_used_from_several_threads_at_once(tmp_path):
+    import threading
+
+    store = ReaderStore(tmp_path / "data")
+    cid = store.create_conversation("a1", "t")["id"]
+    errors: list[Exception] = []
+
+    def writer(n):
+        try:
+            for i in range(300):
+                store.add_memory_note("a1", f"w{n}-{i}")
+                store.memory_notes("a1")
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [threading.Thread(target=writer, args=(n,)) for n in range(4)]
+    for t in threads:
+        t.start()
+    for i in range(300):
+        store.add_message(cid, "user", "text", {"text": str(i)})
+        store.messages(cid)
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert len(store.memory_notes("a1")) == 1200
+    assert len(store.messages(cid)) == 300

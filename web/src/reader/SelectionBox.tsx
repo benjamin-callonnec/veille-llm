@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { IconButton } from "../components/Icon";
+import { placeBox } from "./lib/place";
 import type { Quote } from "./lib/quote";
 
 export const COLORS = ["yellow", "green", "red"] as const;
@@ -12,16 +14,46 @@ interface Props {
   onClose(): void;
 }
 
-/** The small box next to a selected passage: ask a question, highlight, copy. */
+/**
+ * The box next to a selected passage, one quiet pill like the chat composer: three colour dots to
+ * highlight, the question, a copy icon, and a send icon once there is something to send.
+ */
 export function SelectionBox({ anchor, onAsk, onHighlight, onCopy, onClose }: Props) {
   const [question, setQuestion] = useState("");
+  const box = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 340, height: 48 });
+  const text = question.trim();
+
+  useLayoutEffect(() => {
+    const rect = box.current?.getBoundingClientRect();
+    if (rect && rect.width > 0 && rect.height > 0)
+      setSize({ width: rect.width, height: rect.height });
+  }, []);
+
+  const { left, top } = placeBox(anchor, size, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: Escape closes the box from inside it
     <div
       className="selection-box"
-      style={{ left: anchor.x, top: anchor.y + 8 }}
+      ref={box}
+      style={{ left, top }}
       onKeyDown={(e) => e.key === "Escape" && onClose()}
     >
+      <div className="selection-dots">
+        {COLORS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            aria-label={`Highlight ${c}`}
+            title={`Highlight ${c}`}
+            className={`dot hl-${c}`}
+            onClick={() => onHighlight(c)}
+          />
+        ))}
+      </div>
       <input
         // biome-ignore lint/a11y/noAutofocus: the box exists only to type a question
         autoFocus
@@ -31,24 +63,11 @@ export function SelectionBox({ anchor, onAsk, onHighlight, onCopy, onClose }: Pr
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
         onKeyDown={(e) => {
-          const text = question.trim();
           if (e.key === "Enter" && text) onAsk(text);
         }}
       />
-      <div className="selection-tools">
-        {COLORS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            aria-label={`Highlight ${c}`}
-            className={`dot hl-${c}`}
-            onClick={() => onHighlight(c)}
-          />
-        ))}
-        <button type="button" onClick={onCopy}>
-          Copy
-        </button>
-      </div>
+      <IconButton icon="copy" label="Copy" onClick={onCopy} />
+      {text && <IconButton icon="send" label="Send" onClick={() => onAsk(text)} />}
     </div>
   );
 }

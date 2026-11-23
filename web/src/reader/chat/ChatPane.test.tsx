@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import type { ChatApi, Conversation, StoredMessage } from "./api";
 import { ChatPane } from "./ChatPane";
 import type { ChatEvent } from "./events";
+import type { QuizApi } from "./quizApi";
 import { useChat } from "./useChat";
 
 afterEach(cleanup);
@@ -74,9 +75,19 @@ function makeApi(gate: Promise<void>) {
   return api;
 }
 
-function Host({ api, onGo, model }: { api: ChatApi; onGo: (p: number) => void; model?: string }) {
+function Host({
+  api,
+  onGo,
+  onCite,
+  model,
+}: {
+  api: ChatApi;
+  onGo: (p: number) => void;
+  onCite?: (p: number, q?: string) => void;
+  model?: string;
+}) {
   const chat = useChat("a1", api);
-  return <ChatPane chat={chat} onGo={onGo} model={model} />;
+  return <ChatPane chat={chat} onGo={onGo} onCite={onCite} model={model} />;
 }
 
 test("sending streams the answer, thinking folds when it starts and reopens on demand", async () => {
@@ -159,12 +170,140 @@ test("retry asks for another answer to the last question", async () => {
   expect(spy).toHaveBeenCalledTimes(1);
 });
 
-test("the plus icon of the composer starts a new empty conversation", async () => {
+test("a new conversation starts from its own icon in the corner of the chat, not from a plus", async () => {
   const api = makeApi(Promise.resolve());
   render(<Host api={api} onGo={() => {}} />);
   await userEvent.type(await screen.findByRole("textbox", { name: "Message" }), "Q{Enter}");
   await screen.findByRole("button", { name: /Thought for/ });
-  await userEvent.click(screen.getByRole("button", { name: "New conversation" }));
+  const fresh = screen.getByRole("button", { name: "New conversation" });
+  expect(fresh.textContent).toBe("");
+  expect(fresh.closest(".chat-tools")).not.toBeNull();
+  expect(document.querySelector(".composer [aria-label='New conversation']")).toBeNull();
+  await userEvent.click(fresh);
   await waitFor(() => expect(screen.queryByRole("button", { name: /Thought for/ })).toBeNull());
   expect(screen.getByText(/select a passage/i)).toBeTruthy();
+});
+
+test("the new conversation icon is there from the start and disabled while an answer streams", async () => {
+  let open: () => void = () => {};
+  const gate = new Promise<void>((r) => {
+    open = r;
+  });
+  render(<Host api={makeApi(gate)} onGo={() => {}} />);
+  const icon = await screen.findByRole("button", { name: "New conversation" });
+  expect((icon as HTMLButtonElement).disabled).toBe(false);
+  await userEvent.type(screen.getByRole("textbox", { name: "Message" }), "Q{Enter}");
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "New conversation" }) as HTMLButtonElement).disabled,
+    ).toBe(true),
+  );
+  open();
+});
+
+test("a compaction shows as a quiet note, not as a message with actions", async () => {
+  const api = makeApi(Promise.resolve());
+  const base = api.messages;
+  api.messages = async (item, id) => [
+    {
+      id: 90,
+      seq: 1,
+      role: "user",
+      kind: "text",
+      content: { text: "old question" },
+      created_at: "",
+    },
+    {
+      id: 91,
+      seq: 2,
+      role: "system",
+      kind: "compaction",
+      content: { summary: "SECRET SUMMARY", upto_seq: 1 },
+      created_at: "",
+    },
+    ...(await base(item, id)),
+  ];
+  const conversations = api.listConversations;
+  api.listConversations = async (item) => {
+    const list = await conversations(item);
+    return list.length
+      ? list
+      : [{ id: 1, item_id: "a1", title: "T", created_at: "", updated_at: "" }];
+  };
+  render(<Host api={api} onGo={() => {}} />);
+  const note = await screen.findByText(/earlier messages were summarised/i);
+  expect(note.closest(".turn")).toBeNull();
+  expect(screen.queryByText("SECRET SUMMARY")).toBeNull();
+  expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(1); // only the old question
+});
+
+test("a notice shows its own text as a quiet note", async () => {
+  const api = makeApi(Promise.resolve());
+  api.messages = async () => [
+    { id: 1, seq: 1, role: "user", kind: "text", content: { text: "q" }, created_at: "" },
+    {
+      id: 2,
+      seq: 2,
+      role: "system",
+      kind: "notice",
+      content: { text: "I could not start the quiz: nope." },
+      created_at: "",
+    },
+  ];
+  api.listConversations = async () => [
+    { id: 1, item_id: "a1", title: "T", created_at: "", updated_at: "" },
+  ];
+  render(<Host api={api} onGo={() => {}} />);
+  const note = await screen.findByText("I could not start the quiz: nope.");
+  expect(note.closest(".turn")).toBeNull();
+  expect(screen.queryByText(/earlier messages were summarised/i)).toBeNull();
+});
+
+test("a citation chip goes through onCite when given, onGo stays for the quote arrow", async () => {
+  const onGo = vi.fn();
+  const onCite = vi.fn();
+  render(<Host api={makeApi(Promise.resolve())} onGo={onGo} onCite={onCite} />);
+  await userEvent.type(await screen.findByRole("textbox", { name: "Message" }), "Hi{Enter}");
+  await userEvent.click(await screen.findByRole("button", { name: "p.3" }));
+  expect(onCite).toHaveBeenCalledWith(3);
+  expect(onGo).not.toHaveBeenCalled();
+});
+
+function QuizHost({ api, quizApi }: { api: ChatApi; quizApi: QuizApi }) {
+  const chat = useChat("a1", api);
+  return <ChatPane chat={chat} onGo={() => {}} quizApi={quizApi} />;
+}
+
+test("a quiz card answers for the paper of the chat even when the pane got no itemId prop", async () => {
+  const api = makeApi(Promise.resolve());
+  const conv: Conversation = { id: 1, item_id: "a1", title: "T", created_at: "", updated_at: "" };
+  api.listConversations = async () => [conv];
+  api.messages = async () => [
+    {
+      id: 5,
+      seq: 1,
+      role: "system",
+      kind: "quiz",
+      content: {
+        quiz_id: 9,
+        kind: "choice",
+        question: "Why?",
+        options: ["a1x", "b1x", "c1x", "d1x"],
+      },
+      created_at: "",
+    },
+  ];
+  const answer = vi.fn(async () => ({
+    correct: true,
+    explanation: "Because.",
+    quote: "because",
+    page: 1,
+    section: null,
+    choice: 0,
+    correct_choice: 0,
+    score: { paper: { total: 1, correct: 1 }, session: null },
+  }));
+  render(<QuizHost api={api} quizApi={{ start: vi.fn(), answer } as never} />);
+  await userEvent.click(await screen.findByRole("button", { name: /a1x/ }));
+  await waitFor(() => expect(answer).toHaveBeenCalledWith("a1", 9, { choice: 0 }));
 });

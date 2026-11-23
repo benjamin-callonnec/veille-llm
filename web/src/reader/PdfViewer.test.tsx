@@ -170,6 +170,15 @@ test("never renders links from the PDF", async () => {
   expect(document.querySelector("a[href]")).toBeNull();
 });
 
+test("the search button is an icon with a name and a tooltip, and opens the search", async () => {
+  setup();
+  const button = await screen.findByRole("button", { name: "Search" });
+  expect(button.textContent).toBe("");
+  expect(button.getAttribute("title")).toMatch(/Search/);
+  await userEvent.click(button);
+  expect(await screen.findByRole("searchbox", { name: "Search" })).toBeTruthy();
+});
+
 test("the slash key opens the search and matches are marked in the text", async () => {
   const source = new FakeSource({ text: () => "The needle is here" });
   setup({}, source);
@@ -247,4 +256,61 @@ test("scrolled to the very bottom the last page is reported", async () => {
   } finally {
     Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
   }
+});
+
+const flashes = () => Array.from(document.querySelectorAll("[data-flash]"));
+
+test("a flash draws the located quote on its page, then ends and tells the parent", async () => {
+  const onFlashDone = vi.fn();
+  setup({
+    page: 2,
+    flash: { page: 2, quote: "Text of page 2", nonce: 1 },
+    flashMs: 250,
+    onFlashDone,
+  });
+  await waitFor(() => expect(flashes().length).toBe(1));
+  const el = flashes()[0] as HTMLElement;
+  expect(el.className).toContain("hl-flash");
+  expect(el.closest('[data-page="2"]')).not.toBeNull();
+  expect(Number.parseFloat(el.style.left)).toBeCloseTo((50 / 600) * 100, 2);
+  expect(onFlashDone).not.toHaveBeenCalled();
+  await waitFor(() => expect(onFlashDone).toHaveBeenCalledTimes(1));
+  expect(flashes()).toHaveLength(0);
+});
+
+test("a quote that is not on the page flashes nothing", async () => {
+  const onFlashDone = vi.fn();
+  setup({
+    flash: { page: 1, quote: "words that are nowhere to be seen", nonce: 1 },
+    flashMs: 250,
+    onFlashDone,
+  });
+  await waitFor(() => expect(document.querySelector(".pdf-text-layer span")).not.toBeNull());
+  expect(flashes()).toHaveLength(0);
+});
+
+test("a new nonce restarts the flash", async () => {
+  const onFlashDone = vi.fn();
+  const source = new FakeSource();
+  const base = { source, page: 1, onPageChange: vi.fn(), onSelection: vi.fn(), highlights: [] };
+  const flash = { page: 1, quote: "Text of page 1", nonce: 1 };
+  const { rerender } = render(
+    <PdfViewer {...base} flash={flash} flashMs={400} onFlashDone={onFlashDone} />,
+  );
+  await waitFor(() => expect(flashes().length).toBe(1));
+  await new Promise((r) => setTimeout(r, 250));
+  rerender(
+    <PdfViewer {...base} flash={{ ...flash, nonce: 2 }} flashMs={400} onFlashDone={onFlashDone} />,
+  );
+  await new Promise((r) => setTimeout(r, 250));
+  // 500 ms after the first flash started, yet the restarted one is still showing
+  expect(onFlashDone).not.toHaveBeenCalled();
+  expect(flashes()).toHaveLength(1);
+  await waitFor(() => expect(onFlashDone).toHaveBeenCalledTimes(1));
+});
+
+test("without a flash nothing is drawn", async () => {
+  setup();
+  await waitFor(() => expect(document.querySelector(".pdf-text-layer span")).not.toBeNull());
+  expect(flashes()).toHaveLength(0);
 });

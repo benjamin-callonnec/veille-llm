@@ -6,7 +6,7 @@ import { useChat } from "./chat/useChat";
 import { HighlightsStrip } from "./HighlightsStrip";
 import { parseHash, writeHash } from "./lib/anchor";
 import { PaneLayout } from "./PaneLayout";
-import { PdfViewer, type Selection } from "./PdfViewer";
+import { type Flash, PdfViewer, type Selection } from "./PdfViewer";
 import { openPdf } from "./pdf/pdfjsSource";
 import { PdfOpenError, type PdfSource } from "./pdf/source";
 import { SelectionBox } from "./SelectionBox";
@@ -71,6 +71,7 @@ export function ReaderPage({
   const [source, setSource] = useState<PdfSource | null>(null);
   const [page, setPage] = useState(() => parseHash(window.location.hash).page ?? 1);
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [flash, setFlash] = useState<Flash | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const { highlights, add, remove, error: saveError } = useHighlights(itemId, api);
   const chat = useChat(itemId, chatApi);
@@ -129,6 +130,14 @@ export function ReaderPage({
     [itemId],
   );
 
+  const cite = useCallback(
+    (p: number, quote?: string) => {
+      changePage(p);
+      if (quote) setFlash({ page: p, quote, nonce: Date.now() });
+    },
+    [changePage],
+  );
+
   const closeBox = () => {
     setSelection(null);
     window.getSelection()?.removeAllRanges();
@@ -159,6 +168,8 @@ export function ReaderPage({
         onPageChange={changePage}
         onSelection={setSelection}
         highlights={highlights}
+        flash={flash ?? undefined}
+        onFlashDone={() => setFlash(null)}
       />
       <HighlightsStrip highlights={highlights} onGo={changePage} onRemove={remove} />
     </>
@@ -184,7 +195,12 @@ export function ReaderPage({
           The highlight could not be saved.
         </p>
       )}
-      <PaneLayout pdf={pdfPane} chat={<ChatPane chat={chat} onGo={changePage} model={model} />} />
+      <PaneLayout
+        pdf={pdfPane}
+        chat={
+          <ChatPane chat={chat} onGo={changePage} onCite={cite} model={model} itemId={itemId} />
+        }
+      />
       {selection && (
         <SelectionBox
           quote={selection.quote}

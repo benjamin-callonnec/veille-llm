@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { timeAgo } from "../../lib/time";
+import { stripQuizMarker } from "../lib/quiz";
 import { CopyButton } from "./CopyButton";
+import { type Citation, toCitations } from "./events";
 import { Markdown } from "./Markdown";
 import type { AssistantState, Block } from "./reducer";
 import { Thinking } from "./Thinking";
@@ -13,8 +15,9 @@ interface BodyProps {
   durationMs: number | null;
   error?: { kind: string; message: string };
   stopped: boolean;
+  citations?: Citation[];
   onToggle(): void;
-  onCite?(page: number): void;
+  onCite?(page: number, quote?: string): void;
   /** Shown as a quiet row of icons on hover, only for a finished answer that has text. */
   actions?: { text: string; time: string };
 }
@@ -30,7 +33,9 @@ function Body(p: BodyProps) {
           durationMs={p.durationMs}
           onToggle={p.onToggle}
         />
-        {p.answer && <Markdown text={p.answer} onCite={p.onCite} />}
+        {p.answer && (
+          <Markdown text={stripQuizMarker(p.answer)} citations={p.citations} onCite={p.onCite} />
+        )}
         {p.stopped && <p className="muted">Stopped.</p>}
         {p.error && (
           <p role="alert" className="chat-error">
@@ -58,7 +63,7 @@ export function AssistantMessage({
 }: {
   state: AssistantState;
   onToggleThinking(): void;
-  onCite?(page: number): void;
+  onCite?(page: number, quote?: string): void;
 }) {
   return (
     <Body
@@ -69,6 +74,7 @@ export function AssistantMessage({
       durationMs={state.durationMs}
       error={state.error}
       stopped={state.status === "stopped"}
+      citations={state.citations}
       onToggle={onToggleThinking}
       onCite={onCite}
     />
@@ -80,6 +86,7 @@ export interface StoredAssistant {
   blocks?: Block[];
   duration_ms?: number;
   stopped?: boolean;
+  citations?: Citation[];
   error?: { kind: string; message: string };
 }
 
@@ -93,7 +100,7 @@ export function StoredAssistantMessage({
   content: StoredAssistant;
   createdAt?: string;
   now?: number;
-  onCite?(page: number): void;
+  onCite?(page: number, quote?: string): void;
 }) {
   const [open, setOpen] = useState(false);
   const answer = content.answer ?? "";
@@ -106,6 +113,7 @@ export function StoredAssistantMessage({
       durationMs={content.duration_ms ?? null}
       error={content.error}
       stopped={content.stopped === true}
+      citations={toCitations(content.citations)}
       onToggle={() => setOpen(!open)}
       onCite={onCite}
       actions={answer ? { text: answer, time: timeAgo(createdAt, now) } : undefined}

@@ -50,7 +50,7 @@ def test_a_theme_can_be_forced_over_the_system_appearance():
     assert "color-scheme: dark" in rule(TOKENS, ':root[data-theme="dark"]')
     for theme in ("light", "dark"):
         block = rule(TOKENS, f':root[data-theme="{theme}"]')
-        for token in ("--bg", "--fg", "--card", "--accent", "--hl-yellow"):
+        for token in ("--bg", "--fg", "--card", "--accent", "--dot-yellow"):
             assert token in block, (theme, token)
 
 
@@ -95,3 +95,125 @@ def test_your_question_is_a_neutral_bubble_not_an_accent_coloured_one():
 def test_the_composer_is_a_big_rounded_pill():
     r = rule(CHAT, ".composer")
     assert re.search(r"border-radius:\s*(2\d|3\d)px", r)
+
+
+def _token_blocks():
+    """The four places the theme tokens live: light, dark (system), light forced, dark forced."""
+    media = re.findall(r"@media \(prefers-color-scheme: dark\) \{\s*:root \{([^}]*)\}", TOKENS)
+    plain = re.findall(r"^:root \{([^}]*)\}", TOKENS, flags=re.M)
+    return {
+        "light": "\n".join(plain),
+        "dark system": "\n".join(media),
+        "light forced": rule(TOKENS, ':root[data-theme="light"]'),
+        "dark forced": rule(TOKENS, ':root[data-theme="dark"]'),
+    }
+
+
+def _color(block: str, token: str) -> str | None:
+    found = re.findall(rf"{re.escape(token)}:\s*(#[0-9a-fA-F]{{3,8}})", block)
+    return found[0].lower() if found else None
+
+
+def test_the_colour_dots_have_their_own_real_colours_in_every_theme():
+    """The page highlights are dark in Nuit (black text on a white page); the dots must not be."""
+    for name, block in _token_blocks().items():
+        dots = [_color(block, f"--dot-{c}") for c in ("yellow", "green", "red")]
+        assert all(dots), (name, dots)
+        assert len(set(dots)) == 3, (name, dots)
+        for background in ("--bg", "--card", "--composer"):
+            assert _color(block, background) not in dots, (name, background)
+
+
+def test_the_dots_use_the_dot_colours_and_the_page_highlights_keep_theirs():
+    reader = (STYLES / "reader.css").read_text()
+    for color in ("yellow", "green", "red"):
+        assert f"var(--dot-{color})" in rule(reader, f".dot.hl-{color}")
+        assert f"var(--hl-{color})" in rule(reader, f".hl-{color}")  # the page highlight
+
+
+def test_the_selection_box_is_a_quiet_rounded_pill():
+    reader = (STYLES / "reader.css").read_text()
+    box = rule(reader, ".selection-box")
+    assert re.search(r"border-radius:\s*(2\d|3\d)px", box)
+    assert "var(--composer)" in box
+
+
+def test_highlights_over_the_white_page_use_the_same_light_colours_in_every_theme():
+    """The PDF page stays white in Nuit, and highlights are multiplied over it: a dark colour there
+    turns the text black. Only the interface (the dots) changes with the theme."""
+    blocks = _token_blocks()
+    for color in ("yellow", "green", "red"):
+        values = {name: _color(block, f"--hl-{color}") for name, block in blocks.items()}
+        value = values["light"]
+        assert value is not None
+        # a dark block either inherits the light colour (no override) or repeats it
+        assert all(v in (None, value) for v in values.values()), (color, values)
+        channels = [int(value[i : i + 2], 16) for i in (1, 3, 5)]
+        assert min(channels) >= 0xC0 - 0x20, (color, value)  # a light colour, not a dark one
+
+
+def test_the_highlights_list_is_quiet_and_its_text_is_readable_in_every_theme():
+    reader = (STYLES / "reader.css").read_text()
+    text = rule(reader, ".hl-row-text")
+    assert "color: var(--fg)" in text and "border: 0" in text
+    assert "background: transparent" in text  # never the highlight colour behind the text
+    dot = rule(reader, ".hl-dot.hl-yellow")
+    assert "var(--dot-yellow)" in dot
+    actions = rule(reader, ".hl-actions")
+    assert "opacity: 0" in actions  # shown on hover or focus, like the chat messages
+    assert "highlights-strip li button:first-child" not in reader  # the old coloured row rule
+    assert ".highlights-strip button" not in reader.split(".pdf-scroll {")[0]  # no boxed buttons
+
+
+def _luminance(color: str) -> float:
+    channels = [int(color[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+    lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+
+def _contrast(a: str, b: str) -> float:
+    hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_the_colour_dots_are_visible_on_every_surface_of_every_theme():
+    """A dot is a non-text control: WCAG asks 3:1 against what it sits on (page, card, bubble)."""
+    for name, block in _token_blocks().items():
+        for surface in ("--bg", "--card", "--bubble"):
+            background = _color(block, surface)
+            assert background, (name, surface)
+            for c in ("yellow", "green", "red"):
+                dot = _color(block, f"--dot-{c}")
+                assert dot and _contrast(dot, background) >= 3, (name, c, surface)
+
+
+def test_the_muted_text_is_readable_on_every_surface_of_every_theme():
+    for name, block in _token_blocks().items():
+        for surface in ("--bg", "--card", "--bubble", "--composer"):
+            background = _color(block, surface)
+            muted = _color(block, "--muted")
+            assert background and muted, (name, surface)
+            assert _contrast(muted, background) >= 4.5, (name, surface)
+
+
+def test_the_highlight_actions_stay_visible_on_a_touch_screen():
+    reader = (STYLES / "reader.css").read_text()
+    assert "@media (hover: none)" in reader
+    touch = reader.split("@media (hover: none)")[1]
+    assert ".hl-actions" in touch and "opacity: 1" in touch
+
+
+def test_on_a_narrow_screen_the_panes_stack_instead_of_leaving_slivers():
+    reader = (STYLES / "reader.css").read_text()
+    assert "@media (max-width: 640px)" in reader
+    narrow = reader.split("@media (max-width: 640px)")[1]
+    assert re.search(r"\.panes-body\s*\{[^}]*flex-direction:\s*column", narrow)
+    assert "!important" in rule(narrow, ".pane")  # beats the inline flex-basis of the ratio
+
+
+def test_long_unbroken_words_wrap_in_quiz_cards_and_highlight_rows():
+    reader = (STYLES / "reader.css").read_text()
+    assert "overflow-wrap: anywhere" in rule(CHAT, ".quiz")
+    assert "overflow-wrap: anywhere" in rule(reader, ".hl-quote")
+    for selector in (".quiz-option > span:nth-child(2)", ".quiz-step-text"):
+        assert "min-width: 0" in rule(CHAT, selector), selector

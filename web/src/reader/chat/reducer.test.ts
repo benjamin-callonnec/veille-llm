@@ -82,3 +82,10 @@ describe("blocks and status", () => {
     expect(s.durationMs).toBe(2000);
   });
 });
+
+test("the citations event is kept in the state", () => {
+  const items = [{ page: 2, quote: null, status: "page_only" as const, section: null }];
+  const s = applyEvent(start(), { type: "citations", items }, 1100);
+  expect(s.citations).toEqual(items);
+  expect(start().citations).toBeUndefined();
+});

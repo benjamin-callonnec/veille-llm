@@ -92,13 +92,52 @@ The page shows the PDF (zoom, search with `/`, outline, PageUp/PageDown) next to
 chat; the divider can be dragged (or moved with the arrow keys) and each pane collapsed. Select a
 passage to get a small box: type a question about it (Enter), or pick a colour to highlight it, or
 copy it. Highlights are kept in `reader.db` and the page number stays in the URL. The tutor chat
-chat is a streaming conversation with the tutor (Agent SDK on your subscription, no API key, no
-tools yet): answers stream token by token, a discreet "Thinking" line shows the reasoning (open while
+chat is a streaming conversation with the tutor (Agent SDK on your subscription, no API key, local tools, see below): answers stream token by token, a discreet "Thinking" line shows the reasoning (open while
 the agent works, folded when the answer starts, reopenable any time), `[p.N]` citations scroll the PDF,
 conversations are kept per paper (dropdown in the chat header: new, rename, delete, export to
-Markdown). The tutor uses Sonnet by default (`VEILLE_READER_MODEL` to change it) and, for now, only sees
-the title, summary and the passage you selected, not the full text (tools come with #23).
-Remaining pieces: #23 to #26 (parent: #17).
+Markdown). The tutor uses Sonnet by default (`VEILLE_READER_MODEL` to change it).
+
+**The tutor reads the paper (#23).** It has three local, read-only tools: `load_artifact` (pages, a
+section by title, the references, a figure or a table, your highlights), `search_paper` and
+`session_memory` (short notes about you, kept per paper; list, add, edit and delete them through
+`/api/items/<id>/memory`). The text comes from the cached PDF (extracted with `pypdf`, cached in the
+database); everything a tool returns is an escaped data block, never instructions. Limits per answer:
+12 tool calls (6 per tool, 15 s each), 8 model turns and 0.50 USD; per conversation 3.00 USD, which you
+can raise once by sending `raise_limit: true` with a message. Long conversations are summarised (the
+last 4 exchanges and your notes are always kept; the cost of a conversation counts every answer, even
+those that hit a limit or were regenerated). Notes say whether you or the tutor wrote them. Every turn leaves a trace (tools, tokens, time, cost, never
+the text) at `/api/items/<id>/conversations/<cid>/trace`. Not there yet: the `ask_user` tool and the
+screens for the notes, the limit and the trace.
+
+**Grounded citations (#31).** The tutor cites as `[p.4 "short exact quote"]`. After each answer the
+server checks every quote against the page text (letters and digits only, case and spacing ignored)
+and marks it verified, found on another page, not found, or page only; the section comes from the PDF
+outline and from where the quote sits on the page. In the chat, a doubtful citation is a dashed chip
+whose tooltip says why, and clicking a chip goes to the page and flashes the quote in the PDF.
+`search_paper` is a local ranked search (BM25 over passages of about 700 characters, section titles
+indexed with them, exact phrases first), so a paraphrased question still finds the right page.
+`make eval-reader` (`ARGS="--limit 3"`, `--model`, `--ids`) runs 10 questions on two papers
+(`evals/reader_cases.json`) through the real tutor on your subscription and reports page precision and
+recall, verified quotes, expected facts, abstention, tool calls, cost and time (JSON in
+`evals/results/`, git-ignored).
+The question box next to a selected passage is one pill: three coloured dots, the question, copy, and a
+send icon once you typed. A new conversation starts from the compose icon in the chat corner (the "+"
+of the composer is kept for attachments and audio).
+**Composer (#24).** Paste (Cmd/Ctrl+V) or drop an image or screenshot: up to 4 per message, 5 MB each,
+PNG, JPEG, WebP or GIF (checked from the bytes, not the name), shown as removable thumbnails and
+scaled down in the browser when large. Images are stored under `.local/reader/images/`, served only
+to the local reader and passed to the tutor as image blocks; text inside an image is data, not
+instructions. After each answer, up to three suggested follow-up questions appear as chips (one click
+sends them; a suggestion with `[placeholders]` fills the composer, Tab jumps to the next one). Drafts
+are kept per conversation. Images are not deleted with their conversation.
+**Quizzes (#25).** The "Quiz me" icon in the chat corner (or asking the tutor for a quiz) adds a quiz
+card: multiple choice or a free answer, each question grounded in a verified quote and page. The right
+answer and the explanation never leave the server before you reply; then the card shows the verdict,
+the explanation with its citation chip and your score on the paper. Free answers are graded against the
+paper with the reasoning shown. A wrong answer writes a short note in the session memory. Routes for
+the history and score exist (`/api/items/<id>/quizzes`); there is no history screen yet. Design and
+rulings: `docs/superpowers/specs/2026-11-22-reader-quiz-design.md`.
+Remaining piece: #26 (voice) (parent: #17).
 
 ## Deploy on GitHub Pages
 

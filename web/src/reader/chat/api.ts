@@ -1,3 +1,4 @@
+import type { ImagePayload } from "./attachments";
 import { type ChatEvent, parseSse } from "./events";
 import type { Block } from "./reducer";
 
@@ -29,14 +30,23 @@ export type StoredContent =
 export interface StoredMessage {
   id: number;
   seq: number;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   kind: string;
   content: Record<string, unknown>;
   created_at: string;
 }
 
+export interface ImageRef {
+  /** The id on the server (empty while the message is still being sent). */
+  id: string;
+  mime: string;
+  name?: string;
+  /** A local `data:` URL, only for the message that was just sent. */
+  url?: string;
+}
+
 export type SendBody =
-  | { kind: "text"; text: string }
+  | { kind: "text"; text: string; images?: ImagePayload[] }
   | { kind: "ask_agent"; quote: Quote; question: string };
 
 export interface ChatApi {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { IconButton } from "../components/Icon";
 import type { OutlineEntry, PdfSource } from "./pdf/source";
 
 export function OutlineMenu({ source, onGo }: { source: PdfSource; onGo(page: number): void }) {
@@ -19,9 +20,7 @@ export function OutlineMenu({ source, onGo }: { source: PdfSource; onGo(page: nu
   if (!entries.length) return null;
   return (
     <div className="pdf-outline">
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>
-        Outline
-      </button>
+      <IconButton icon="outline" label="Outline" expanded={open} onClick={() => setOpen(!open)} />
       {open && (
         <ul>
           {entries.map((e, i) => (
