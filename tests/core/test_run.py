@@ -3,6 +3,7 @@ import io
 import json
 from datetime import UTC, datetime
 
+from veille_llm.hf import Signal
 from veille_llm.llm import LlmLimitError, RawReply
 from veille_llm.models import Item
 from veille_llm.pipeline.run import main, run_pipeline
@@ -150,8 +151,9 @@ def test_run_refreshes_upvotes_of_papers_already_known(tmp_path):
     )
     run(store, out, [paper], Llm())
     assert json.loads(out.read_text())["items"][0]["upvotes"] == 0
-    run(store, out, [paper], Llm(), upvotes=lambda: {"x": 9})
-    assert json.loads(out.read_text())["items"][0]["upvotes"] == 9
+    run(store, out, [paper], Llm(), signals=lambda: {"x": Signal(9, 31)})
+    published = json.loads(out.read_text())["items"][0]
+    assert (published["upvotes"], published["github_stars"]) == (9, 31)
 
 
 def test_run_reports_skipped_batches_and_token_usage(tmp_path):

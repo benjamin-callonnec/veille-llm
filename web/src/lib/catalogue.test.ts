@@ -22,6 +22,7 @@ const item = (over: Partial<Item>): Item => ({
   authors: [],
   published: "2026-11-20T00:00:00Z",
   upvotes: 0,
+  github_stars: 0,
   score: 5,
   type: "paper",
   category: "Agents",
@@ -31,6 +32,21 @@ const item = (over: Partial<Item>): Item => ({
 });
 
 describe("parseCatalogue", () => {
+  test("github_stars defaults to 0 for catalogues written before it existed, and ignores junk", () => {
+    const { github_stars: _drop, ...old } = item({ id: "old" });
+    const cat = parseCatalogue({
+      generated_at: "2026-11-22T00:00:00Z",
+      window_days: 30,
+      categories: [],
+      items: [
+        old,
+        { ...old, id: "junk", github_stars: "many" },
+        { ...old, id: "ok", github_stars: 12 },
+      ],
+    });
+    expect(cat.items.map((i) => i.github_stars)).toEqual([0, 0, 12]);
+  });
+
   test("keeps well-formed items and defaults a missing brief to empty", () => {
     const { brief: _drop, ...old } = item({ id: "old" });
     const cat = parseCatalogue({
@@ -129,6 +145,20 @@ describe("applyFilters", () => {
       item({ id: "n", type: "news", upvotes: 0, score: 9 }),
     ];
     expect(applyFilters(mixed, DEFAULT_FILTERS).map((i) => i.id)).toEqual(["n", "p"]);
+  });
+  test("trending counts the GitHub stars on a log scale: a big repo never buries many upvotes", () => {
+    const papers = [
+      item({ id: "plain", upvotes: 10, score: 5 }),
+      item({ id: "starred", upvotes: 10, score: 5, github_stars: 100 }),
+      item({ id: "voted", upvotes: 60, score: 5 }),
+      item({ id: "huge", upvotes: 10, score: 5, github_stars: 100_000 }),
+    ];
+    expect(applyFilters(papers, DEFAULT_FILTERS).map((i) => i.id)).toEqual([
+      "voted",
+      "huge",
+      "starred",
+      "plain",
+    ]);
   });
   test("sorts by date and by score", () => {
     expect(ids({ sort: "date" })).toEqual(["2", "3", "1"]);

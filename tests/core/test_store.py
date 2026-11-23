@@ -2,6 +2,7 @@ import sqlite3
 
 import pytest
 
+from veille_llm.hf import Signal
 from veille_llm.models import Enrichment, Item, Verdict
 from veille_llm.store import Store
 
@@ -123,13 +124,49 @@ def test_store_survives_reopen(tmp_path):
     assert [i.id for i, _ in second.pending_enrichment()] == ["a"]
 
 
-def test_refresh_upvotes_raises_but_never_lowers_and_keeps_status(store):
+def test_refresh_signals_keeps_the_status_of_a_classified_item(store):
     store.upsert_items([item("a", upvotes=3)], NOW)
     store.save_verdicts([verdict("a")])
-    store.refresh_upvotes({"a": 9, "ghost": 5})
-    store.refresh_upvotes({"a": 4})
+    store.refresh_signals({"a": Signal(9, 0), "ghost": Signal(5, 0)})
+    store.refresh_signals({"a": Signal(4, 0)})
     (pending, _) = store.pending_enrichment()[0]
     assert pending.upvotes == 9
+
+
+def test_refresh_signals_raises_both_but_never_lowers(store):
+    store.upsert_items([item("a", upvotes=3)], NOW)
+    store.refresh_signals({"a": Signal(9, 50), "ghost": Signal(5, 5)})
+    store.refresh_signals({"a": Signal(4, 20)})
+    (pending,) = store.pending_classification()
+    assert (pending.upvotes, pending.github_stars) == (9, 50)
+
+
+def test_published_item_carries_its_github_stars(store):
+    store.upsert_items([item("a")], NOW)
+    store.save_verdicts([verdict("a")])
+    store.save_enrichments([Enrichment("a", "Cat", "Hook.", "A brief.")])
+    store.refresh_signals({"a": Signal(2, 77)})
+    (published,) = store.published_items("2026-01-01T00:00:00Z")
+    assert published["github_stars"] == 77 and published["upvotes"] == 2
+    assert published["brief"] == "A brief." and published["score"] == 7
+
+
+def test_old_databases_get_the_github_stars_column_at_zero(tmp_path):
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(
+        "CREATE TABLE items (id TEXT PRIMARY KEY, source TEXT NOT NULL, kind TEXT NOT NULL,"
+        " title TEXT NOT NULL, summary TEXT NOT NULL, url TEXT NOT NULL, authors TEXT NOT NULL,"
+        " published TEXT NOT NULL, upvotes INTEGER NOT NULL DEFAULT 0, first_seen TEXT NOT NULL,"
+        " status TEXT NOT NULL DEFAULT 'new');"
+        "INSERT INTO items VALUES ('x','s','paper','T','S','u','[]','2026-11-20T00:00:00Z',4,"
+        "'2026-11-20T00:00:00Z','new');"
+    )
+    old.commit()
+    old.close()
+    store = Store(path)
+    (got,) = store.pending_classification()
+    assert (got.upvotes, got.github_stars) == (4, 0)
 
 
 def test_published_item_carries_its_brief(store):

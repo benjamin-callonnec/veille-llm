@@ -8,6 +8,7 @@ from dataclasses import astuple
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from veille_llm.hf import Signal
 from veille_llm.models import LEGACY, Enrichment, Item, Provenance, Verdict, content_hash
 from veille_llm.pipeline.version import outdated
 
@@ -47,7 +48,7 @@ CREATE TABLE IF NOT EXISTS newsletter (
 );
 """
 
-_ITEM_COLUMNS = "id, source, kind, title, summary, url, authors, published, upvotes"
+_ITEM_COLUMNS = "id, source, kind, title, summary, url, authors, published, upvotes, github_stars"
 
 
 def _item(row: sqlite3.Row | tuple) -> Item:
@@ -61,6 +62,7 @@ def _item(row: sqlite3.Row | tuple) -> Item:
         authors=json.loads(row[6]),
         published=row[7],
         upvotes=row[8],
+        github_stars=row[9],
     )
 
 
@@ -91,7 +93,10 @@ class Store:
         legacy = "TEXT NOT NULL DEFAULT 'legacy'"
         wanted = {
             "enrichments": [("brief", "TEXT NOT NULL DEFAULT ''")],
-            "items": [("content_hash", "TEXT NOT NULL DEFAULT ''")],
+            "items": [
+                ("content_hash", "TEXT NOT NULL DEFAULT ''"),
+                ("github_stars", "INTEGER NOT NULL DEFAULT 0"),
+            ],
         }
         for table in ("verdicts", "enrichments"):
             wanted.setdefault(table, [])
@@ -139,9 +144,10 @@ class Store:
                         status = "duplicate"
                 self._conn.execute(
                     "INSERT INTO items (id, source, kind, title, summary, url, authors, "
-                    "published, upvotes, first_seen, status, content_hash) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "
-                    "ON CONFLICT(id) DO UPDATE SET upvotes = MAX(upvotes, excluded.upvotes)",
+                    "published, upvotes, github_stars, first_seen, status, content_hash) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT(id) DO UPDATE SET upvotes = MAX(upvotes, excluded.upvotes), "
+                    "github_stars = MAX(github_stars, excluded.github_stars)",
                     (
                         i.id,
                         i.source,
@@ -152,6 +158,7 @@ class Store:
                         json.dumps(i.authors),
                         i.published,
                         i.upvotes,
+                        i.github_stars,
                         now,
                         status,
                         digest,
@@ -159,12 +166,14 @@ class Store:
                 )
         return len({i.id for i in items} - existing)
 
-    def refresh_upvotes(self, upvotes: dict[str, int]) -> None:
-        """Raise (never lower) the upvotes of known items, whatever their status."""
+    def refresh_signals(self, signals: dict[str, Signal]) -> None:
+        """Raise (never lower) the upvotes and GitHub stars of known items, any status."""
         with self._conn:
-            for item_id, votes in upvotes.items():
+            for item_id, (votes, stars) in signals.items():
                 self._conn.execute(
-                    "UPDATE items SET upvotes = MAX(upvotes, ?) WHERE id = ?", (votes, item_id)
+                    "UPDATE items SET upvotes = MAX(upvotes, ?), "
+                    "github_stars = MAX(github_stars, ?) WHERE id = ?",
+                    (votes, stars, item_id),
                 )
 
     def pending_classification(self, limit: int | None = None) -> list[Item]:
@@ -206,8 +215,8 @@ class Store:
             sql += f" LIMIT {int(limit)}"
         out = []
         for row in self._conn.execute(sql):
-            item = _item(row[:9])
-            out.append((item, Verdict(item.id, bool(row[9]), row[10], row[11], row[12])))
+            item = _item(row[:10])
+            out.append((item, Verdict(item.id, bool(row[10]), row[11], row[12], row[13])))
         return out
 
     def save_enrichments(
@@ -243,8 +252,8 @@ class Store:
         )
         out = []
         for row in rows:
-            if outdated(Provenance(row[9], row[10], row[11]), current):
-                out.append(_item(row[:9]))
+            if outdated(Provenance(row[10], row[11], row[12]), current):
+                out.append(_item(row[:10]))
                 if len(out) >= limit:
                     break
         return out
@@ -263,10 +272,10 @@ class Store:
         )
         out = []
         for row in rows:
-            if outdated(Provenance(row[16], row[17], row[18]), current):
-                item = _item(row[:9])
-                verdict = Verdict(item.id, bool(row[9]), row[10], row[11], row[12])
-                out.append((item, verdict, Enrichment(item.id, row[13], row[14], row[15])))
+            if outdated(Provenance(row[17], row[18], row[19]), current):
+                item = _item(row[:10])
+                verdict = Verdict(item.id, bool(row[10]), row[11], row[12], row[13])
+                out.append((item, verdict, Enrichment(item.id, row[14], row[15], row[16])))
                 if len(out) >= limit:
                     break
         return out
@@ -388,7 +397,7 @@ class Store:
         )
         out = []
         for row in rows:
-            item = _item(row[:9])
+            item = _item(row[:10])
             out.append(
                 {
                     "id": item.id,
@@ -399,11 +408,12 @@ class Store:
                     "authors": item.authors,
                     "published": item.published,
                     "upvotes": item.upvotes,
-                    "score": row[9],
-                    "type": row[10],
-                    "category": row[11],
-                    "hook": row[12],
-                    "brief": row[13],
+                    "github_stars": item.github_stars,
+                    "score": row[10],
+                    "type": row[11],
+                    "category": row[12],
+                    "hook": row[13],
+                    "brief": row[14],
                 }
             )
         return out

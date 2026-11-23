@@ -12,6 +12,7 @@ const item = (over: Partial<Item>): Item => ({
   authors: [],
   published: "2026-11-20T00:00:00Z",
   upvotes: 0,
+  github_stars: 0,
   score: 7,
   type: "paper",
   category: "Agents",
@@ -90,4 +91,12 @@ test("a title with markup is only ever text in the accessible name", () => {
   render(<Card item={item({ title: "<b>x</b>" })} />);
   expect(document.querySelector("b")).toBeNull();
   expect(openLink().getAttribute("aria-label")).toBe('Open "<b>x</b>" in the reader');
+});
+
+test("the card shows the GitHub stars of the linked repo, and nothing when there is none", () => {
+  render(<Card item={item({ github_stars: 162 })} />);
+  expect(screen.getByText("162 GitHub stars")).toBeTruthy();
+  cleanup();
+  render(<Card item={item({ github_stars: 0 })} />);
+  expect(screen.queryByText(/GitHub stars/)).toBeNull();
 });

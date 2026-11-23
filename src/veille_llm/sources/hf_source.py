@@ -1,4 +1,4 @@
-"""Hugging Face daily papers: upvotes are a best-effort signal, never a failure."""
+"""Hugging Face daily papers: upvotes and GitHub stars are best-effort signals, never a failure."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import time
 import urllib.request
 from collections.abc import Callable
 
-from veille_llm.hf import DAILY_PAPERS_URL, parse_upvotes
+from veille_llm.hf import DAILY_PAPERS_URL, Signal, parse_signals
 from veille_llm.models import Item
 from veille_llm.retry import retry_call
 
@@ -19,19 +19,29 @@ def _fetch() -> bytes:
         return response.read()
 
 
-def hf_upvotes(
+def hf_signals(
     fetch: Callable[[], bytes] = _fetch, sleep: Callable[[float], None] = time.sleep
-) -> dict[str, int]:
-    """arXiv id -> upvotes. Returns {} when Hugging Face is unreachable or malformed."""
+) -> dict[str, Signal]:
+    """arXiv id -> upvotes and GitHub stars; {} when Hugging Face is unreachable or malformed."""
     try:
-        return parse_upvotes(json.loads(retry_call(fetch, sleep=sleep)))
+        return parse_signals(json.loads(retry_call(fetch, sleep=sleep)))
     except Exception:  # noqa: BLE001 - the watch works without this signal
         return {}
 
 
-def with_upvotes(items: list[Item], upvotes: dict[str, int]) -> list[Item]:
+def with_signals(items: list[Item], signals: dict[str, Signal]) -> list[Item]:
     out = []
     for item in items:
-        votes = upvotes.get(item.id.removeprefix("arxiv:"), 0) if item.source == "arxiv" else 0
-        out.append(dataclasses.replace(item, upvotes=max(item.upvotes, votes)))
+        signal = (
+            signals.get(item.id.removeprefix("arxiv:"), Signal())
+            if item.source == "arxiv"
+            else Signal()
+        )
+        out.append(
+            dataclasses.replace(
+                item,
+                upvotes=max(item.upvotes, signal.upvotes),
+                github_stars=max(item.github_stars, signal.github_stars),
+            )
+        )
     return out

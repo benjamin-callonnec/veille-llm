@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from veille_llm.hf import Signal
 from veille_llm.llm import DEFAULT_MODEL, RawReply, Runner, claude_runner
 from veille_llm.pipeline.categorize import enrich_pending, refresh_stale_hooks
 from veille_llm.pipeline.classify import BATCH_SIZE, classify_pending, reclassify_stale
@@ -22,7 +23,7 @@ from veille_llm.pipeline.progress import Progress
 from veille_llm.pipeline.version import classify_provenance, hooks_provenance
 from veille_llm.sources import RSS_FEEDS, Source, SourceReport, collect_all
 from veille_llm.sources.arxiv_source import arxiv_source
-from veille_llm.sources.hf_source import hf_upvotes, with_upvotes
+from veille_llm.sources.hf_source import hf_signals, with_signals
 from veille_llm.sources.rss_source import rss_source
 from veille_llm.store import Store
 
@@ -77,7 +78,7 @@ async def run_pipeline(
     now: datetime,
     out: Path,
     runner: Runner | None = None,
-    upvotes: Callable[[], dict[str, int]] | None = None,
+    signals: Callable[[], dict[str, Signal]] | None = None,
     model: str = DEFAULT_MODEL,
     max_batches: int | None = None,
     progress: Progress | None = None,
@@ -88,7 +89,7 @@ async def run_pipeline(
     heartbeat = asyncio.create_task(progress.heartbeat(heartbeat_seconds))
     try:
         return await _run(
-            store, sources, days, now, out, runner, upvotes, model, max_batches, progress
+            store, sources, days, now, out, runner, signals, model, max_batches, progress
         )
     finally:
         heartbeat.cancel()
@@ -101,7 +102,7 @@ async def _run(
     now: datetime,
     out: Path,
     runner: Runner | None,
-    upvotes: Callable[[], dict[str, int]] | None,
+    signals: Callable[[], dict[str, Signal]] | None,
     model: str,
     max_batches: int | None,
     progress: Progress,
@@ -118,9 +119,11 @@ async def _run(
     for source in report.sources:
         state = "ok" if source.ok else f"FAILED ({source.error})"
         progress.info(f"source {source.name}: {source.count} items, {state}")
-    if upvotes is not None:
-        items = with_upvotes(items, upvotes())
-        store.refresh_upvotes({i.id: i.upvotes for i in items if i.upvotes})
+    if signals is not None:
+        items = with_signals(items, signals())
+        store.refresh_signals(
+            {i.id: Signal(i.upvotes, i.github_stars) for i in items if i.upvotes or i.github_stars}
+        )
     fresh = deterministic_filter(
         items, known_ids=store.known_ids([i.id for i in items]), now=now, days=days
     )
@@ -323,7 +326,7 @@ def main(
                 runner=runner,
                 model=args.model,
                 max_batches=args.max_batches,
-                upvotes=hf_upvotes if live else None,
+                signals=hf_signals if live else None,
                 progress=progress,
             )
         )
