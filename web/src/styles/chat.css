@@ -627,27 +627,20 @@
   width: 32px;
   height: 32px;
 }
-.composer-mic.listening {
+.icon-btn.composer-mic.listening {
   color: var(--dot-red);
   background: var(--bubble);
 }
-.composer-mic.listening::after {
-  content: "";
-  position: absolute;
-  margin: -14px 0 0 14px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--dot-red);
+.composer-mic.listening .icon {
   animation: voice-pulse 1.4s ease-in-out infinite;
 }
 @keyframes voice-pulse {
   50% {
-    opacity: 0.25;
+    opacity: 0.45;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .composer-mic.listening::after {
+  .composer-mic.listening .icon {
     animation: none;
   }
 }

@@ -5,6 +5,10 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+### Added
+- Voice (#26): dictate into the composer with a quiet microphone icon (browser speech recognition, push to talk, live phrase, editable result, asked only on click, clear message if blocked) and read answers aloud with a speaker icon, sentence by sentence while they stream, with stop and replay; citations, markdown and code are not spoken.
+- A local `/api/voice` WebSocket (loopback and same origin only, size and rate limits, no audio on disk) with an engine interface for a future local model, and a reconnecting client. Not used by the UI yet; see `docs/superpowers/specs/2026-11-23-reader-voice-design.md` for what is real and the evaluation of whisper.cpp and piper. Adds the `websockets` library to the reader dependencies.
+
 ## [0.12.0] - 2026-11-23
 
 ### Added
