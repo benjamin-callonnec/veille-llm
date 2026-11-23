@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { timeAgo } from "../../lib/time";
 import { stripQuizMarker } from "../lib/quiz";
+import { ReadAloudButton } from "../voice/ReadAloudButton";
+import { defaultSynth } from "../voice/useReadAloud";
 import { CopyButton } from "./CopyButton";
 import { type Citation, toCitations } from "./events";
 import { Markdown } from "./Markdown";
@@ -45,10 +47,11 @@ function Body(p: BodyProps) {
           </p>
         )}
       </div>
-      {p.actions && (
+      {(p.actions || (p.answer && defaultSynth())) && (
         <div className="msg-actions">
-          <CopyButton text={p.actions.text} />
-          {p.actions.time && <span className="msg-time">{p.actions.time}</span>}
+          {p.actions && <CopyButton text={p.actions.text} />}
+          {p.answer && <ReadAloudButton text={p.answer} streaming={p.working} />}
+          {p.actions?.time && <span className="msg-time">{p.actions.time}</span>}
         </div>
       )}
     </div>

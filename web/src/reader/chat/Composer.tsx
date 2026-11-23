@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconButton } from "../../components/Icon";
 import { nextPlaceholder, placeholders } from "../lib/placeholders";
+import { browserStt, type SttEngine } from "../voice/stt";
+import { joinText, useDictation } from "../voice/useDictation";
 import { imagesOf, pickImages } from "./attachments";
 import { loadDraft, saveDraft } from "./drafts";
 
@@ -18,6 +20,8 @@ interface Props {
   tabFill?: string;
   /** Whether there is something typed (the suggestions fold away then). */
   onDirty?(dirty: boolean): void;
+  /** The dictation engine; by default the browser's, absent where it is not supported. */
+  speech?: SttEngine | null;
 }
 
 interface Attached {
@@ -39,6 +43,7 @@ export function Composer({
   fill = null,
   tabFill,
   onDirty,
+  speech,
 }: Props) {
   const [text, setText] = useState(() => loadDraft(draftKey));
   const [images, setImages] = useState<Attached[]>([]);
@@ -51,7 +56,23 @@ export function Composer({
   const imagesRef = useRef<Attached[]>([]);
   imagesRef.current = images;
 
-  const ready = text.trim().length > 0 || images.length > 0;
+  const textRef = useRef(text);
+  textRef.current = text;
+  const [browser] = useState(() => (speech === undefined ? browserStt() : null));
+  const engine = speech === undefined ? browser : speech;
+  const dictation = useDictation(
+    engine,
+    (words) => {
+      const next = joinText(textRef.current, words);
+      textRef.current = next;
+      setText(next);
+      saveDraft(draftKey, next);
+    },
+    setNotice,
+  );
+  const shown = joinText(text, dictation.interim);
+
+  const ready = shown.trim().length > 0 || images.length > 0;
 
   useEffect(() => {
     if (shownKey.current === draftKey) return;
@@ -122,7 +143,7 @@ export function Composer({
   };
 
   const submit = () => {
-    const value = text.trim();
+    const value = shown.trim();
     if ((!value && images.length === 0) || streaming) return;
     if (images.length) {
       onSend(
@@ -130,6 +151,7 @@ export function Composer({
         images.map((i) => i.file),
       );
     } else onSend(value);
+    dictation.abandon();
     for (const i of images) URL.revokeObjectURL(i.url);
     setImages([]);
     setNotice(null);
@@ -177,8 +199,11 @@ export function Composer({
             aria-label="Message"
             placeholder={streaming ? "Answering…" : (tabFill ?? "Ask about the paper…")}
             rows={1}
-            value={text}
-            onChange={(e) => edit(e.target.value)}
+            value={shown}
+            onChange={(e) => {
+              dictation.abandon();
+              edit(e.target.value);
+            }}
             onPaste={(e) => {
               const files = imagesOf(e.clipboardData);
               // pasted text always wins: a copied table also carries a picture of itself
@@ -213,6 +238,16 @@ export function Composer({
             <kbd className="composer-key" title="Press Tab to use this suggestion">
               Tab
             </kbd>
+          )}
+          {engine && !streaming && (
+            <IconButton
+              icon="mic"
+              label={dictation.listening ? "Stop dictation" : "Dictate"}
+              className={dictation.listening ? "composer-mic listening" : "composer-mic"}
+              pressed={dictation.listening}
+              size={18}
+              onClick={dictation.toggle}
+            />
           )}
           {streaming ? (
             <IconButton
