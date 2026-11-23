@@ -363,7 +363,7 @@ test("a live answer uses the citations event of the stream", async () => {
 });
 
 test("Tab on an empty composer fills it with the suggested prompt, and Enter sends it", async () => {
-  const props = composer({ tabFill: "Why divide by the square root of d_k?" });
+  const props = composer({ recommendations: ["Why divide by the square root of d_k?"] });
   box().focus();
   await userEvent.tab();
   expect((box() as HTMLTextAreaElement).value).toBe("Why divide by the square root of d_k?");
@@ -373,7 +373,7 @@ test("Tab on an empty composer fills it with the suggested prompt, and Enter sen
 });
 
 test("Tab selects the first [placeholder] of a suggestion it fills", async () => {
-  composer({ tabFill: "Explain the intuition behind [equation]" });
+  composer({ recommendations: ["Explain the intuition behind [equation]"] });
   box().focus();
   await userEvent.tab();
   const area = box() as HTMLTextAreaElement;
@@ -381,7 +381,7 @@ test("Tab selects the first [placeholder] of a suggestion it fills", async () =>
 });
 
 test("Tab does nothing special once something is typed", async () => {
-  composer({ tabFill: "A suggestion" });
+  composer({ recommendations: ["A suggestion"] });
   await userEvent.type(box(), "my own");
   await userEvent.tab();
   expect((box() as HTMLTextAreaElement).value).toBe("my own");

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { type Available, hintAt } from "../lib/hints";
+import { FIRST_HINT, idleHint, recoAt } from "../lib/hints";
+import type { Available } from "../lib/tips";
 
 export const HINT_INTERVAL_MS = 6000;
 export const HINT_FADE_MS = 200;
@@ -9,15 +10,31 @@ const reducedMotion = () =>
   window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
 
 /**
- * The placeholder of the empty composer. It changes slowly, with a short fade, only while it is
- * `enabled` (nothing typed, no answer running); with reduced motion it stays on the first hint.
+ * The placeholder of the empty composer: the recommended next questions when the tutor has some
+ * (they take turns, Tab fills the one shown), otherwise the invitation and the tips. It changes
+ * slowly, with a short fade, only while `enabled` (nothing typed, no answer running); a single
+ * recommendation, or reduced motion, keeps it still.
  */
-export function useHint(enabled: boolean, have: Available): { text: string; fading: boolean } {
+export function useHint(
+  enabled: boolean,
+  have: Available,
+  recommendations: string[],
+): { text: string; reco: string | null; fading: boolean } {
   const [n, setN] = useState(0);
   const [fading, setFading] = useState(false);
   const reduce = reducedMotion();
+  const key = recommendations.join("\u0001");
+
+  // other recommendations start again from the first one
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` stands for the list
   useEffect(() => {
-    if (!enabled || reduce) return;
+    setN(0);
+    setFading(false);
+  }, [key]);
+
+  const rotates = enabled && !reduce && recommendations.length !== 1;
+  useEffect(() => {
+    if (!rotates) return;
     let fade: ReturnType<typeof setTimeout> | undefined;
     const every = setInterval(() => {
       setFading(true);
@@ -30,6 +47,13 @@ export function useHint(enabled: boolean, have: Available): { text: string; fadi
       clearInterval(every);
       clearTimeout(fade);
     };
-  }, [enabled, reduce]);
-  return { text: hintAt(n, have), fading: enabled && fading };
+  }, [rotates]);
+
+  const reco = recoAt(n, recommendations);
+  const index = reduce ? 0 : n;
+  return {
+    text: reco ?? (reduce ? FIRST_HINT : idleHint(index, have)),
+    reco,
+    fading: rotates && fading,
+  };
 }

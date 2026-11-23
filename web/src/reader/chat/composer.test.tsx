@@ -410,7 +410,7 @@ test("Enter on an exact skill name sends it at once", async () => {
 // --- the rotating placeholder ----------------------------------------------------------------
 
 import { act } from "@testing-library/react";
-import { FIRST_HINT, hintAt } from "../lib/hints";
+import { FIRST_HINT, idleHint } from "../lib/hints";
 import { HINT_FADE_MS, HINT_INTERVAL_MS } from "./useHint";
 
 const placeholder = () => box().getAttribute("placeholder");
@@ -418,6 +418,7 @@ const tick = (ms: number) =>
   act(() => {
     vi.advanceTimersByTime(ms);
   });
+const next = () => tick(HINT_INTERVAL_MS + HINT_FADE_MS);
 const stubMotion = (reduce: boolean) =>
   vi.stubGlobal("matchMedia", (query: string) => ({
     matches: reduce && query.includes("reduce"),
@@ -425,28 +426,71 @@ const stubMotion = (reduce: boolean) =>
     addEventListener() {},
     removeEventListener() {},
   }));
+const have = { skills: true, reports: false, dictation: false };
 
-test("the placeholder opens on the plain invitation and then rotates", () => {
+test("with no recommendation the composer opens on the invitation, then shows the tips", () => {
   vi.useFakeTimers();
   stubMotion(false);
-  setup({ skills: SKILLS });
+  setup({ skills: SKILLS, speech: null });
   expect(placeholder()).toBe(FIRST_HINT);
-  tick(HINT_INTERVAL_MS + HINT_FADE_MS);
-  expect(placeholder()).toBe(hintAt(1, { skills: true, reports: false }));
+  next();
+  expect(placeholder()).toBe(idleHint(1, have));
   expect(placeholder()).not.toBe(FIRST_HINT);
   vi.useRealTimers();
 });
 
-test("a tip shows up as every fourth hint, and only for what exists", () => {
+test("a recommendation replaces the tips: they rotate between the recommendations only", () => {
   vi.useFakeTimers();
   stubMotion(false);
-  setup({ skills: SKILLS, hasReports: true });
-  const seen: string[] = [];
-  for (let i = 0; i < 4; i++) {
-    tick(HINT_INTERVAL_MS + HINT_FADE_MS);
-    seen.push(placeholder() ?? "");
+  setup({ recommendations: ["Why does it work?", "What are the limits?"], skills: SKILLS });
+  const seen = [placeholder()];
+  for (let i = 0; i < 3; i++) {
+    next();
+    seen.push(placeholder());
   }
-  expect(seen[2]).toBe(hintAt(3, { skills: true, reports: true })); // the fourth hint overall
+  expect(seen).toEqual([
+    "Why does it work?",
+    "What are the limits?",
+    "Why does it work?",
+    "What are the limits?",
+  ]);
+  vi.useRealTimers();
+});
+
+test("Tab fills the recommendation that is shown, and the Tab key badge is only there for one", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  stubMotion(false);
+  const { view, props } = setup({ recommendations: ["First?", "Second?"] });
+  expect(screen.getByText("Tab")).toBeTruthy();
+  next();
+  expect(placeholder()).toBe("Second?");
+  box().focus();
+  await userEvent.keyboard("{Tab}");
+  expect(box().value).toBe("Second?");
+  view.rerender(<Composer {...props} recommendations={[]} />);
+  fireEvent.change(box(), { target: { value: "" } });
+  expect(screen.queryByText("Tab")).toBeNull();
+  vi.useRealTimers();
+});
+
+test("a single recommendation stays: nothing rotates", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  setup({ recommendations: ["Only one?"] });
+  expect(vi.getTimerCount()).toBe(0);
+  tick(3 * (HINT_INTERVAL_MS + HINT_FADE_MS));
+  expect(placeholder()).toBe("Only one?");
+  vi.useRealTimers();
+});
+
+test("new recommendations start again from the first one", () => {
+  vi.useFakeTimers();
+  stubMotion(false);
+  const { view, props } = setup({ recommendations: ["A?", "B?"] });
+  next();
+  expect(placeholder()).toBe("B?");
+  view.rerender(<Composer {...props} recommendations={["C?", "D?"]} />);
+  expect(placeholder()).toBe("C?");
   vi.useRealTimers();
 });
 
@@ -469,13 +513,18 @@ test("nothing rotates while you type, while it answers, or with reduced motion",
   vi.useRealTimers();
 });
 
-test("the suggestion of the agent wins over the rotation", () => {
+test("tips about reports and dictation show only when they exist", () => {
   vi.useFakeTimers();
   stubMotion(false);
-  setup({ tabFill: "Why does it work?" });
-  tick(3 * (HINT_INTERVAL_MS + HINT_FADE_MS));
-  expect(placeholder()).toBe("Why does it work?");
-  expect(vi.getTimerCount()).toBe(0);
+  setup({ hasReports: true, speech: null });
+  const seen: string[] = [];
+  for (let i = 0; i < 15; i++) {
+    next();
+    seen.push(placeholder() ?? "");
+  }
+  expect(seen.some((t) => t.includes("reports"))).toBe(true);
+  expect(seen.some((t) => t.includes("microphone"))).toBe(false); // no speech engine here
+  expect(seen.some((t) => t.includes("Type / for commands"))).toBe(false); // no skills here
   vi.useRealTimers();
 });
 

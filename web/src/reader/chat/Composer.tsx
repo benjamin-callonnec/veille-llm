@@ -20,8 +20,11 @@ interface Props {
   draftKey?: string;
   /** Put this text in the composer (a new `n` each time); a `[placeholder]` is selected. */
   fill?: { text: string; n: number } | null;
-  /** The first suggested prompt: Tab on an empty composer fills it in (then Enter sends). */
-  tabFill?: string;
+  /**
+   * The next questions the tutor recommends: they take turns as the placeholder, Tab on an empty
+   * composer fills in the one shown (then Enter sends). Without any, the placeholder shows tips.
+   */
+  recommendations?: string[];
   /** Whether there is something typed (the suggestions fold away then). */
   onDirty?(dirty: boolean): void;
   /** The dictation engine; by default the browser's, absent where it is not supported. */
@@ -31,6 +34,8 @@ interface Props {
   /** There is a report to open: the tips may say so. */
   hasReports?: boolean;
 }
+
+const NO_RECOMMENDATIONS: string[] = [];
 
 interface Attached {
   file: File;
@@ -49,7 +54,7 @@ export function Composer({
   model,
   draftKey = "new",
   fill = null,
-  tabFill,
+  recommendations = NO_RECOMMENDATIONS,
   onDirty,
   speech,
   skills = [],
@@ -88,10 +93,11 @@ export function Composer({
 
   const ready = shown.trim().length > 0 || images.length > 0;
 
-  const hint = useHint(!streaming && !tabFill && !ready, {
-    skills: skills.length > 0,
-    reports: hasReports,
-  });
+  const hint = useHint(
+    !streaming && !ready,
+    { skills: skills.length > 0, reports: hasReports, dictation: Boolean(engine) },
+    recommendations,
+  );
   const query = slashQuery(shown);
   const matches = query === null ? [] : skills.filter((s) => s.name.startsWith(query));
   const menuOpen = matches.length > 0 && !menuClosed;
@@ -231,7 +237,7 @@ export function Composer({
           <textarea
             ref={area}
             aria-label="Message"
-            placeholder={streaming ? "Answering…" : (tabFill ?? hint.text)}
+            placeholder={streaming ? "Answering…" : hint.text}
             className={hint.fading ? "hint-fading" : undefined}
             rows={1}
             value={shown}
@@ -273,12 +279,12 @@ export function Composer({
               } else if (
                 e.key === "Tab" &&
                 !e.shiftKey &&
-                tabFill &&
+                hint.reco &&
                 !text &&
                 images.length === 0
               ) {
                 e.preventDefault();
-                put(tabFill);
+                put(hint.reco);
               } else if (e.key === "Tab" && guided) {
                 const el = e.currentTarget;
                 const next = nextPlaceholder(text, el.selectionStart, el.selectionEnd, e.shiftKey);
@@ -289,7 +295,7 @@ export function Composer({
               }
             }}
           />
-          {tabFill && !text && !streaming && images.length === 0 && (
+          {hint.reco && !text && !streaming && images.length === 0 && (
             <kbd className="composer-key" title="Press Tab to use this suggestion">
               Tab
             </kbd>
