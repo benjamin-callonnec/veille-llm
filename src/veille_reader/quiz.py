@@ -394,7 +394,7 @@ async def create_quiz(
     pages, outline = paper.pages, paper.outline  # type: ignore[attr-defined]
     if not any(p.strip() for p in pages):
         raise QuizError("the paper has no text to ask about")
-    avoid = [h["question"] for h in store.quiz_history(item_id)[:10]]
+    avoid = store.quiz_questions(item_id, 10)
     request = QuizRequest(item, pages, kind, focus[:MAX_FOCUS], list(recent or []), avoid)
     failure = "the quiz could not be made"
     for _ in range(ATTEMPTS):

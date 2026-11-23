@@ -547,6 +547,13 @@ class ReaderStore:
             return False
         return True
 
+    def quiz_questions(self, item_id: str, limit: int = 10) -> list[str]:
+        """The questions of the latest quizzes of a paper, answered or not, newest first."""
+        rows = self._con.execute(
+            "SELECT spec FROM quizzes WHERE item_id = ? ORDER BY id DESC LIMIT ?", (item_id, limit)
+        ).fetchall()
+        return [json.loads(r[0])["question"] for r in rows]
+
     def quiz_history(self, item_id: str) -> list[dict]:
         """Answered quizzes of a paper, newest first (question and verdict, never the key)."""
         rows = self._con.execute(

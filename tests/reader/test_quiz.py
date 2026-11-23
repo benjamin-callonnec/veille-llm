@@ -254,6 +254,21 @@ def test_the_questions_already_asked_are_given_to_the_maker(store, paper):
     assert maker.requests[1].avoid == [GOOD["question"]]
 
 
+def test_unanswered_quizzes_are_avoided_too_newest_first_and_capped(store, paper):
+    import asyncio
+
+    maker = Maker(GOOD, FREE, GOOD, GOOD)
+    cid, _ = make(store, maker, paper)  # a first quiz, left unanswered
+    asyncio.run(create_quiz(store, maker, "a1", ITEMS[0], cid, paper, "free"))
+    asyncio.run(create_quiz(store, maker, "a1", ITEMS[0], cid, paper))
+    assert maker.requests[1].avoid == [GOOD["question"]]
+    assert maker.requests[2].avoid == [FREE["question"], GOOD["question"]]
+    for _ in range(12):
+        store.add_quiz("a1", cid, {**GOOD, "question": f"Q{_}?"})
+    asyncio.run(create_quiz(store, maker, "a1", ITEMS[0], cid, paper))
+    assert len(maker.requests[3].avoid) == 10 and maker.requests[3].avoid[0] == "Q11?"
+
+
 def test_a_choice_answer_scores_and_a_miss_writes_a_weak_point_note(store, paper):
     import asyncio
 
