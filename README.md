@@ -158,6 +158,9 @@ their own speech service, so it is not local; nothing is recorded by the reader.
 2. Settings > Pages > Source: **GitHub Actions**.
 3. `.github/workflows/daily.yml` runs every day at 06:00 UTC (or by hand): pipeline, then build of `web/` and deploy.
 
+GitHub's own crons start hours late, so a Cloudflare Worker (`scheduler/`, crons and state in `iac/`)
+dispatches `daily.yml` and `weekly.yml` on time. One-time setup, tokens and rotation: `setup/README.md`.
+
 ## Known limits
 
 - The catalogue keeps the items of the last 30 days exported by the pipeline.
