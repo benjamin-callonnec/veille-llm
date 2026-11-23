@@ -97,7 +97,7 @@ def test_make_reader_rebuilds_the_static_front_so_port_8765_is_never_stale():
     servers = recipe.index("kill 0")
     assert build < servers  # built first, then both servers start
     assert "$(READER_FRONT_URL)" in recipe  # and it says where to go
-    assert "READER_FRONT_URL ?= http://127.0.0.1:5173" in makefile
+    assert "READER_FRONT_URL ?= http://127.0.0.1:$(FRONT_PORT)" in makefile
 
 
 def test_make_reader_sends_the_pages_to_the_hot_reload_server():
