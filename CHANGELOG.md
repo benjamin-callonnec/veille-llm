@@ -5,6 +5,12 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-11-23
+
+### Fixed
+- Reader (#30): a figure or table found late (the first look at the structure of a paper takes about a second) no longer overrides what you did meanwhile: another citation, a highlight, the page field, a scroll to another page or another paper.
+- Reader (#30): a stored structure that is not valid JSON or does not fit is extracted again and replaced, instead of ending in a server error.
+
 ## [0.14.0] - 2026-11-23
 
 ### Added
