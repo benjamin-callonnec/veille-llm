@@ -257,7 +257,20 @@ export function ReaderPage({
       )}
       <PaneLayout
         pdf={pdfPane}
-        chat={<ChatPane chat={chat} onGo={goToRects} onCite={cite} model={model} itemId={itemId} />}
+        chat={
+          <ChatPane
+            chat={chat}
+            onGo={goToRects}
+            onCite={cite}
+            model={model}
+            itemId={itemId}
+            viewer={{
+              available: reports.length > 0,
+              open: viewerOpen,
+              onToggle: () => setViewerOpen((open) => !open),
+            }}
+          />
+        }
       />
       {viewerOpen && (
         <FileViewer

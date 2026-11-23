@@ -204,3 +204,42 @@ test("a slow older load never overwrites a newer one", async () => {
   expect(screen.getByText("knows RNNs")).toBeTruthy();
   expect(screen.queryByText("wants proofs")).toBeNull();
 });
+
+test("the reports icon is there only when there is a report, and toggles the viewer", async () => {
+  const onToggle = vi.fn();
+  const { rerender } = render(
+    <SessionTools
+      itemId="a1"
+      conversation={1}
+      version={0}
+      api={api()}
+      viewer={{ available: false, open: false, onToggle }}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Reports (V)" })).toBeNull();
+  rerender(
+    <SessionTools
+      itemId="a1"
+      conversation={1}
+      version={0}
+      api={api()}
+      viewer={{ available: true, open: false, onToggle }}
+    />,
+  );
+  const button = screen.getByRole("button", { name: "Reports (V)" });
+  expect(button.getAttribute("aria-pressed")).toBe("false");
+  await userEvent.click(button);
+  expect(onToggle).toHaveBeenCalledTimes(1);
+  rerender(
+    <SessionTools
+      itemId="a1"
+      conversation={1}
+      version={0}
+      api={api()}
+      viewer={{ available: true, open: true, onToggle }}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "Reports (V)" }).getAttribute("aria-pressed")).toBe(
+    "true",
+  );
+});

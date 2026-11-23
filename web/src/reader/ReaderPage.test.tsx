@@ -626,3 +626,29 @@ test("the viewer opens by itself when the tutor saved a report", async () => {
   expect(await screen.findByRole("region", { name: "Viewer" })).toBeTruthy();
   expect(await screen.findByText("Deck")).toBeTruthy();
 });
+
+test("a closed viewer comes back with the reports icon of the chat", async () => {
+  const meta: ReportMeta = { id: 7, title: "Deck", version: 1, updated_at: "" };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: 7, title: "Deck", version: 1, versions: [], html: "<p>x</p>" }),
+    })),
+  );
+  setup({ reports: async () => [meta] });
+  await screen.findByText("Text of page 1");
+  const icon = await screen.findByRole("button", { name: "Reports (V)" });
+  await userEvent.click(icon);
+  expect(screen.getByRole("region", { name: "Viewer" })).toBeTruthy();
+  await userEvent.keyboard("{Escape}");
+  expect(screen.queryByRole("region", { name: "Viewer" })).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "Reports (V)" }));
+  expect(screen.getByRole("region", { name: "Viewer" })).toBeTruthy();
+});
+
+test("with no report there is no reports icon", async () => {
+  setup();
+  await screen.findByText("Text of page 1");
+  expect(screen.queryByRole("button", { name: "Reports (V)" })).toBeNull();
+});
