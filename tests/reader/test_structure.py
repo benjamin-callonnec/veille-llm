@@ -168,3 +168,13 @@ def test_outline_sections_take_their_level_from_their_numbering(tmp_path):
         outline=[("1 Intro", 1), ("1.1 Setup", 1), ("Related work", 1)],
     )
     assert [s.level for s in extract_structure(pdf).sections] == [1, 2, 1]
+
+
+@pytest.mark.parametrize("error", [AssertionError("odd"), IndexError("odd"), ZeroDivisionError()])
+def test_whatever_pdfminer_raises_is_an_unreadable_pdf(tmp_path, monkeypatch, error):
+    def broken(*_args, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(structure, "extract_pages", broken)
+    with pytest.raises(PaperError):
+        extract_pages_structure(write(tmp_path, ["Hello"]))

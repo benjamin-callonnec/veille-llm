@@ -13,8 +13,6 @@ from statistics import median
 
 from pdfminer.high_level import extract_pages
 from pdfminer.layout import LTChar, LTTextContainer, LTTextLine
-from pdfminer.pdftypes import PDFException
-from pdfminer.psexceptions import PSException
 
 from veille_reader.citations import normalise
 from veille_reader.paper import MAX_PAGES, PaperError, extract_outline
@@ -164,7 +162,7 @@ def extract_pages_structure(pdf_path: Path) -> list[PageStructure]:
                 blocks.append(Block(text, (x, y, w, h), float(median(sizes))))
             pages.append(PageStructure(float(width), float(height), blocks))
         return pages
-    except (PDFException, PSException, OSError, ValueError, KeyError, TypeError, RecursionError):
+    except Exception:  # noqa: BLE001 - pdfminer raises many kinds on odd PDFs: all mean unreadable
         raise PaperError("cannot read the PDF structure") from None
 
 
