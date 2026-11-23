@@ -11,6 +11,9 @@ section du changelog en description. Il ne fait rien si la release de cette vers
 
 ## Étapes (sur `develop`, avant le merge)
 
+0. **Code review avant toute release** : lance le skill `code-review` sur ce qui part (la branche
+   `develop` depuis le dernier tag). Corrige les problèmes critiques et importants (test d'abord) avant
+   de continuer ; note les mineurs reportés dans ta réponse. Pas de bump tant que la review n'est pas faite.
 1. Dernier tag : `git describe --tags --abbrev=0` (sinon la version courante de `pyproject.toml`).
    Commits depuis : `git log <tag>..develop --oneline --no-merges`.
 2. Niveau de bump, d'après les types de commit :
@@ -39,5 +42,18 @@ Un test échoue tant que ce n'est pas décidé :
 - `... bump major` : les résultats changent beaucoup.
 Un changement de modèle ou de prompt invalide de toute façon (hash enregistré avec chaque résultat).
 Propose le niveau d'après les commits qui touchent `RESULT_FILES`, puis note-le dans le changelog.
+
+## Après chaque push de `main`
+
+Une fois que l'auteur a poussé (le workflow `release` crée le tag et la release, vérifie-le), mets les
+issues à jour avec le compte personnel (skill `github-workflow`) :
+
+- ferme chaque issue entièrement livrée, avec un commentaire court : version (`vX.Y.Z`), ce qui est fait,
+  ce qui reste hors périmètre (renvoyé vers une autre issue si besoin) ;
+- commente les issues partiellement livrées ou débloquées par cette version ;
+- coche les cases des tâches terminées dans le corps des issues restantes ;
+- crée les issues de suite décidées pendant le travail.
+
+Repo public : jamais d'adresse, de secret ni de valeur de `SUBSCRIBERS` dans ces textes.
 
 Ne crée jamais le tag à la main : c'est le workflow qui le fait.
