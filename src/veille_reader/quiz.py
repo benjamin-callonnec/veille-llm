@@ -294,7 +294,7 @@ def validate_quiz(raw: object, pages: list[str], outline: list[tuple[str, int]])
     if verdict["status"] not in ("verified", "wrong_page"):
         raise QuizError("the quote is not in the paper")
     spec["page"] = int(verdict.get("found_page") or page)
-    spec["quote"] = quote
+    spec["quote"] = verdict["quote"]  # without the entities of the model's escaped view
     spec["section"] = verdict.get("section")
     return spec
 

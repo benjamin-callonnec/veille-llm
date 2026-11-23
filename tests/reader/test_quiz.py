@@ -71,6 +71,13 @@ def test_a_good_quiz_is_validated_and_grounded():
     assert validate_quiz(FREE, PAGES, OUTLINE)["reference"].startswith("Each head")
 
 
+def test_a_quiz_quote_with_html_entities_is_checked_and_stored_unescaped():
+    pages = ["Intro\nWe show that a & b < c holds for every input."]
+    raw = {**GOOD, "page": 1, "quote": "that a &amp; b &lt; c holds for every"}
+    spec = validate_quiz(raw, pages, [])
+    assert spec["quote"] == "that a & b < c holds for every"
+
+
 def test_a_quote_on_another_page_moves_the_quiz_to_that_page():
     assert check(page=1)["page"] == 2
 
