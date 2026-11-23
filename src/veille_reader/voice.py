@@ -9,6 +9,7 @@ see docs/superpowers/specs/2026-11-23-reader-voice-design.md. `EchoEngine` is a 
 
 import asyncio
 import json
+import logging
 import time
 from collections import deque
 from collections.abc import Callable, Iterator
@@ -17,6 +18,8 @@ from typing import Protocol
 
 from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
+
+log = logging.getLogger(__name__)
 
 PROTOCOL = 1
 MAX_TEXT_FRAME = 8192  # bytes of one JSON control frame
@@ -107,6 +110,7 @@ class VoiceSession:
         self._stt: SttSession | None = None
         self._received = 0
         self._limit = 0
+        self._overflowed = False  # an utterance went over the limit: drop its audio quietly
 
     def hello(self) -> dict:
         has = self.engine is not None
@@ -163,11 +167,13 @@ class VoiceSession:
         if not isinstance(rate, int) or not MIN_RATE <= rate <= MAX_RATE:
             raise VoiceError("bad_rate", f"rate must be between {MIN_RATE} and {MAX_RATE}.")
         self._stt = engine.start_stt(rate)
+        self._overflowed = False
         self._received = 0
         self._limit = rate * 2 * MAX_UTTERANCE_SECONDS
         return [{"type": "ready"}]
 
     def _stop(self) -> list[Out]:
+        self._overflowed = False
         if self._stt is None:
             raise VoiceError("not_listening", "Not listening.")
         stt, self._stt = self._stt, None
@@ -187,10 +193,13 @@ class VoiceSession:
         if len(chunk) > MAX_AUDIO_FRAME:
             raise VoiceError("frame_too_large", "Audio frame too large.", fatal=True)
         if self._stt is None:
+            if self._overflowed:
+                return []  # the error was sent once; the rest of that utterance is ignored
             raise VoiceError("not_listening", "Start listening before sending audio.")
         self._received += len(chunk)
         if self._received > self._limit:
             self._stt = None
+            self._overflowed = True
             raise VoiceError("utterance_too_long", "That utterance is too long.")
         partial = self._stt.feed(chunk)
         return [{"type": "partial", "text": partial}] if partial is not None else []
@@ -201,6 +210,7 @@ class VoiceSession:
     def close(self) -> None:
         """Drop any audio held for an utterance that never ended."""
         self._stt = None
+        self._overflowed = False
 
 
 async def serve(ws: WebSocket, engine: VoiceEngine | None) -> None:
@@ -217,16 +227,29 @@ async def serve(ws: WebSocket, engine: VoiceEngine | None) -> None:
                 await ws.send_text(json.dumps(frame))
 
     async def speak(item: Speak) -> None:
+        me = asyncio.current_task()
         try:
             await send({"type": "audio_start", "id": item.id, "format": "pcm16", "rate": OUT_RATE})
-            for chunk in session.synthesize(item.text):
+            chunks = iter(session.synthesize(item.text))
+            while (chunk := await asyncio.to_thread(next, chunks, None)) is not None:
                 await send(chunk)
-                await asyncio.sleep(0)  # a cancel can come in between two chunks
             await send({"type": "audio_end", "id": item.id})
         except VoiceError as exc:
-            await send(exc.frame())
+            await _try_send(exc.frame())
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # an engine crash or a closed socket must not become a lost task error
+            log.warning("speech %s failed", item.id, exc_info=True)
+            await _try_send(VoiceError("synthesis_failed", "The voice engine failed.").frame())
         finally:
-            speaking.pop(item.id, None)
+            if speaking.get(item.id) is me:  # a replacement may already own this id
+                del speaking[item.id]
+
+    async def _try_send(frame: dict) -> None:
+        try:
+            await send(frame)
+        except Exception:  # the client is gone: nothing left to tell
+            pass
 
     async def run(outs: list[Out]) -> None:
         for out in outs:

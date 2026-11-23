@@ -37,3 +37,14 @@ def test_subs_add_and_remove_explain_the_email_variable_when_it_is_missing():
         )  # fmt: skip
         assert result.returncode != 0
         assert f"usage: make {target} EMAIL=" in result.stdout + result.stderr
+
+
+def test_reader_ports_are_variables_shared_by_the_check_and_the_commands():
+    text = (ROOT / "Makefile").read_text()
+    assert "READER_PORT ?= 8765" in text
+    assert "FRONT_PORT ?= 5173" in text
+    assert "READER_FRONT_URL ?= http://127.0.0.1:$(FRONT_PORT)" in text
+    recipe = _recipe("reader")
+    assert "for port in $(READER_PORT) $(FRONT_PORT)" in recipe
+    assert "--port $(FRONT_PORT)" in recipe
+    assert "8765" not in recipe and "5173" not in recipe
