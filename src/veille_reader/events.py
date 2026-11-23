@@ -30,8 +30,10 @@ def done(duration_ms: int, usage: dict | None = None) -> dict:
     return event
 
 
-def error(kind: str, message: str, usage: dict | None = None) -> dict:
+def error(kind: str, message: str, usage: dict | None = None, raisable: bool = False) -> dict:
     event = {"type": "error", "kind": kind, "message": message}
+    if raisable:
+        event["raisable"] = True  # the conversation budget can be raised once, from the chat
     if usage:
         event["usage"] = usage  # an answer that fails or hits a limit still cost something
     return event

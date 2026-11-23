@@ -355,22 +355,28 @@ class ReaderStore:
         ]
 
     def replace_last_assistant(self, conversation_id: int) -> None:
-        """Drop the last answer (regenerate) and the quiz cards and notices that follow it."""
+        """Drop the last answer (regenerate), the quiz cards and notices that follow it, and the
+        question cards and note lines it produced (stored just before it)."""
         with self._con:
             rows = self._con.execute(
                 "SELECT id, role, kind FROM messages WHERE conversation_id = ? ORDER BY seq DESC",
                 (conversation_id,),
             ).fetchall()
-            trailing = []
+            doomed: list[int] = []
+            found = False
             for message_id, role, kind in rows:
-                trailing.append(message_id)
-                if role == "assistant":
-                    self._con.executemany(
-                        "DELETE FROM messages WHERE id = ?", [(i,) for i in trailing]
-                    )
-                    return
-                if not (role == "system" and kind in ("quiz", "notice")):
-                    return
+                if not found:
+                    doomed.append(message_id)
+                    if role == "assistant":
+                        found = True
+                    elif not (role == "system" and kind in ("quiz", "notice")):
+                        return
+                elif role == "system" and kind in ("ask", "memory"):
+                    doomed.append(message_id)
+                else:
+                    break
+            if found:
+                self._con.executemany("DELETE FROM messages WHERE id = ?", [(i,) for i in doomed])
 
     def export_markdown(self, item_id: str, conversation_id: int) -> str | None:
         conversation = self.conversation(item_id, conversation_id)

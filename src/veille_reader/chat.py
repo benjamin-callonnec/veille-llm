@@ -79,8 +79,26 @@ class _Answer:
             self.usage = event.get("usage")
         elif kind == "error":
             self.error = {"kind": event["kind"], "message": event["message"]}
+            if event.get("raisable"):
+                self.error["raisable"] = True
             if event.get("usage"):
                 self.usage = event["usage"]
+
+    def memory_line(self, event: dict) -> dict | None:
+        """The note the tutor just saved or deleted, to show as a quiet line (never hidden)."""
+        if event.get("type") != "tool_result" or event.get("is_error"):
+            return None
+        block = next(
+            (b for b in self.blocks if b["type"] == "tool" and b["id"] == event["id"]), None
+        )
+        if block is None or block["name"] != "session_memory":
+            return None
+        action = block["input"].get("action")
+        if action == "write":
+            return {"action": "saved", "text": str(block["input"].get("text", ""))[:500]}
+        if action == "delete":
+            return {"action": "deleted", "text": ""}
+        return None
 
     def content(self, stopped: bool) -> dict:
         duration = self.duration_ms
@@ -153,11 +171,27 @@ def check_citations(tools: object, text: str) -> list[dict]:
         return []
 
 
-def _refusal_runner(message: str) -> AgentRunner:
+def _refusal_runner(message: str, raisable: bool) -> AgentRunner:
     async def runner(request: RunRequest) -> AsyncIterator[dict]:
-        yield events.error("budget", message)  # not the subscription limit
+        yield events.error("budget", message, raisable=raisable)  # not the subscription limit
 
     return runner
+
+
+def _forget_refused_repeat(store: ReaderStore, cid: int, content: dict) -> None:
+    """Asking again the question that was just refused (budget) replaces it."""
+    messages = store.messages(cid)
+    if len(messages) < 2:
+        return
+    question, refusal = messages[-2], messages[-1]
+    if (
+        question["role"] == "user"
+        and question["content"] == content
+        and refusal["role"] == "assistant"
+        and (refusal["content"].get("error") or {}).get("kind") == "budget"
+        and not refusal["content"].get("answer")
+    ):
+        store.delete_messages(cid, [question["id"], refusal["id"]])
 
 
 _END = object()
@@ -214,6 +248,7 @@ async def stream_turn(
 ) -> AsyncIterator[str]:
     """Stream one turn. With `kind` None the last user message is run again (regenerate)."""
     if kind is not None and content is not None:
+        _forget_refused_repeat(store, cid, content)
         store.add_message(cid, "user", kind, content)
     answer = _Answer()
     stopped = True
@@ -224,7 +259,7 @@ async def stream_turn(
         limits = agent_limits or AgentLimits()
         refusal = session_refusal(store, cid, limits, raise_limit)
         if refusal is not None:
-            runner = _refusal_runner(refusal)
+            runner = _refusal_runner(refusal, raisable=not store.limit_raised(cid))
         messages = store.messages(cid)
         summary, turns = current_history(messages)
         # a refused turn does not pay for a summary
@@ -279,6 +314,9 @@ async def stream_turn(
                         yield sse(events.suggestions(answer.suggestions))
                 answer.apply(event)
                 yield sse(event)
+                if (line := answer.memory_line(event)) is not None:
+                    store.add_message(cid, "system", "memory", line)
+                    yield sse(events.memory_note(line["action"], line["text"]))
                 if event.get("type") in ("done", "error"):
                     break
         except Exception as exc:  # noqa: BLE001 - reported to the user as a stream event

@@ -116,6 +116,10 @@ class QuizAnswerIn(BaseModel):
     order: list[int] | None = Field(default=None, max_length=5)
 
 
+class RegenerateIn(BaseModel):
+    raise_limit: bool = False
+
+
 class AskAnswerIn(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_REPLY)
 
@@ -433,7 +437,7 @@ def create_app(
         return await run_turn(item_id, cid, body.kind, content, body.raise_limit)
 
     @app.post("/api/items/{item_id}/conversations/{cid}/regenerate")
-    async def regenerate(item_id: str, cid: int):  # noqa: ANN202
+    async def regenerate(item_id: str, cid: int, body: RegenerateIn | None = None):  # noqa: ANN202
         if store.conversation(item_id, cid) is None:
             return unknown("unknown_conversation")
         if cid in app.state.streaming:
@@ -442,7 +446,7 @@ def create_app(
         spoken = [m for m in store.messages(cid) if m["role"] in ("user", "assistant")]
         if not spoken or spoken[-1]["role"] != "user":
             return JSONResponse({"reason": "nothing_to_regenerate"}, status_code=400)
-        return await run_turn(item_id, cid, None, None)
+        return await run_turn(item_id, cid, None, None, bool(body and body.raise_limit))
 
     @app.post("/api/items/{item_id}/conversations/{cid}/quizzes", status_code=201)
     async def start_quiz(item_id: str, cid: int, body: QuizIn):  # noqa: ANN202
