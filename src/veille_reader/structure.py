@@ -5,6 +5,8 @@ origin at the top left, so they do not depend on the zoom. Everything here is pl
 the PDF: it is stored and shown, never executed or obeyed.
 """
 
+import re
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
@@ -14,7 +16,8 @@ from pdfminer.layout import LTChar, LTTextContainer, LTTextLine
 from pdfminer.pdftypes import PDFException
 from pdfminer.psexceptions import PSException
 
-from veille_reader.paper import MAX_PAGES, PaperError
+from veille_reader.citations import normalise
+from veille_reader.paper import MAX_PAGES, PaperError, extract_outline
 
 Rect = tuple[float, float, float, float]
 
@@ -36,6 +39,35 @@ class PageStructure:
     width: float
     height: float
     blocks: list[Block]
+
+
+@dataclass(frozen=True)
+class Heading:
+    """A section: its title, its page, where its heading line is (None when not found)."""
+
+    title: str
+    page: int
+    rect: Rect | None
+    level: int
+
+
+@dataclass(frozen=True)
+class Caption:
+    """The caption of a figure or a table (kind is "figure" or "table")."""
+
+    kind: str
+    number: int
+    text: str
+    page: int
+    rect: Rect
+
+
+@dataclass(frozen=True)
+class Structure:
+    extractor: str
+    pages: list[PageStructure]
+    sections: list[Heading]
+    captions: list[Caption]
 
 
 def _clamp(value: float) -> float:
@@ -68,3 +100,62 @@ def extract_pages_structure(pdf_path: Path) -> list[PageStructure]:
         return pages
     except (PDFException, PSException, OSError, ValueError, KeyError, TypeError, RecursionError):
         raise PaperError("cannot read the PDF structure") from None
+
+
+# shortcut: font size 1.15x the body or a numbered title; calibrate on real papers (plan, task 10)
+_HEADING_RATIO = 1.15
+_NUMBERED = re.compile(r"^(\d+(?:\.\d+){0,2})\.?\s+[A-Z]")
+_CAPTION = re.compile(r"^(figure|fig\.?|table)\s*(\d+)\s*[:.]", re.IGNORECASE)
+MAX_HEADING_CHARS = 120
+MAX_NUMBERED_CHARS = 80
+
+
+def _body_size(pages: list[PageStructure]) -> float | None:
+    """The font size most of the text is set in (weighted by the length of each line)."""
+    weights: Counter[float] = Counter()
+    for page in pages:
+        for block in page.blocks:
+            weights[round(block.size, 1)] += len(block.text)
+    return weights.most_common(1)[0][0] if weights else None
+
+
+def _heading_level(block: Block, body: float) -> int | None:
+    text = block.text
+    if len(text) > MAX_HEADING_CHARS or text.endswith("."):
+        return None
+    numbered = _NUMBERED.match(text)
+    if numbered and block.size >= body and len(text) <= MAX_NUMBERED_CHARS:
+        return numbered.group(1).count(".") + 1
+    return 1 if block.size >= body * _HEADING_RATIO else None
+
+
+def _outline_sections(pages: list[PageStructure], outline: list[tuple[str, int]]) -> list[Heading]:
+    sections = []
+    for title, number in outline:
+        wanted = normalise(title)
+        blocks = pages[number - 1].blocks if 1 <= number <= len(pages) else []
+        rect = next((b.rect for b in blocks if wanted and wanted in normalise(b.text)), None)
+        sections.append(Heading(title, number, rect, 1))
+    return sections
+
+
+def extract_structure(pdf_path: Path) -> Structure:
+    """Text lines, sections (the PDF outline, else guessed from the type) and figure captions."""
+    pages = extract_pages_structure(pdf_path)
+    outline = extract_outline(pdf_path)
+    body = _body_size(pages)
+    sections = _outline_sections(pages, outline) if outline else []
+    captions = []
+    for number, page in enumerate(pages, start=1):
+        for block in page.blocks:
+            caption = _CAPTION.match(block.text)
+            if caption:
+                kind = "table" if caption.group(1).lower() == "table" else "figure"
+                captions.append(
+                    Caption(kind, int(caption.group(2)), block.text, number, block.rect)
+                )
+            elif not outline and body is not None:
+                level = _heading_level(block, body)
+                if level is not None:
+                    sections.append(Heading(block.text, number, block.rect, level))
+    return Structure(EXTRACTOR, pages, sections, captions)
