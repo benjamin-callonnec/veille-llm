@@ -24,6 +24,7 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 - Quizzes (#25): a "Quiz me" icon (or just ask the tutor) makes a question from the paper, multiple choice or free answer. Each question is validated, grounded in a verified quote and page, and the right answer and explanation stay on the server until you reply. A free answer is graded against the paper with the reasoning shown. Scores are kept per paper and per quiz, and a wrong answer leaves a note in the session memory so the tutor revisits it.
 - The highlights list is redone in the chat's quiet style (#35): a discreet highlighter icon with the count, then plain rows (colour dot, page, passage in the normal text colour, readable in both themes) with copy and delete icons on hover. Clicking a row still goes to the top of its page; going to the exact place waits for the bounding-box work (#30).
 - Suggested prompts: the first one is the composer's placeholder (Tab fills it in, Enter sends), the others stay buttons in the chat. A quiz card always answers for the paper of the chat.
+- Quiz formats: single choice and true/false answer on click, multiple choice has checkboxes and a right-arrow icon that appears once something is ticked, fill-in-the-blank and put-in-order are graded on the server without the model, and the free answer stays graded by the model. "Quiz me" mixes the formats. Answer failures now say why (already answered shows the result).
 
 ## [0.11.0] - 2026-11-22
 
