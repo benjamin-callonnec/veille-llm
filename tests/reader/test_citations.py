@@ -193,3 +193,43 @@ def test_a_quote_copied_from_the_escaped_text_the_model_saw_is_verified():
         [v] = verify_citations(pages, [], parse_citations(f'[p.1 "{quoted}"]'))
         assert v["status"] == "verified"
         assert v["quote"] == "a & b < c holds"
+
+
+# --- figure and table labels -----------------------------------------------------------------
+
+
+def test_a_citation_can_name_a_figure_or_a_table():
+    found = parse_citations("see [p.4 Figure 2] and [p.5 table 1] and [p.6 fig. 3]")
+    assert [(c.page, c.quote, c.label) for c in found] == [
+        (4, None, "figure 2"),
+        (5, None, "table 1"),
+        (6, None, "figure 3"),
+    ]
+
+
+def test_quote_and_bare_citations_have_no_label():
+    assert [c.label for c in parse_citations('[p.4 "some exact quote here"] and [p.4]')] == [
+        None,
+        None,
+    ]
+
+
+def test_a_label_with_too_many_digits_is_not_a_citation():
+    assert parse_citations("[p.4 Figure 12345]") == []
+
+
+def test_two_labels_on_one_page_are_two_verdicts_and_stay_page_only():
+    first, second = verdicts("[p.3 Figure 2] and [p.3 Figure 3]")
+    assert (first["status"], first["label"]) == ("page_only", "figure 2")
+    assert (second["status"], second["label"]) == ("page_only", "figure 3")
+    assert first["quote"] is None
+
+
+def test_a_labelled_citation_on_a_missing_page_is_invalid():
+    [v] = verdicts("[p.99 Figure 2]")
+    assert v["status"] == "invalid_page"
+
+
+def test_a_verdict_without_a_label_has_no_label_key():
+    [v] = verdicts("[p.3]")
+    assert "label" not in v

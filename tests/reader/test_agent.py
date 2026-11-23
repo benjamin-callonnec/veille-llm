@@ -487,6 +487,11 @@ def test_the_tutor_is_told_to_quote_and_never_to_invent():
     assert "reference list" in text.lower()
 
 
+def test_the_tutor_may_cite_a_figure_or_a_table_when_it_cannot_quote():
+    text = SYSTEM_PROMPT_TOOLS
+    assert "[p.N Figure K]" in text and "[p.N Table K]" in text
+
+
 def test_the_tutor_abstains_plainly_when_the_paper_has_no_answer():
     text = SYSTEM_PROMPT_TOOLS.lower()
     assert "does not contain the answer" in text and "cite nothing" in text
