@@ -8,10 +8,11 @@ from pathlib import Path
 from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
+from starlette.requests import HTTPConnection
 
 from veille_reader import events
 from veille_reader.chat import stream_turn
@@ -39,6 +40,7 @@ from veille_reader.quiz import (
 )
 from veille_reader.storage import ReaderStore
 from veille_reader.tools import PaperTools
+from veille_reader.voice import CLOSE_POLICY, VoiceEngine, serve
 
 TOOLS_TIMEOUT = 45.0  # seconds to get the paper ready (PDF download and text extraction)
 LOCAL_HOSTS = {"127.0.0.1", "localhost"}
@@ -139,7 +141,7 @@ def _hostname(header: str) -> str:
     return header.rsplit(":", 1)[0] if ":" in header else header
 
 
-def _cross_site(request: Request, dev_origins: frozenset[str] = frozenset()) -> bool:
+def _cross_site(request: HTTPConnection, dev_origins: frozenset[str] = frozenset()) -> bool:
     """A page on another origin must not drive the server (it has side effects: downloads)."""
     if request.headers.get("sec-fetch-site", "same-origin") not in {"same-origin", "none"}:
         return True
@@ -166,6 +168,7 @@ def create_app(
     summarizer: Summarizer | None = None,
     quiz_maker: QuizMaker | None = None,
     grader: Grader | None = None,
+    voice_engine: VoiceEngine | None = None,
 ) -> FastAPI:
     loaded = {"items": _load_items(catalogue_path), "mtime": catalogue_path.stat().st_mtime_ns}
 
@@ -195,6 +198,17 @@ def create_app(
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         return response
+
+    @app.websocket("/api/voice")
+    async def voice(ws: WebSocket) -> None:
+        # the http middleware does not see WebSockets: same loopback and same-origin rules here
+        if _hostname(ws.headers.get("host", "")) not in LOCAL_HOSTS or _cross_site(
+            ws, frozenset(dev_origins)
+        ):
+            await ws.close(code=CLOSE_POLICY)
+            return
+        await ws.accept()
+        await serve(ws, voice_engine)
 
     def unknown(reason: str = "unknown_item") -> JSONResponse:
         return JSONResponse({"reason": reason}, status_code=404)
