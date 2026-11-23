@@ -43,7 +43,10 @@ def test_every_secret_the_deploy_needs_is_given():
         "R2_STATE_SECRET_ACCESS_KEY",
     ):
         assert f"secrets.{name}" in text, name
-    assert "AWS_ACCESS_KEY_ID" in text and "AWS_SECRET_ACCESS_KEY" in text
+    # the same names as in the secrets and in .env.cloudflare: the Makefile maps them for Terraform
+    assert "R2_STATE_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}" in CI
+    assert "R2_STATE_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}" in CI
+    assert "AWS_" not in text
 
 
 def test_ci_only_runs_on_push_and_never_on_pull_request_target():

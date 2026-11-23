@@ -13,7 +13,28 @@ d'environnement locales et des secrets GitHub.
    `export CLOUDFLARE_ACCOUNT_ID=...`.
 2. Créer un **token API nommé `veille-llm`**, limité à ce compte, avec seulement : *Workers Scripts : Edit*,
    *Workers R2 Storage : Edit*, *Account Settings : Read*. Ne jamais réutiliser celui d'un autre repo.
-   En local, `npx wrangler login` suffit ; pour Terraform : `export CLOUDFLARE_API_TOKEN=...`.
+   En local, `npx wrangler login` suffit pour wrangler ; Terraform lit les variables ci-dessous.
+
+## Variables d'environnement locales : `.env.cloudflare`
+
+Les mêmes quatre noms servent partout : ce fichier, les secrets GitHub (étape 3) et les cibles `make`.
+Créer **`.env.cloudflare`** à la racine (ignoré par git ; ne pas le confondre avec `.env`, réservé au token
+Claude du lecteur), en mode 600, avec ces lignes et vos valeurs :
+
+```bash
+CLOUDFLARE_ACCOUNT_ID=...
+CLOUDFLARE_API_TOKEN=...
+R2_STATE_ACCESS_KEY_ID=...        # étape 2
+R2_STATE_SECRET_ACCESS_KEY=...    # étape 2
+```
+
+```bash
+chmod 600 .env.cloudflare
+set -a; source .env.cloudflare; set +a     # dans chaque nouveau terminal, avant make tf-*
+```
+
+`make tf-*` s'arrête en nommant la variable manquante. Le Makefile range lui-même les clés R2 sous les noms
+`AWS_*` que Terraform exige : n'exportez pas ceux-là.
 
 ## 2. Bucket R2 de l'état Terraform
 
@@ -21,12 +42,8 @@ d'environnement locales et des secrets GitHub.
 ./setup/bootstrap.sh        # crée veille-llm-tfstate (idempotent)
 ```
 
-Puis dans *R2 > Manage R2 API tokens*, créer une paire de clés **limitée à ce bucket** et l'exporter :
-
-```bash
-export AWS_ACCESS_KEY_ID=...
-export AWS_SECRET_ACCESS_KEY=...
-```
+Puis dans *R2 > Manage R2 API tokens*, créer une paire de clés **limitée à ce bucket** et la mettre dans
+`.env.cloudflare` sous `R2_STATE_ACCESS_KEY_ID` et `R2_STATE_SECRET_ACCESS_KEY`.
 
 ## 3. Secrets GitHub du repo (pour la CI)
 

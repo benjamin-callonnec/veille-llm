@@ -102,9 +102,20 @@ def test_terraform_targets_stop_early_when_the_environment_is_incomplete():
     for name in (
         "CLOUDFLARE_API_TOKEN",
         "CLOUDFLARE_ACCOUNT_ID",
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
+        "R2_STATE_ACCESS_KEY_ID",
+        "R2_STATE_SECRET_ACCESS_KEY",
     ):
         assert name in recipe, name
+    assert "AWS_" not in recipe
     assert "is not set" in recipe and "setup/README.md" in recipe
     assert "tf-env" not in re.search(r"^tf-validate:.*", makefile, re.MULTILINE).group(0)
+
+
+def test_the_r2_keys_have_the_same_names_everywhere_and_make_maps_them_to_terraform_s():
+    makefile = (ROOT / "Makefile").read_text()
+    assert "export AWS_ACCESS_KEY_ID := $(R2_STATE_ACCESS_KEY_ID)" in makefile
+    assert "export AWS_SECRET_ACCESS_KEY := $(R2_STATE_SECRET_ACCESS_KEY)" in makefile
+    readme = (ROOT / "setup" / "README.md").read_text()
+    for name in ("R2_STATE_ACCESS_KEY_ID", "R2_STATE_SECRET_ACCESS_KEY", ".env.cloudflare"):
+        assert name in readme, name
+    assert "export AWS_" not in readme

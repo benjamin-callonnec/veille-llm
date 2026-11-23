@@ -120,13 +120,17 @@ scheduler-secret:
 	cd scheduler && npx wrangler secret put GITHUB_TOKEN
 
 # Terraform of the scheduler (iac/): crons and state. CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID
-# come from the environment (never from a file in git); AWS_* carry the R2 keys of the state bucket.
+# and the R2_STATE_* keys of the state bucket come from the environment (never from a file in git):
+# `set -a; source .env.cloudflare; set +a` (see setup/README.md). Terraform's S3 backend wants the keys
+# under the AWS_* names, so they are mapped here: everywhere else they keep their R2_STATE_* names.
 export TF_VAR_cloudflare_api_token := $(CLOUDFLARE_API_TOKEN)
 export TF_VAR_cloudflare_account_id := $(CLOUDFLARE_ACCOUNT_ID)
+export AWS_ACCESS_KEY_ID := $(R2_STATE_ACCESS_KEY_ID)
+export AWS_SECRET_ACCESS_KEY := $(R2_STATE_SECRET_ACCESS_KEY)
 
 # Fails at once, with the name of what is missing, instead of letting Terraform look for a cloud role.
 tf-env:
-	@for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do \
+	@for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID R2_STATE_ACCESS_KEY_ID R2_STATE_SECRET_ACCESS_KEY; do \
 		eval "value=\$${$$name}"; \
 		test -n "$$value" || { echo "$$name is not set: see setup/README.md"; exit 1; }; \
 	done
