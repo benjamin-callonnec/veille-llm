@@ -57,7 +57,7 @@ class Caption:
     """The caption of a figure or a table (kind is "figure" or "table")."""
 
     kind: str
-    number: int
+    number: str  # as the paper writes it: "2", or "3.1" in papers numbered by chapter
     text: str
     page: int
     rect: Rect
@@ -171,8 +171,7 @@ def extract_pages_structure(pdf_path: Path) -> list[PageStructure]:
 # shortcut: font size 1.15x the body or a numbered title; calibrate on real papers (plan, task 10)
 _HEADING_RATIO = 1.15
 _NUMBERED = re.compile(r"^(\d+(?:\.\d+){0,2})\.?\s+[A-Z]")
-# "Figure 3.1:" belongs to a numbering we do not follow: it is not "Figure 3"
-_CAPTION = re.compile(r"^(figure|fig\.?|table)\s*(\d+)(?:\s*:|\.(?!\d))", re.IGNORECASE)
+_CAPTION = re.compile(r"^(figure|fig\.?|table)\s*(\d+(?:\.\d+)?)(?:\s*:|\.(?!\d))", re.IGNORECASE)
 MAX_HEADING_CHARS = 120
 MAX_NUMBERED_CHARS = 80
 
@@ -220,9 +219,7 @@ def extract_structure(pdf_path: Path) -> Structure:
             caption = _CAPTION.match(block.text)
             if caption:
                 kind = "table" if caption.group(1).lower() == "table" else "figure"
-                captions.append(
-                    Caption(kind, int(caption.group(2)), block.text, number, block.rect)
-                )
+                captions.append(Caption(kind, caption.group(2), block.text, number, block.rect))
             elif not outline and body is not None:
                 level = _heading_level(block, body)
                 if level is not None:

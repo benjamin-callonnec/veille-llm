@@ -306,7 +306,7 @@ def test_structure_of_a_paper(tmp_path, catalogue):
     response = client.get("/api/items/a1/structure")
     assert response.status_code == 200
     body = response.json()
-    assert [(c["kind"], c["number"], c["page"]) for c in body["captions"]] == [("figure", 1, 1)]
+    assert [(c["kind"], c["number"], c["page"]) for c in body["captions"]] == [("figure", "1", 1)]
     assert len(body["captions"][0]["rect"]) == 4
 
 

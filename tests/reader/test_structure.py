@@ -92,8 +92,8 @@ def test_figure_and_table_captions(tmp_path):
     )
     captions = extract_structure(write(tmp_path, [page])).captions
     assert [(c.kind, c.number, c.text, c.page) for c in captions] == [
-        ("figure", 2, "Figure 2: Overview of the model", 1),
-        ("table", 1, "Table 1. Results", 1),
+        ("figure", "2", "Figure 2: Overview of the model", 1),
+        ("table", "1", "Table 1. Results", 1),
     ]
     assert all(len(c.rect) == 4 for c in captions)
 
@@ -147,7 +147,7 @@ def test_a_stored_copy_that_does_not_fit_is_extracted_again(tmp_path):
     pdf = write(tmp_path, ["Figure 1: A figure"])
     store.save_paper_structure("a1", EXTRACTOR, {"extractor": EXTRACTOR, "pages": "garbage"})
     result = load_structure(store, "a1", pdf)
-    assert result is not None and [c.number for c in result.captions] == [1]
+    assert result is not None and [c.number for c in result.captions] == ["1"]
 
 
 def test_a_line_of_spaces_is_not_a_block(tmp_path):
@@ -155,10 +155,10 @@ def test_a_line_of_spaces_is_not_a_block(tmp_path):
     assert [b.text for b in page.blocks] == ["First line", "Last line"]
 
 
-def test_a_dotted_figure_number_is_not_mistaken_for_its_integer_part(tmp_path):
-    page = f"{BODY}\nFigure 3.1: A sub-numbered figure\nFigure 3: The real one"
+def test_a_dotted_figure_number_is_kept_whole(tmp_path):
+    page = f"{BODY}\nFigure 3.1: A chapter-numbered figure\nFigure 3: The plain one"
     captions = extract_structure(write(tmp_path, [page])).captions
-    assert [(c.number, c.text) for c in captions] == [(3, "Figure 3: The real one")]
+    assert [c.number for c in captions] == ["3.1", "3"]
 
 
 def test_outline_sections_take_their_level_from_their_numbering(tmp_path):

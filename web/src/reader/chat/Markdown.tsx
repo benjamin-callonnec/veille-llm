@@ -16,7 +16,7 @@ interface Props {
 
 // same pattern as the server (src/veille_reader/citations.py)
 const CITE =
-  /\[p\.(\d+)(?:\s*[:,]?\s*(?:["“«]([^"”»\]]*)["”»]|([Ff][Ii][Gg][Uu][Rr][Ee]|[Ff][Ii][Gg]\.?|[Tt][Aa][Bb][Ll][Ee])\s*(\d{1,3})))?\s*\]/g;
+  /\[p\.(\d+)(?:\s*[:,]?\s*(?:["“«]([^"”»\]]*)["”»]|([Ff][Ii][Gg][Uu][Rr][Ee]|[Ff][Ii][Gg]\.?|[Tt][Aa][Bb][Ll][Ee])\s*(\d{1,3}(?:\.\d{1,3})?)))?\s*\]/g;
 const MAX_QUOTE = 300;
 const MIN_QUOTE_CHARS = 8;
 
@@ -66,7 +66,7 @@ export function Markdown({ text, citations = [], onCite }: Props) {
     const quote = (q ?? "").trim();
     const label: Label | undefined =
       kind && num
-        ? { kind: kind.toLowerCase() === "table" ? "table" : "figure", number: Number(num) }
+        ? { kind: kind.toLowerCase() === "table" ? "table" : "figure", number: num }
         : undefined;
     cites.push({
       page: Number(n),

@@ -16,7 +16,7 @@ MIN_QUOTE_CHARS = 8
 MAX_QUOTE_CHARS = 300
 
 _CITE = re.compile(
-    r'\[p\.(\d+)(?:\s*[:,]?\s*(?:["“«]([^"”»\]]*)["”»]|((?i:figure|fig\.?|table))\s*(\d{1,3})))?\s*\]',
+    r'\[p\.(\d+)(?:\s*[:,]?\s*(?:["“«]([^"”»\]]*)["”»]|((?i:figure|fig\.?|table))\s*(\d{1,3}(?:\.\d{1,3})?)))?\s*\]',
 )
 
 
@@ -32,7 +32,7 @@ class Citation:
 def _label(kind: str | None, number: str | None) -> str | None:
     if not kind or not number:
         return None
-    return f"{'table' if kind.lower() == 'table' else 'figure'} {int(number)}"
+    return f"{'table' if kind.lower() == 'table' else 'figure'} {number}"
 
 
 def parse_citations(text: str) -> list[Citation]:

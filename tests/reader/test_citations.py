@@ -214,6 +214,11 @@ def test_quote_and_bare_citations_have_no_label():
     ]
 
 
+def test_a_chapter_numbered_figure_keeps_its_dotted_number():
+    [c] = parse_citations("see [p.11 Figure 3.1]")
+    assert c.label == "figure 3.1"
+
+
 def test_a_label_with_too_many_digits_is_not_a_citation():
     assert parse_citations("[p.4 Figure 12345]") == []
 

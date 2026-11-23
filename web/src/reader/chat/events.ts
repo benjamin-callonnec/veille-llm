@@ -19,7 +19,8 @@ export interface Citation {
 /** A figure or a table named by a citation. */
 export interface Label {
   kind: "figure" | "table";
-  number: number;
+  /** As the paper writes it: "2", or "3.1" when figures are numbered by chapter. */
+  number: string;
 }
 
 /** A click on a citation chip: the page, then the quote or the label when it has one. */

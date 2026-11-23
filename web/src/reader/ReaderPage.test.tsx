@@ -517,7 +517,7 @@ const ask = async () => {
 test("a cited figure is shown in place, on the page of its caption", async () => {
   setup({
     reply: "As shown in [p.2 Figure 1]",
-    captions: [{ kind: "figure", number: 1, page: 3, rect: [0.1, 0.5, 0.3, 0.02] }],
+    captions: [{ kind: "figure", number: "1", page: 3, rect: [0.1, 0.5, 0.3, 0.02] }],
   });
   await ask();
   await userEvent.click(await screen.findByRole("button", { name: "p.2" }));

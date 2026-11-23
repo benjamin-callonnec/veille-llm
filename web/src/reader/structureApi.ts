@@ -4,7 +4,7 @@ import type { Rect } from "./lib/quote";
 /** The caption of a figure or a table, as the server found it in the PDF. */
 export interface Caption {
   kind: "figure" | "table";
-  number: number;
+  number: string;
   page: number;
   rect: Rect;
 }
