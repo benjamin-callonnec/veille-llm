@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -27,6 +28,7 @@ MAX_ZIP_BYTES = 1_000_000
 TIMEOUT_SECONDS = 15
 FILE_NAME = re.compile(r"^[a-z][a-z0-9-]{0,39}\.md$")
 _HOSTS = ("github.com", "githubusercontent.com")
+_SWAP = threading.Lock()  # the startup sync and a manual one never swap the cache together
 
 
 def _github_host(host: str | None) -> bool:
@@ -90,13 +92,22 @@ def sync_skills(
         return -1  # nothing usable (a release is never meant to be empty): keep the cache
     cache.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".skills-", dir=cache.parent))
-    try:
-        for name, text in files.items():
-            (staging / name).write_text(text, encoding="utf-8")
-        if cache.exists():
-            shutil.rmtree(cache)
-        os.replace(staging, cache)
-    except OSError:
-        shutil.rmtree(staging, ignore_errors=True)
-        return -1
+    backup = staging.with_name(staging.name + "-old")
+    with _SWAP:
+        try:
+            for name, text in files.items():
+                (staging / name).write_text(text, encoding="utf-8")
+            had_cache = cache.exists()
+            if had_cache:
+                os.replace(cache, backup)
+            try:
+                os.replace(staging, cache)
+            except OSError:
+                if had_cache:
+                    os.replace(backup, cache)  # put the previous cache back
+                raise
+        except OSError:
+            shutil.rmtree(staging, ignore_errors=True)
+            return -1
+        shutil.rmtree(backup, ignore_errors=True)
     return len(files)

@@ -400,3 +400,9 @@ test("a /query with no match closes the menu, so Enter sends", async () => {
   await userEvent.type(box(), "/zzz{Enter}");
   expect(onSend).toHaveBeenCalledWith("/zzz");
 });
+
+test("Enter on an exact skill name sends it at once", async () => {
+  const { onSend } = setup({ skills: SKILLS });
+  await userEvent.type(box(), "/present{Enter}");
+  expect(onSend).toHaveBeenCalledWith("/present", undefined, false, "present");
+});

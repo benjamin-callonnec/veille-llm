@@ -89,3 +89,22 @@ test("with no report there is an empty state", () => {
   setup({ reports: [], selectedId: null });
   expect(screen.getByText(/no report yet/i)).toBeTruthy();
 });
+
+test("a report that cannot be loaded clears the view instead of showing the old one", async () => {
+  setup();
+  const frame = await screen.findByTitle("Deck");
+  await waitFor(() => expect(frame.getAttribute("srcdoc")).toContain("<p>v2</p>"));
+  vi.mocked(api.getReport).mockResolvedValue(null);
+  await userEvent.selectOptions(screen.getByLabelText("Version"), "1");
+  await waitFor(() => expect(screen.queryByTitle("Deck")).toBeNull());
+});
+
+test("Esc that something else already handled does not close the viewer", async () => {
+  const h = setup();
+  await screen.findByTitle("Deck");
+  const other = (e: KeyboardEvent) => e.key === "Escape" && e.preventDefault();
+  document.body.addEventListener("keydown", other);
+  await userEvent.keyboard("{Escape}");
+  document.body.removeEventListener("keydown", other);
+  expect(h.onClose).not.toHaveBeenCalled();
+});

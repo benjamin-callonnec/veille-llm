@@ -39,7 +39,7 @@ from veille_reader.quiz import (
     view_of,
     with_results,
 )
-from veille_reader.reports import ReportTools, export_name
+from veille_reader.reports import ReportTools, export_name, with_csp
 from veille_reader.skills import load_skills
 from veille_reader.skills_sync import default_fetcher as default_skills_fetcher
 from veille_reader.skills_sync import sync_skills
@@ -355,7 +355,7 @@ def create_app(
             return unknown("unknown_report")
         name = export_name(view["title"])
         return Response(
-            view["html"],
+            with_csp(view["html"]),
             media_type="text/html; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename="{name}"'},
         )
@@ -507,6 +507,8 @@ def create_app(
             content = {"quote": body.quote.model_dump(), "question": body.question}
         else:
             content = {"text": body.text or ""}
+            if body.skill:
+                content["skill"] = body.skill  # remembered, so Regenerate runs it again
             try:
                 images = decode_images([i.model_dump() for i in body.images])
             except ImageError as exc:
@@ -531,7 +533,9 @@ def create_app(
         spoken = [m for m in store.messages(cid) if m["role"] in ("user", "assistant")]
         if not spoken or spoken[-1]["role"] != "user":
             return JSONResponse({"reason": "nothing_to_regenerate"}, status_code=400)
-        return await run_turn(item_id, cid, None, None, bool(body and body.raise_limit))
+        last_user = next((m for m in reversed(spoken) if m["role"] == "user"), None)
+        skill = (last_user or {}).get("content", {}).get("skill")
+        return await run_turn(item_id, cid, None, None, bool(body and body.raise_limit), skill)
 
     @app.post("/api/items/{item_id}/conversations/{cid}/quizzes", status_code=201)
     async def start_quiz(item_id: str, cid: int, body: QuizIn):  # noqa: ANN202

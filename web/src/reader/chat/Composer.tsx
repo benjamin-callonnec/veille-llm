@@ -247,7 +247,11 @@ export function Composer({
                   e.preventDefault();
                   return setMenuClosed(true);
                 }
-                if ((e.key === "Enter" && !e.shiftKey) || (e.key === "Tab" && !e.shiftKey)) {
+                const exact = matches.some((m) => `/${m.name}` === text.trim());
+                if (
+                  (e.key === "Enter" && !e.shiftKey && !exact) ||
+                  (e.key === "Tab" && !e.shiftKey)
+                ) {
                   e.preventDefault();
                   return choose(matches[active]?.name ?? "");
                 }

@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from veille_reader.agent import build_sdk_tools
-from veille_reader.reports import ReportTools, check_html, export_name
+from veille_reader.reports import ReportTools, check_html, export_name, with_csp
 from veille_reader.server import create_app
 from veille_reader.skills import Skill, SkillSession
 from veille_reader.storage import ReaderStore
@@ -155,8 +155,41 @@ def test_export_sets_a_safe_attachment_name_and_keeps_the_html(client):
     html = "<html><body><h1>Hi</h1></body></html>"
     r = client.store.save_report("a1", 'A "deck"/\n x', html)
     response = client.get(f"/api/items/a1/reports/{r['id']}/export")
-    assert response.text == html
+    assert response.text == with_csp(html)
+    assert "<h1>Hi</h1>" in response.text
     assert response.headers["content-type"].startswith("text/html")
     disposition = response.headers["content-disposition"]
     assert disposition.startswith("attachment; filename=") and "\n" not in disposition
     assert "/" not in disposition.split("filename=")[1]
+
+
+def test_export_carries_the_same_policy_as_the_viewer(client):
+    r = client.store.save_report("a1", "Deck", "<!DOCTYPE html><html><body>hi</body></html>")
+    text = client.get(f"/api/items/a1/reports/{r['id']}/export").text
+    assert text.startswith('<!DOCTYPE html><meta http-equiv="Content-Security-Policy"')
+    assert "default-src 'none'" in text and "hi" in text
+
+
+def test_regenerate_keeps_the_skill_the_user_invoked(tmp_path):
+    from veille_reader import events
+
+    seen = []
+
+    async def runner(request):
+        seen.append(request.skill)
+        yield events.done(1)
+
+    cat = tmp_path / "c.json"
+    cat.write_text(json.dumps({"items": [{"id": "a1", "title": "A", "url": "https://x/y"}]}))
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    (skills / "present.md").write_text("---\nname: present\ndescription: d\n---\nDo it.")
+    app = create_app(tmp_path / "data", cat, runner=runner, skills_dir=skills)
+    c = TestClient(app, base_url="http://127.0.0.1:8765")
+    cid = c.post("/api/items/a1/conversations", json={}).json()["id"]
+    c.post(
+        f"/api/items/a1/conversations/{cid}/messages",
+        json={"kind": "text", "text": "/present", "skill": "present"},
+    )
+    c.post(f"/api/items/a1/conversations/{cid}/regenerate")
+    assert [s.name for s in seen] == ["present", "present"]

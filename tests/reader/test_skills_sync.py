@@ -136,3 +136,24 @@ def test_get_skills_lists_without_prompt_then_sync_refreshes(tmp_path):
     assert client.get("/api/skills").json() == []
     assert client.post("/api/skills/sync").json() == {"count": 1}
     assert client.get("/api/skills").json() == [{"name": "a", "description": "d a", "tools": []}]
+
+
+def test_a_failed_swap_restores_the_previous_cache(tmp_path, monkeypatch):
+    import os
+
+    from veille_reader import skills_sync
+
+    run(tmp_path, make_zip({"a.md": skill("a")}))
+    real = os.replace
+    calls = []
+
+    def flaky(src, dst):
+        calls.append((src, dst))
+        if len(calls) == 2:  # the second rename (the new cache into place) fails
+            raise OSError("disk")
+        return real(src, dst)
+
+    monkeypatch.setattr(skills_sync.os, "replace", flaky)
+    assert run(tmp_path, make_zip({"b.md": skill("b")})) == -1
+    assert names(tmp_path) == ["a.md"]
+    assert [p.name for p in tmp_path.iterdir()] == ["cache"]

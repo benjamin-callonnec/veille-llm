@@ -6,6 +6,13 @@ from veille_reader.storage import MAX_HTML_CHARS, ReaderStore
 from veille_reader.tools import ToolError, _data, _int
 
 MAX_TITLE = 120
+# The same policy as web/src/reader/viewer/csp.ts: an exported file keeps it when opened from disk.
+CSP = (
+    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; "
+    "font-src data:; base-uri 'none'; form-action 'none'"
+)
+_META = f'<meta http-equiv="Content-Security-Policy" content="{CSP}">'
+_DOCTYPE = re.compile(r"^\s*<!doctype[^>]*>", re.I)
 # shortcut: a regex, not an HTML parser, so a URL built in JavaScript is not seen; the sandboxed
 # viewer's CSP is the real barrier, this check keeps exported files self-contained.
 _EXTERNAL = re.compile(
@@ -28,6 +35,13 @@ def check_html(html: str) -> None:
             "External resources are not allowed: inline all CSS, JavaScript and images "
             "(images as data: URIs) and use no external URL."
         )
+
+
+def with_csp(html: str) -> str:
+    """The page with the policy first (after the doctype); never searches for <head>."""
+    found = _DOCTYPE.match(html)
+    end = found.end() if found else 0
+    return html[:end] + _META + html[end:]
 
 
 def export_name(title: str) -> str:
