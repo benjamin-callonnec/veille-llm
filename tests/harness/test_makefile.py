@@ -48,3 +48,38 @@ def test_reader_ports_are_variables_shared_by_the_check_and_the_commands():
     assert "for port in $(READER_PORT) $(FRONT_PORT)" in recipe
     assert "--port $(FRONT_PORT)" in recipe
     assert "8765" not in recipe and "5173" not in recipe
+
+
+def test_scheduler_targets_install_without_scripts_and_set_the_github_secret():
+    assert "npm ci" in _recipe("scheduler-install")
+    assert "--ignore-scripts" in _recipe("scheduler-install")
+    assert "wrangler secret put GITHUB_TOKEN" in _recipe("scheduler-secret")
+    assert "wrangler deploy" in _recipe("scheduler-deploy")
+    assert "npm run check" in _recipe("scheduler-check")
+
+
+def test_install_and_check_cover_the_scheduler():
+    assert "scheduler-install" in _recipe("install")
+    assert "scheduler-check" in _recipe("check")
+
+
+def test_wrangler_leaves_the_crons_to_terraform():
+    wrangler = (ROOT / "scheduler" / "wrangler.toml").read_text()
+    assert 'name = "veille-llm-scheduler"' in wrangler
+    assert "workers_dev = false" in wrangler
+    assert "[triggers]" not in wrangler.replace("# [triggers]", "")
+    assert not any(line.strip().startswith("crons") for line in wrangler.splitlines()), (
+        "the crons are Terraform's (iac/main.tf)"
+    )
+
+
+def test_gitignore_blocks_scheduler_and_terraform_local_files():
+    lines = (ROOT / ".gitignore").read_text().splitlines()
+    for wanted in (
+        "scheduler/node_modules/",
+        ".wrangler/",
+        ".dev.vars",
+        "iac/.terraform/",
+        "*.tfstate*",
+    ):
+        assert wanted in lines, wanted

@@ -1,8 +1,9 @@
-.PHONY: catalogue reader reader-build reader-token subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
+.PHONY: scheduler-install scheduler-check scheduler-deploy scheduler-secret catalogue reader reader-build reader-token subs-add subs-remove subs-list subs-push install unittest serve lint check web-install web-check web-build
 
 install:
 	uv sync --locked
 	$(MAKE) web-install
+	$(MAKE) scheduler-install
 
 unittest:
 	uv run pytest
@@ -16,6 +17,7 @@ check:
 	uv run ruff format --check src tests
 	uv run pytest
 	$(MAKE) web-check
+	$(MAKE) scheduler-check
 
 web-install:
 	cd web && npm ci --ignore-scripts
@@ -102,3 +104,17 @@ subs-list:
 
 subs-push:
 	@uv run python scripts/subs.py push
+
+# Cloudflare Worker that dispatches daily.yml and weekly.yml at the right time (#38).
+# Run these from the repo root: they cd into scheduler/ (where wrangler.toml lives) themselves.
+scheduler-install:
+	cd scheduler && npm ci --ignore-scripts
+
+scheduler-check:
+	cd scheduler && npm run check
+
+scheduler-deploy:
+	cd scheduler && npx wrangler deploy
+
+scheduler-secret:
+	cd scheduler && npx wrangler secret put GITHUB_TOKEN

@@ -1,0 +1,7 @@
+# Cloudflare Worker that starts daily.yml and weekly.yml on time (GitHub's own crons start hours late).
+# The cron triggers are NOT here: Terraform owns them (iac/main.tf), wrangler only deploys the code.
+# The GitHub token is a Worker secret: `make scheduler-secret` (never in git or Terraform).
+name = "veille-llm-scheduler"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+workers_dev = false
