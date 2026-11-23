@@ -3,6 +3,7 @@
 import argparse
 import os
 import sys
+import threading
 from pathlib import Path
 
 import uvicorn
@@ -11,6 +12,7 @@ from veille_reader.agent import MODEL, sdk_runner, sdk_summarizer
 from veille_reader.env import load_env_file, permission_warning
 from veille_reader.quiz_agent import sdk_grader, sdk_quiz_maker
 from veille_reader.server import create_app
+from veille_reader.skills_sync import sync_skills
 
 HOST = "127.0.0.1"
 DEV_ORIGINS = "http://127.0.0.1:5173,http://localhost:5173"
@@ -55,6 +57,11 @@ def token_status(env_file: Path) -> str:
     )
 
 
+def start_skills_sync(data_dir: Path) -> None:
+    """Pull the skills of the `skills` branch in the background; the reader never waits for it."""
+    threading.Thread(target=sync_skills, args=(data_dir / "skills",), daemon=True).start()
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     print(token_status(args.env_file))
@@ -76,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    start_skills_sync(args.data_dir)
     if args.reload:
         # uvicorn restarts worker processes, which rebuild the app from the environment
         os.environ["VEILLE_READER_DATA_DIR"] = str(args.data_dir)

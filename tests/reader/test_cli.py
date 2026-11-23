@@ -1,6 +1,24 @@
 from unittest.mock import patch
 
+import pytest
+
 from veille_reader import cli
+
+
+@pytest.fixture(autouse=True)
+def no_skills_sync():
+    """`main` pulls the skills in a thread: never over the network in a test."""
+    with patch.object(cli, "sync_skills") as sync:
+        yield sync
+
+
+def test_main_pulls_the_skills_into_the_data_dir(tmp_path, no_skills_sync):
+    cat = tmp_path / "c.json"
+    cat.write_text('{"items": []}', encoding="utf-8")
+    with patch.object(cli.uvicorn, "run"):
+        cli.main(["serve", "--data-dir", str(tmp_path / "d"), "--catalogue", str(cat)])
+    cli.threading.Event().wait(0.1)  # the daemon thread starts at once
+    no_skills_sync.assert_called_once_with(tmp_path / "d" / "skills")
 
 
 def test_serve_binds_loopback_only(tmp_path):

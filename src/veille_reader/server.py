@@ -39,6 +39,9 @@ from veille_reader.quiz import (
     view_of,
     with_results,
 )
+from veille_reader.skills import load_skills
+from veille_reader.skills_sync import default_fetcher as default_skills_fetcher
+from veille_reader.skills_sync import sync_skills
 from veille_reader.storage import ReaderStore
 from veille_reader.structure import load_structure
 from veille_reader.tools import PaperTools
@@ -187,6 +190,8 @@ def create_app(
     grader: Grader | None = None,
     voice_engine: VoiceEngine | None = None,
     ask_timeout: float = ASK_TIMEOUT,
+    skills_dir: Path | None = None,
+    skills_fetch: Fetcher | None = None,
 ) -> FastAPI:
     loaded = {"items": _load_items(catalogue_path), "mtime": catalogue_path.stat().st_mtime_ns}
 
@@ -579,6 +584,22 @@ def create_app(
         if not store.delete_memory_note(item_id, note_id):
             return unknown("unknown_note")
         return Response(status_code=204)
+
+    skills_cache = skills_dir or data_dir / "skills"
+
+    @app.get("/api/skills")
+    def list_skills() -> list[dict]:
+        return [
+            {"name": s.name, "description": s.description, "tools": list(s.tools)}
+            for s in load_skills(skills_cache)
+        ]
+
+    @app.post("/api/skills/sync")
+    async def sync_skills_now() -> dict:
+        count = await asyncio.to_thread(
+            sync_skills, skills_cache, skills_fetch or default_skills_fetcher
+        )
+        return {"count": count}
 
     @app.get("/catalogue.json")
     def catalogue() -> FileResponse:
