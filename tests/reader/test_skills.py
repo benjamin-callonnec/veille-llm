@@ -163,3 +163,10 @@ def test_check_directory_reports_each_problem(tmp_path):
 def test_check_directory_refuses_an_empty_or_missing_folder(tmp_path):
     assert check_directory(tmp_path)
     assert check_directory(tmp_path / "nope")
+
+
+def test_present_skill_asks_for_quoted_citations():
+    text = (REPO_SKILLS / "present.md").read_text(encoding="utf-8")
+    assert '[p.N "exact quote"]' in text
+    assert "Figure K" in text and "Table K" in text
+    assert check_directory(REPO_SKILLS) == []
