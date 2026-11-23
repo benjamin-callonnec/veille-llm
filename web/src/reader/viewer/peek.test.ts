@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { cropFor, parseCite } from "./peek";
+import { parseCite, peekScrollTop } from "./peek";
 
 const cite = (veilleCite: unknown) => ({ veilleCite });
 
@@ -52,32 +52,27 @@ test("without a PDF the bound is large but a page still has to be sensible", () 
   expect(parseCite(cite({ page: 10000 }), 9999)).toBeNull();
 });
 
-test("no rectangles: the top of the page", () => {
-  expect(cropFor(null)).toEqual({ y: 0, h: 0.3 });
-  expect(cropFor([])).toEqual({ y: 0, h: 0.3 });
+test("no passage: the page is shown from its top", () => {
+  expect(peekScrollTop(null, 800, 300)).toBe(0);
+  expect(peekScrollTop([], 800, 300)).toBe(0);
 });
 
-test("a passage in the middle gets a margin and a minimum height", () => {
-  const { y, h } = cropFor([[0.1, 0.5, 0.8, 0.04]]);
-  expect(y).toBeLessThanOrEqual(0.5 - 0.04);
-  expect(y + h).toBeGreaterThanOrEqual(0.54 + 0.1);
-  expect(h).toBeGreaterThanOrEqual(0.25);
+test("the passage lands a third of the way down the visible area, never above the page", () => {
+  // the passage is at 50% of an 800px page; the card shows 300px: 400 - 100
+  expect(peekScrollTop([[0.1, 0.5, 0.8, 0.04]], 800, 300)).toBe(300);
+  // near the top: scrolling would go negative, so 0
+  expect(peekScrollTop([[0.1, 0.02, 0.8, 0.04]], 800, 300)).toBe(0);
 });
 
-test("near the bottom or the top the band stays inside the page", () => {
-  const low = cropFor([[0.1, 0.95, 0.8, 0.03]]);
-  expect(low.y + low.h).toBeCloseTo(1);
-  expect(low.y).toBeGreaterThanOrEqual(0);
-  const high = cropFor([[0.1, 0.01, 0.8, 0.03]]);
-  expect(high.y).toBe(0);
-  expect(high.h).toBeGreaterThanOrEqual(0.25);
-});
-
-test("several lines are all inside the band", () => {
-  const { y, h } = cropFor([
-    [0.1, 0.2, 0.8, 0.03],
-    [0.1, 0.4, 0.8, 0.03],
-  ]);
-  expect(y).toBeLessThanOrEqual(0.2);
-  expect(y + h).toBeGreaterThanOrEqual(0.43);
+test("with several lines the first one counts", () => {
+  expect(
+    peekScrollTop(
+      [
+        [0.1, 0.6, 0.8, 0.03],
+        [0.1, 0.5, 0.8, 0.03],
+      ],
+      800,
+      300,
+    ),
+  ).toBe(300);
 });

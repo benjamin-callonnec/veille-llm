@@ -4,14 +4,13 @@ import { locateQuote } from "../lib/locate";
 import type { Rect } from "../lib/quote";
 import type { PdfSource } from "../pdf/source";
 import { type Caption, findCaption } from "../structureApi";
-import { type CiteRef, cropFor } from "./peek";
+import { type CiteRef, peekScrollTop } from "./peek";
 
 const CARD_WIDTH = 420;
-const HIGHLIGHT = "rgba(255, 213, 0, 0.35)";
 
 type State =
   | { status: "loading" }
-  | { status: "ready" | "unlocated"; page: number }
+  | { status: "ready" | "unlocated"; page: number; rects: Rect[] }
   | { status: "nopdf" | "error" };
 
 const MESSAGES: Partial<Record<State["status"], string>> = {
@@ -29,9 +28,13 @@ interface Props {
   onClose(): void;
 }
 
-/** A glance at the paper: the page cut around the cited passage, the passage highlighted. */
+/**
+ * A glance at the paper: the whole page, scrollable, already scrolled to the cited passage, with
+ * the passage highlighted.
+ */
 export function CitationPeek({ cite, source, captions, onOpen, onClose }: Props) {
   const [state, setState] = useState<State>({ status: "loading" });
+  const scroller = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const latestCaptions = useRef(captions);
   latestCaptions.current = captions;
@@ -63,13 +66,16 @@ export function CitationPeek({ cite, source, captions, onOpen, onClose }: Props)
         }
         if (ctrl.signal.aborted) return;
         if (!(info.width > 0 && info.height > 0)) throw new Error("page without a size");
-        const band = cropFor(rects);
-        const whole = document.createElement("canvas");
-        await source.render(page, whole, CARD_WIDTH / info.width, ctrl.signal);
+        const target = canvas.current;
+        const box = scroller.current;
+        if (!target || !box) return;
+        // the page is drawn at the width of the card (pdf.js draws it sharp on any screen)
+        const width = box.clientWidth || CARD_WIDTH;
+        await source.render(page, target, width / info.width, ctrl.signal);
         if (ctrl.signal.aborted) return;
-        draw(canvas.current, whole, band, rects);
+        box.scrollTop = peekScrollTop(rects, target.offsetHeight, box.clientHeight);
         const asked = Boolean(cite.quote || cite.label);
-        setState({ status: asked && !rects ? "unlocated" : "ready", page });
+        setState({ status: asked && !rects ? "unlocated" : "ready", page, rects: rects ?? [] });
       } catch {
         if (!ctrl.signal.aborted) setState({ status: "error" });
       }
@@ -79,53 +85,42 @@ export function CitationPeek({ cite, source, captions, onOpen, onClose }: Props)
 
   const shownPage = "page" in state ? state.page : cite.page;
   const message = MESSAGES[state.status];
+  const showPage = state.status === "ready" || state.status === "unlocated";
   return (
     <aside className="citation-peek" aria-label="Preview of the paper">
       <header>
         <strong>{`p.${shownPage}`}</strong>
-        <button type="button" onClick={() => onOpen(cite)}>
-          Open in the PDF
-        </button>
+        <IconButton
+          icon="external"
+          label="Open in the PDF"
+          size={16}
+          onClick={() => onOpen(cite)}
+        />
         <IconButton icon="close" label="Close the preview" size={16} onClick={onClose} />
       </header>
       {message && <p role="status">{message}</p>}
-      <canvas
-        ref={canvas}
-        hidden={state.status === "nopdf" || state.status === "error" || state.status === "loading"}
-      />
+      <div
+        className={state.status === "loading" ? "peek-scroll peek-loading" : "peek-scroll"}
+        ref={scroller}
+        hidden={state.status === "nopdf" || state.status === "error"}
+      >
+        <div className="peek-sheet">
+          <canvas ref={canvas} />
+          {showPage &&
+            state.rects.map(([x, y, w, h]) => (
+              <span
+                key={`${x}-${y}`}
+                className="peek-highlight"
+                style={{
+                  left: `${x * 100}%`,
+                  top: `${y * 100}%`,
+                  width: `${w * 100}%`,
+                  height: `${h * 100}%`,
+                }}
+              />
+            ))}
+        </div>
+      </div>
     </aside>
   );
-}
-
-/** Copy the band of the rendered page into the card and paint the passage over it. */
-function draw(
-  target: HTMLCanvasElement | null,
-  whole: HTMLCanvasElement,
-  band: { y: number; h: number },
-  rects: Rect[] | null,
-): void {
-  const ctx = target?.getContext("2d");
-  if (!target || !ctx || whole.width <= 0 || whole.height <= 0) return;
-  target.width = whole.width;
-  target.height = Math.max(1, Math.round(whole.height * band.h));
-  ctx.drawImage(
-    whole,
-    0,
-    band.y * whole.height,
-    whole.width,
-    band.h * whole.height,
-    0,
-    0,
-    target.width,
-    target.height,
-  );
-  ctx.fillStyle = HIGHLIGHT;
-  for (const [x, y, w, h] of rects ?? []) {
-    ctx.fillRect(
-      x * target.width,
-      ((y - band.y) / band.h) * target.height,
-      w * target.width,
-      (h / band.h) * target.height,
-    );
-  }
 }

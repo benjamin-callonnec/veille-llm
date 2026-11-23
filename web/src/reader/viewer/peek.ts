@@ -1,4 +1,5 @@
 import type { Label } from "../chat/events";
+import { firstRectTop, scrollTargetTop } from "../lib/goto";
 import type { Rect } from "../lib/quote";
 
 /** What a click on a citation of a report asks for. */
@@ -45,18 +46,15 @@ export function parseCite(data: unknown, maxPage: number): CiteRef | "close" | n
   return out;
 }
 
-const MARGIN_TOP = 0.04;
-const MARGIN_BOTTOM = 0.1;
-const MIN_BAND = 0.25;
-const TOP_BAND = 0.3;
-
-/** The vertical band of a page to show, as fractions of its height. */
-export function cropFor(rects: Rect[] | null): { y: number; h: number } {
-  if (!rects || rects.length === 0) return { y: 0, h: TOP_BAND };
-  const top = Math.min(...rects.map((r) => r[1])) - MARGIN_TOP;
-  const bottom = Math.max(...rects.map((r) => r[1] + r[3])) + MARGIN_BOTTOM;
-  const h = Math.min(1, Math.max(MIN_BAND, bottom - top));
-  const centre = (top + bottom) / 2;
-  const y = Math.min(1 - h, Math.max(0, centre - h / 2));
-  return { y, h };
+/**
+ * Where to scroll the page of the preview so the passage is a third of the way down the visible
+ * area (never above the page); 0 when nothing was located.
+ */
+export function peekScrollTop(
+  rects: Rect[] | null,
+  sheetHeight: number,
+  viewportHeight: number,
+): number {
+  if (!rects || rects.length === 0) return 0;
+  return scrollTargetTop(0, firstRectTop(rects) * sheetHeight, viewportHeight);
 }

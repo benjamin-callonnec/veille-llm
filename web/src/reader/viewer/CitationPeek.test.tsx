@@ -121,3 +121,77 @@ test("Open in the PDF and the close button call back with the citation", async (
   await userEvent.click(screen.getByRole("button", { name: "Close the preview" }));
   expect(props.onClose).toHaveBeenCalledTimes(1);
 });
+
+// --- the whole page, scrollable, at the passage, highlighted ------------------------------
+
+const highlights = () => document.querySelectorAll<HTMLElement>(".peek-highlight");
+
+test("the whole page is drawn at the width of the card, not a cut of it", async () => {
+  const { props } = setup({ page: 2, quote: "Text of page 2" });
+  const source = props.source as FakeSource;
+  await waitFor(() => expect(source.renders).toHaveLength(1));
+  // a 600pt wide page in a 420px card
+  expect(source.renders[0]?.scale).toBeCloseTo(0.7);
+});
+
+test("the passage is highlighted where it is on the page, in percent of the page", async () => {
+  setup({ page: 2, quote: "Text of page 2" });
+  await waitFor(() => expect(highlights()).toHaveLength(1));
+  const box = highlights()[0] as HTMLElement;
+  // FakeSource: one text box at x=50 y=100 w=200 h=12 on a 600 x 800 page
+  expect(Number.parseFloat(box.style.left)).toBeCloseTo((50 / 600) * 100);
+  expect(Number.parseFloat(box.style.top)).toBeCloseTo((100 / 800) * 100);
+  expect(Number.parseFloat(box.style.width)).toBeCloseTo((200 / 600) * 100);
+  expect(Number.parseFloat(box.style.height)).toBeCloseTo((12 / 800) * 100);
+});
+
+test("a figure is highlighted at its caption", async () => {
+  setup({ page: 2, label: { kind: "figure", number: "2" } }, { captions: async () => [figure(2)] });
+  await waitFor(() => expect(highlights()).toHaveLength(1));
+  expect(Number.parseFloat((highlights()[0] as HTMLElement).style.top)).toBeCloseTo(40);
+});
+
+test("nothing is highlighted when the passage is not located, or for a page alone", async () => {
+  setup({ page: 2, quote: "words that are nowhere on this page" });
+  await waitFor(() => expect(status()).toBe("Passage not located"));
+  expect(highlights()).toHaveLength(0);
+  cleanup();
+  const { props } = setup({ page: 3 });
+  await waitFor(() => expect((props.source as FakeSource).renders).toHaveLength(1));
+  expect(highlights()).toHaveLength(0);
+});
+
+test("the page is scrolled to the passage once it is drawn", async () => {
+  const scrolls: number[] = [];
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(300);
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(800);
+  Object.defineProperty(HTMLElement.prototype, "scrollTop", {
+    configurable: true,
+    get: () => 0,
+    set: (v: number) => {
+      scrolls.push(v);
+    },
+  });
+  const source = new FakeSource({ numPages: 5 });
+  source.textLayer = async () => ({
+    text: "Text of page 2",
+    boxes: [{ text: "Text of page 2", x: 50, y: 400, width: 200, height: 12 }],
+  });
+  setup({ page: 2, quote: "Text of page 2" }, { source });
+  await waitFor(() => expect(highlights()).toHaveLength(1));
+  expect(scrolls.at(-1)).toBe(300); // 400 - 300 / 3
+  Reflect.deleteProperty(HTMLElement.prototype, "scrollTop");
+});
+
+test("the page can be scrolled inside the card", async () => {
+  const { props } = setup({ page: 2 });
+  await waitFor(() => expect((props.source as FakeSource).renders).toHaveLength(1));
+  expect(document.querySelector(".peek-scroll")).not.toBeNull();
+});
+
+test("Open in the PDF is an icon: no text in the button", () => {
+  setup({ page: 2 });
+  const button = screen.getByRole("button", { name: "Open in the PDF" });
+  expect(button.textContent).toBe("");
+  expect(button.querySelector("svg")).not.toBeNull();
+});
