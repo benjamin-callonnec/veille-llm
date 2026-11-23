@@ -19,6 +19,7 @@ const titleOf = (body: SendBody) =>
   (body.kind === "text" ? body.text : body.question).trim().slice(0, 50) || "New conversation";
 
 const TRAILING = new Set(["quiz", "notice"]);
+const BEFORE_ANSWER = new Set(["ask", "memory"]);
 
 /** What regenerate drops, as the server does: the last answer and the quiz cards after it. */
 function withoutLastAnswer(messages: StoredMessage[]): StoredMessage[] {
@@ -29,7 +30,16 @@ function withoutLastAnswer(messages: StoredMessage[]): StoredMessage[] {
     TRAILING.has(messages[end - 1]?.kind ?? "")
   )
     end--;
-  return messages[end - 1]?.role === "assistant" ? messages.slice(0, end - 1) : messages;
+  if (messages[end - 1]?.role !== "assistant") return messages;
+  end--;
+  // the question cards and note lines of that turn sit just before its answer
+  while (
+    end > 0 &&
+    messages[end - 1]?.role === "system" &&
+    BEFORE_ANSWER.has(messages[end - 1]?.kind ?? "")
+  )
+    end--;
+  return messages.slice(0, end);
 }
 
 export function useChat(
