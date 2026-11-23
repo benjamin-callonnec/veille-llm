@@ -46,6 +46,8 @@ export function useChat(
   itemId: string,
   api: ChatApi = httpChatApi,
   clock: () => number = Date.now,
+  /** Called when a turn ends and the tutor saved a report during it. */
+  onReport?: () => void,
 ) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentId, setCurrentId] = useState<number | null>(null);
@@ -61,6 +63,8 @@ export function useChat(
   const conversationsRef = useRef<Conversation[]>([]);
   conversationsRef.current = conversations;
   const loadToken = useRef(0);
+  const reportRef = useRef(onReport);
+  reportRef.current = onReport;
 
   const loadMessages = useCallback(
     async (id: number) => {
@@ -117,8 +121,17 @@ export function useChat(
     async (id: number, stream: AsyncIterable<ChatEvent>, ctrl: AbortController) => {
       setAssistant(initialAssistant(clock()));
       setStreaming(true);
+      const names = new Map<string, string>();
+      let wroteReport = false;
       try {
         for await (const event of stream) {
+          if (event.type === "tool_use") names.set(event.id, event.name);
+          if (
+            event.type === "tool_result" &&
+            !event.is_error &&
+            names.get(event.id) === "write_report"
+          )
+            wroteReport = true;
           setAssistant((s) => (s ? applyEvent(s, event, clock()) : s));
         }
       } catch {
@@ -130,6 +143,7 @@ export function useChat(
         setStreaming(false);
         controller.current = null;
         busy.current = false;
+        if (wroteReport) reportRef.current?.();
       }
     },
     [clock, loadMessages, settle],

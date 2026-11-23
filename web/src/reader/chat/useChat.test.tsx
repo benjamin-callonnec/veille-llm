@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import type { ChatApi, Conversation, StoredMessage } from "./api";
 import type { ChatEvent } from "./events";
 import { useChat } from "./useChat";
@@ -357,4 +357,37 @@ test("leaving the page aborts a running answer", async () => {
   unmount();
   expect(signals[0]?.aborted).toBe(true);
   release();
+});
+
+const wrote = (id: string, is_error: boolean): ChatEvent[] => [
+  { type: "tool_use", id, name: "write_report", input: {} },
+  { type: "tool_result", id, summary: "Saved", is_error },
+];
+
+test("onReport is called once a turn ends if write_report succeeded", async () => {
+  const onReport = vi.fn();
+  const { api } = fakeApi([...wrote("t1", false), { type: "done", duration_ms: 1 }]);
+  const { result } = renderHook(() => useChat("a1", api, undefined, onReport));
+  await waitFor(() => expect(result.current.ready).toBe(true));
+  await act(async () => {
+    await result.current.send({ kind: "text", text: "go" });
+  });
+  expect(onReport).toHaveBeenCalledTimes(1);
+});
+
+test("onReport is not called when write_report failed or another tool ran", async () => {
+  const onReport = vi.fn();
+  const events: ChatEvent[] = [
+    ...wrote("t1", true),
+    { type: "tool_use", id: "t2", name: "search_paper", input: {} },
+    { type: "tool_result", id: "t2", summary: "ok", is_error: false },
+    { type: "done", duration_ms: 1 },
+  ];
+  const { api } = fakeApi(events);
+  const { result } = renderHook(() => useChat("a1", api, undefined, onReport));
+  await waitFor(() => expect(result.current.ready).toBe(true));
+  await act(async () => {
+    await result.current.send({ kind: "text", text: "go" });
+  });
+  expect(onReport).not.toHaveBeenCalled();
 });

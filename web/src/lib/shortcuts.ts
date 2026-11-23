@@ -38,6 +38,13 @@ export const READER_SHORTCUTS: ShortcutGroup[] = [
     ],
   },
   {
+    title: "Viewer",
+    entries: [
+      { keys: ["V"], label: "Open or close the viewer" },
+      { keys: ["Esc"], label: "Close the viewer" },
+    ],
+  },
+  {
     title: "Selected passage",
     entries: [
       { keys: ["Enter"], label: "Send the question" },

@@ -32,3 +32,9 @@ test("both pages list the shortcut to go home", () => {
     expect(all).toContain("H:Go to the home page (catalogue)");
   }
 });
+
+test("the reader lists the viewer shortcuts", () => {
+  const viewer = READER_SHORTCUTS.find((g) => g.title === "Viewer");
+  const labels = viewer?.entries.map((e) => `${e.keys.join("+")}:${e.label}`) ?? [];
+  expect(labels).toEqual(["V:Open or close the viewer", "Esc:Close the viewer"]);
+});

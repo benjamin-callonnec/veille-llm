@@ -7,6 +7,7 @@ import { PdfOpenError, type PdfSource } from "./pdf/source";
 import { type ReaderItem, ReaderPage } from "./ReaderPage";
 import type { Caption } from "./structureApi";
 import type { Highlight, HighlightsApi } from "./useHighlights";
+import type { ReportMeta } from "./viewer/reportsApi";
 
 const item = (over: Partial<ReaderItem> = {}): ReaderItem => ({
   id: "a1",
@@ -107,6 +108,7 @@ const setup = (
     highlights?: Highlight[];
     captions?: Caption[];
     captionsApi?: (item: string) => Promise<Caption[]>;
+    reports?: () => Promise<ReportMeta[]>;
   } = {},
 ) => {
   const { api, rows } = fakeApi();
@@ -121,6 +123,7 @@ const setup = (
       api={api}
       chatApi={opts.chat ?? chat.api}
       captionsApi={opts.captionsApi ?? (async () => opts.captions ?? [])}
+      reportsApi={opts.reports ?? (async () => [])}
     />,
   );
   return { api, rows, open, chatSent: chat.sent, ...utils };
@@ -572,4 +575,54 @@ test("a figure found late does not override the page typed meanwhile", async () 
   release([{ kind: "figure", number: "1", page: 3, rect: [0.1, 0.5, 0.3, 0.02] }]);
   await new Promise((r) => setTimeout(r, 50));
   expect(field.value).toBe("5");
+});
+
+test("V opens the viewer and V closes it", async () => {
+  setup();
+  await screen.findByText("Text of page 1");
+  expect(screen.queryByRole("region", { name: "Viewer" })).toBeNull();
+  await userEvent.keyboard("v");
+  expect(screen.getByRole("region", { name: "Viewer" })).toBeTruthy();
+  await userEvent.keyboard("v");
+  expect(screen.queryByRole("region", { name: "Viewer" })).toBeNull();
+});
+
+test("V does nothing while typing or with a modifier", async () => {
+  setup();
+  await screen.findByText("Text of page 1");
+  const box = await screen.findByRole("textbox");
+  await userEvent.type(box, "v");
+  expect(screen.queryByRole("region", { name: "Viewer" })).toBeNull();
+  box.blur();
+  await userEvent.keyboard("{Meta>}v{/Meta}");
+  await userEvent.keyboard("{Control>}v{/Control}");
+  expect(screen.queryByRole("region", { name: "Viewer" })).toBeNull();
+});
+
+test("the viewer opens by itself when the tutor saved a report", async () => {
+  const meta: ReportMeta = { id: 7, title: "Deck", version: 1, updated_at: "" };
+  let saved = false;
+  const reports = vi.fn(async () => (saved ? [meta] : []));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: 7, title: "Deck", version: 1, versions: [], html: "<p>x</p>" }),
+    })),
+  );
+  const { api } = fakeChatApi();
+  const chat: ChatApi = {
+    ...api,
+    async *send(...args) {
+      saved = true;
+      yield { type: "tool_use", id: "t", name: "write_report", input: {} };
+      yield { type: "tool_result", id: "t", summary: "Saved", is_error: false };
+      yield* api.send(...args);
+    },
+  };
+  setup({ chat, reports });
+  await screen.findByText("Text of page 1");
+  await userEvent.type(await screen.findByRole("textbox"), "go{Enter}");
+  expect(await screen.findByRole("region", { name: "Viewer" })).toBeTruthy();
+  expect(await screen.findByText("Deck")).toBeTruthy();
 });
