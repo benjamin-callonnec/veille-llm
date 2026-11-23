@@ -5,6 +5,17 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-23
+
+### Added
+- Reader (#43): agent skills. A skill is a Markdown file (`skills/*.md`: name, description, tools, prompt). The tutor sees only the names and descriptions and loads one with `use_skill`, or you invoke it with `/name` from the composer's slash menu (read only). `write_report` and `read_report` refuse to act until a skill that lists them is loaded. No skill, no change in behaviour.
+- Reader (#43): skills are published as `skills.zip` on the `skills` GitHub release by the new `skills.yml` workflow (it validates every skill first) and pulled at startup into `.local/reader/skills/` (a disposable cache; a failed pull keeps the cache).
+- Reader (#43): HTML reports written by the tutor, kept locally (never in git) with one version per write (50 kept), restore of an old version and export as a standalone HTML file. A generic file viewer (`V` opens and closes it) shows them in a sandboxed iframe (scripts allowed, no network, no same origin).
+- Reader (#43): the `/present` skill asks for the audience, depth, length and focus, then writes an HTML presentation of the paper.
+
+### Fixed
+- Reader (#43): regenerating an answer keeps the skill you invoked with `/name`.
+
 ## [0.16.0] - 2026-11-23
 
 ### Added
