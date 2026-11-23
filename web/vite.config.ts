@@ -30,5 +30,10 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
-  test: { environment: "jsdom", include: ["src/**/*.test.{ts,tsx}"] },
+  // vitest empties CSS files by default: tokens.test.ts reads tokens.css as text
+  test: {
+    environment: "jsdom",
+    include: ["src/**/*.test.{ts,tsx}"],
+    css: { include: [/tokens\.css/] },
+  },
 }));

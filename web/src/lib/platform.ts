@@ -60,3 +60,8 @@ export function modifierPressed(e: Modifiers, mac: boolean): boolean {
   if (e.altKey || e.shiftKey) return false;
   return mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 }
+
+/** True when the key goes to a text field, where a letter shortcut must stay a letter. */
+export const isTyping = (target: EventTarget | null) =>
+  target instanceof HTMLElement &&
+  (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);

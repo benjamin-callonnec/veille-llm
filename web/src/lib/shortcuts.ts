@@ -9,8 +9,11 @@ export interface ShortcutGroup {
 }
 
 const HELP: ShortcutGroup = {
-  title: "Help",
-  entries: [{ keys: ["?"], label: "Show or hide the settings" }],
+  title: "General",
+  entries: [
+    { keys: ["H"], label: "Go to the home page (catalogue)" },
+    { keys: ["?"], label: "Show or hide the settings" },
+  ],
 };
 
 /** Every keyboard shortcut of the reader, in one place (the settings panel is built from it). */

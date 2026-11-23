@@ -2,25 +2,31 @@
 
 from __future__ import annotations
 
-import json
-import urllib.request
+from typing import NamedTuple
 
 DAILY_PAPERS_URL = "https://huggingface.co/api/daily_papers"
 
 
-def parse_upvotes(payload: list[dict]) -> dict[str, int]:
+class Signal(NamedTuple):
+    """What the community says about a paper: HF upvotes and the stars of its linked repo."""
+
+    upvotes: int = 0
+    github_stars: int = 0
+
+
+def _count(value: object) -> int:
+    """A count from a payload we do not control: what int() reads, never below 0, else 0."""
+    try:
+        return max(0, int(value))  # type: ignore[call-overload]
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def parse_signals(payload: list[dict]) -> dict[str, Signal]:
     return {
-        item["paper"]["id"]: int(item["paper"].get("upvotes", 0))
+        item["paper"]["id"]: Signal(
+            _count(item["paper"].get("upvotes")), _count(item["paper"].get("githubStars"))
+        )
         for item in payload
         if "id" in item.get("paper", {})
     }
-
-
-def fetch_upvotes() -> dict[str, int]:
-    """arXiv id -> upvotes. Best effort: the watch still builds without this signal."""
-    request = urllib.request.Request(DAILY_PAPERS_URL, headers={"User-Agent": "veille-llm"})
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return parse_upvotes(json.load(response))
-    except (OSError, ValueError):
-        return {}

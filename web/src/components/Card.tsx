@@ -36,6 +36,7 @@ export function Card({ item }: { item: Item }) {
         <span>{date(item.published)}</span>
         <span>score {item.score}/10</span>
         {item.upvotes > 0 && <span>{item.upvotes} upvotes</span>}
+        {item.github_stars > 0 && <span>{item.github_stars} GitHub stars</span>}
       </p>
     </article>
   );

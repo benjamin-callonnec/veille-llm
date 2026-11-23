@@ -10,6 +10,8 @@ export interface Item {
   authors: string[];
   published: string;
   upvotes: number;
+  /** Stars of the repo Hugging Face links to the paper (0 when none, or in older catalogues). */
+  github_stars: number;
   score: number;
   type: ItemType;
   category: string;
@@ -64,6 +66,7 @@ function parseItem(raw: unknown): Item | null {
     authors: Array.isArray(r.authors) ? r.authors.filter(isStr) : [],
     published: r.published,
     upvotes: isNum(r.upvotes) ? r.upvotes : 0,
+    github_stars: isNum(r.github_stars) ? Math.max(0, r.github_stars) : 0,
     score: Math.min(10, Math.max(0, r.score)),
     type: r.type as ItemType,
     category: r.category,
@@ -133,11 +136,16 @@ function matches(item: Item, f: Filters, ignoreCategory = false): boolean {
   );
 }
 
+/**
+ * Upvotes plus the 0-10 score (news never have upvotes: the score keeps strong news among trending
+ * papers), plus the GitHub stars on a log scale (a 100k-star repo adds 17, not 100k).
+ */
+const trend = (i: Item) => i.upvotes + i.score + Math.log2(1 + i.github_stars);
+
 export function applyFilters(items: Item[], f: Filters): Item[] {
   const byDate = (a: Item, b: Item) => b.published.localeCompare(a.published);
   const order: Record<SortKey, (a: Item, b: Item) => number> = {
-    // News never have upvotes: adding the 0-10 score keeps strong news among trending papers.
-    trending: (a, b) => b.upvotes + b.score - (a.upvotes + a.score) || byDate(a, b),
+    trending: (a, b) => trend(b) - trend(a) || byDate(a, b),
     date: (a, b) => byDate(a, b) || b.score - a.score,
     score: (a, b) => b.score - a.score || byDate(a, b),
   };

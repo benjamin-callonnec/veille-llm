@@ -1,5 +1,5 @@
 from veille_llm.arxiv import parse_feed
-from veille_llm.hf import parse_upvotes
+from veille_llm.hf import Signal, parse_signals
 
 FEED = """<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
@@ -23,6 +23,31 @@ def test_parse_feed_normalises_id_and_whitespace():
     assert paper.url == "https://arxiv.org/abs/2611.01234"
 
 
-def test_parse_upvotes_skips_entries_without_id():
+def test_parse_signals_skips_entries_without_id():
     payload = [{"paper": {"id": "2611.01234", "upvotes": 12}}, {"paper": {}}, {}]
-    assert parse_upvotes(payload) == {"2611.01234": 12}
+    assert parse_signals(payload) == {"2611.01234": Signal(12, 0)}
+
+
+def test_parse_signals_keeps_reading_numbers_the_way_int_did():
+    payload = [
+        {"paper": {"id": "a", "upvotes": "12", "githubStars": 7.0}},
+        {"paper": {"id": "b", "upvotes": -3}},
+        {"paper": {"id": "c", "upvotes": float("inf")}},
+    ]
+    assert parse_signals(payload) == {"a": Signal(12, 7), "b": Signal(0, 0), "c": Signal(0, 0)}
+
+
+def test_parse_signals_reads_the_github_stars_of_the_linked_repo():
+    payload = [
+        {
+            "paper": {
+                "id": "a",
+                "upvotes": 3,
+                "githubRepo": "https://github.com/x/y",
+                "githubStars": 162,
+            }
+        },
+        {"paper": {"id": "b", "upvotes": 1, "githubStars": None}},  # no repo linked
+        {"paper": {"id": "c", "githubStars": "oops"}},  # malformed: a signal is never fatal
+    ]
+    assert parse_signals(payload) == {"a": Signal(3, 162), "b": Signal(1, 0), "c": Signal(0, 0)}

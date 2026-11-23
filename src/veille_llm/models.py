@@ -16,6 +16,7 @@ class Item:
     authors: list[str]
     published: str  # ISO 8601 UTC, e.g. 2026-11-20T10:00:00Z
     upvotes: int = 0
+    github_stars: int = 0  # stars of the repo Hugging Face links to the paper
 
 
 @dataclass(frozen=True)

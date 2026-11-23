@@ -10,11 +10,13 @@
   --accent-fg: #ffffff;
   --bubble: #efeee8;
   --composer: #ffffff;
+  --pdf-filter: none;
   color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
+    --pdf-filter: invert(1) hue-rotate(180deg);
     --bg: #131312;
     --fg: #ecece6;
     --muted: #a3a39b;
@@ -46,6 +48,7 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
+  --pdf-filter: none;
   --bg: #fafaf7;
   --fg: #1c1c1a;
   --muted: #5f5f5a;
@@ -65,6 +68,7 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
+  --pdf-filter: invert(1) hue-rotate(180deg);
   --bg: #131312;
   --fg: #ecece6;
   --muted: #a3a39b;

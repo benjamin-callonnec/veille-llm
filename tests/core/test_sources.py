@@ -2,10 +2,11 @@ import dataclasses
 import urllib.error
 from datetime import UTC, datetime
 
+from veille_llm.hf import Signal
 from veille_llm.models import Item
 from veille_llm.sources import SourceReport, collect_all
 from veille_llm.sources.arxiv_source import arxiv_source
-from veille_llm.sources.hf_source import hf_upvotes, with_upvotes
+from veille_llm.sources.hf_source import hf_signals, with_signals
 from veille_llm.sources.rss_source import rss_source
 
 NOW = datetime(2026, 11, 21, 12, 0, tzinfo=UTC)
@@ -91,21 +92,21 @@ def test_arxiv_source_gives_up_after_three_503_without_raising_to_collect_all():
     assert not reports[0].ok and "503" in reports[0].error
 
 
-def test_hf_upvotes_returns_empty_on_error():
+def test_hf_signals_returns_empty_on_error():
     def fetch():
         raise OSError("boom")
 
-    assert hf_upvotes(fetch=fetch, sleep=lambda s: None) == {}
+    assert hf_signals(fetch=fetch, sleep=lambda s: None) == {}
 
 
-def test_hf_upvotes_parses_and_with_upvotes_applies_them():
-    payload = b'[{"paper": {"id": "2611.01234", "upvotes": 12}}]'
-    votes = hf_upvotes(fetch=lambda: payload)
-    assert votes == {"2611.01234": 12}
+def test_hf_signals_parses_and_with_signals_applies_them():
+    payload = b'[{"paper": {"id": "2611.01234", "upvotes": 12, "githubStars": 40}}]'
+    signals = hf_signals(fetch=lambda: payload)
+    assert signals == {"2611.01234": Signal(12, 40)}
     paper = dataclasses.replace(item("arxiv:2611.01234"), source="arxiv")
     news = dataclasses.replace(item("rss:zzz"), source="blog")
-    updated = with_upvotes([paper, news], votes)
-    assert [i.upvotes for i in updated] == [12, 0]
+    updated = with_signals([paper, news], signals)
+    assert [(i.upvotes, i.github_stars) for i in updated] == [(12, 40), (0, 0)]
 
 
 def test_rss_source_parses_atom_and_rss():
