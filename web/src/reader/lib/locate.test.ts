@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { TextBox } from "../pdf/source";
-import { locateQuote, normalise } from "./locate";
+import { locateClosest, locateQuote, normalise, significantWords } from "./locate";
 
 const PAGE = { width: 600, height: 800 };
 const box = (text: string, x: number, y: number, width = 100, height = 10): TextBox => ({
@@ -75,4 +75,61 @@ test("a page with no size gives null", () => {
   expect(
     locateQuote([box("some text here", 0, 0)], "some text here", { width: 0, height: 0 }),
   ).toBeNull();
+});
+
+// --- the closest passage (when there is no exact quote) -----------------------------------
+
+test("significant words drop short and common words, keep numbers and names", () => {
+  expect(significantWords("The accuracy of GPT-4 rises by 12% on GSM8K, and it is a gain")).toEqual(
+    ["accuracy", "gpt", "rises", "12", "gsm8k", "gain"],
+  );
+  expect(significantWords("")).toEqual([]);
+});
+
+// a page with three paragraphs, each made of lines (boxes) that read top to bottom
+const PARAGRAPHS = [
+  ["We introduce a retrieval module that ranks", "passages before the reader model sees them."],
+  ["On GSM8K the accuracy rises by 12% when the", "reasoning steps are sampled several times."],
+  ["Training uses 64 GPUs for two weeks with a", "cosine learning rate schedule and warmup."],
+];
+const page = () =>
+  PARAGRAPHS.flatMap((lines, p) =>
+    lines.map((text, l) => box(text, 60, 100 + p * 120 + l * 14, 480, 12)),
+  );
+
+test("the closest passage is the paragraph that shares the most words with the slide text", () => {
+  const rects = locateClosest(page(), "Accuracy rises 12% on GSM8K with sampled reasoning", PAGE);
+  expect(rects).not.toBeNull();
+  const tops = (rects ?? []).map((r) => r[1] * PAGE.height);
+  // the second paragraph starts at y = 220: its lines, not the first or the third one
+  expect(Math.min(...tops)).toBeGreaterThanOrEqual(215);
+  expect(Math.max(...tops)).toBeLessThan(250);
+});
+
+test("a slide that is about the third paragraph finds the third paragraph", () => {
+  const rects = locateClosest(
+    page(),
+    "Training takes 64 GPUs and a cosine schedule with warmup",
+    PAGE,
+  );
+  const top = Math.min(...(rects ?? []).map((r) => r[1] * PAGE.height));
+  expect(top).toBeGreaterThanOrEqual(335);
+});
+
+test("nothing close enough: no passage rather than a wrong one", () => {
+  expect(
+    locateClosest(page(), "Quantum entanglement of photons in a vacuum chamber", PAGE),
+  ).toBeNull();
+  // two shared words are not a match
+  expect(locateClosest(page(), "Several passages about weather and mountains", PAGE)).toBeNull();
+});
+
+test("a slide text with too few significant words proves nothing", () => {
+  expect(locateClosest(page(), "It is the 12 of them", PAGE)).toBeNull();
+  expect(locateClosest(page(), "", PAGE)).toBeNull();
+});
+
+test("an empty page, or a page with no size, gives nothing and never throws", () => {
+  expect(locateClosest([], "Accuracy rises 12% on GSM8K", PAGE)).toBeNull();
+  expect(locateClosest(page(), "Accuracy rises 12% on GSM8K", { width: 0, height: 0 })).toBeNull();
 });

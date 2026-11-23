@@ -17,7 +17,7 @@ export function withCsp(html: string, head = ""): string {
 
 /**
  * The script injected into every report, right after the policy. It does two jobs and sends the
- * app nothing else (never HTML, only a page, an extract, a figure or a key):
+ * app nothing else (never HTML: a page, an extract, a figure, the short text around a citation, or a key):
  * - the page has the keyboard focus, so V and Escape never reach the app: they are passed up
  *   (not in a field, not with a modifier: Cmd+V is a paste);
  * - the citations `[p.4]`, `[p.4 "extract"]`, `[p.4 Figure 2]` of the text become buttons; a click
@@ -28,8 +28,10 @@ const BRIDGE_JS = String.raw`(function(){
 if(window.__veilleBridge)return;window.__veilleBridge=1;
 function post(m){parent.postMessage(m,"*")}
 var RE=/\[p\.(\d{1,4})(?:\s+(?:["\u201c]([^"\u201d]{3,300})["\u201d]|(Figure|Table|Fig\.?)\s+(\d+(?:\.\d+)?)))?\s*\]/g;
-function cite(s){var m={page:+s.getAttribute("data-p")},q=s.getAttribute("data-q"),k=s.getAttribute("data-k");
-if(q)m.quote=q;if(k){m.kind=k;m.number=s.getAttribute("data-n")}post({veilleCite:m})}
+function around(s){var b=s.closest("li,p,td,th,figcaption,blockquote,h1,h2,h3,h4")||s.closest("section")||s.parentNode;
+var t=((b&&b.textContent)||"").replace(/\[p\.[^\]]*\]/g,"").replace(/\s+/g," ").trim();return t.slice(0,400)}
+function cite(s){var m={page:+s.getAttribute("data-p")},q=s.getAttribute("data-q"),k=s.getAttribute("data-k"),c=around(s);
+if(q)m.quote=q;if(k){m.kind=k;m.number=s.getAttribute("data-n")}if(c.length>=12)m.context=c;post({veilleCite:m})}
 function wrap(){
 var st=document.createElement("style");st.textContent=".veille-cite{text-decoration:underline dotted;cursor:pointer}";
 (document.head||document.documentElement).appendChild(st);

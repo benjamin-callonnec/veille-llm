@@ -7,10 +7,14 @@ export interface CiteRef {
   page: number;
   quote?: string;
   label?: Label;
+  /** The slide text around the citation: used to find the closest passage without an exact quote. */
+  context?: string;
 }
 
 export const MIN_QUOTE = 3;
 export const MAX_QUOTE = 300;
+export const MIN_CONTEXT = 12;
+export const MAX_CONTEXT = 400;
 const NUMBER = /^\d+(\.\d+)?$/;
 
 /**
@@ -32,6 +36,11 @@ export function parseCite(data: unknown, maxPage: number): CiteRef | "close" | n
     const q = r.quote;
     if (typeof q !== "string" || q.length < MIN_QUOTE || q.length > MAX_QUOTE) return null;
     out.quote = q;
+  }
+  if (r.context !== undefined) {
+    if (typeof r.context !== "string") return null;
+    const context = r.context.trim().slice(0, MAX_CONTEXT);
+    if (context.length >= MIN_CONTEXT) out.context = context;
   }
   if (r.kind !== undefined || r.number !== undefined) {
     if (

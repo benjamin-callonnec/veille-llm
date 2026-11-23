@@ -43,6 +43,7 @@ const flush = () => new Promise<void>((done) => setTimeout(done, 10));
 beforeAll(() => {
   document.body.innerHTML = `
     <p id="text">A [p.4] B [p.5 "an exact quote here"] C [p.6 Figure 2] D [p.7 Table 1.2] E [p.8 Fig. 3] F [p.9 \u201ccurly quote\u201d]</p>
+    <ul><li id="claim">Accuracy rises 12% on GSM8K with sampled reasoning [p.11]</li></ul>
     <p id="plain">No citation here, just [p.x] and [brackets].</p>
     <textarea id="area">[p.9]</textarea>
     <style>/* [p.9] */</style>
@@ -67,6 +68,7 @@ test("every citation form becomes a button with its data", () => {
     "[p.7 Table 1.2]",
     "[p.8 Fig. 3]",
     "[p.9 \u201ccurly quote\u201d]",
+    "[p.11]",
   ]);
   expect(chips.every((c) => c.getAttribute("role") === "button" && c.tabIndex === 0)).toBe(true);
   expect(chip('[p.5 "an exact quote here"]')?.dataset.q).toBe("an exact quote here");
@@ -141,5 +143,19 @@ test("installing it twice in the same page changes nothing", async () => {
   chip("[p.4]")?.click();
   await flush();
   expect(seen).toEqual([{ veilleCite: { page: 4 } }]);
-  expect(document.querySelectorAll(".veille-cite")).toHaveLength(6);
+  expect(document.querySelectorAll(".veille-cite")).toHaveLength(7);
+});
+
+test("a citation also sends the text around it (without the citations) to find the closest passage", async () => {
+  chip("[p.11]")?.click();
+  await flush();
+  expect(seen).toEqual([
+    { veilleCite: { page: 11, context: "Accuracy rises 12% on GSM8K with sampled reasoning" } },
+  ]);
+});
+
+test("too little text around a citation sends none", async () => {
+  chip("[p.4]")?.click(); // "A B C D E F": nothing to look for
+  await flush();
+  expect(seen).toEqual([{ veilleCite: { page: 4 } }]);
 });

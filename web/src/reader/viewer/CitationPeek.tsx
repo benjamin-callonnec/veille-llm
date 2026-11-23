@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { IconButton } from "../../components/Icon";
-import { locateQuote } from "../lib/locate";
+import { locateClosest, locateQuote } from "../lib/locate";
 import type { Rect } from "../lib/quote";
 import type { PdfSource } from "../pdf/source";
 import { type Caption, findCaption } from "../structureApi";
@@ -19,6 +19,8 @@ interface Located {
   page: number;
   rects: Rect[] | null;
   asked: boolean;
+  /** The rectangles are the closest passage to the slide text, not an exact quote. */
+  approx: boolean;
 }
 
 type Phase = "loading" | "ready" | "nopdf" | "error";
@@ -62,10 +64,9 @@ export function CitationPeek({ cite, source, captions, onOpen, onClose }: Props)
         let page = cite.page;
         const info = await source.pageInfo(page);
         let rects: Rect[] | null = null;
-        if (cite.quote) {
-          const { boxes } = await source.textLayer(page);
-          rects = locateQuote(boxes, cite.quote, info);
-        }
+        let approx = false;
+        const boxes = cite.quote || cite.context ? (await source.textLayer(page)).boxes : [];
+        if (cite.quote) rects = locateQuote(boxes, cite.quote, info);
         if (!rects && cite.label) {
           const found = findCaption(await latestCaptions.current(), cite.label, cite.page);
           if (found) {
@@ -73,14 +74,19 @@ export function CitationPeek({ cite, source, captions, onOpen, onClose }: Props)
             rects = [found.rect];
           }
         }
+        // no exact passage: the closest one to the text of the slide, shown as only that
+        if (!rects && cite.context && page === cite.page) {
+          rects = locateClosest(boxes, cite.context, info);
+          approx = rects !== null;
+        }
         if (ctrl.signal.aborted) return;
-        setLocated({ page, rects, asked: Boolean(cite.quote || cite.label) });
+        setLocated({ page, rects, approx, asked: Boolean(cite.quote || cite.label) });
       } catch {
         if (!ctrl.signal.aborted) setPhase("error");
       }
     })();
     return () => ctrl.abort();
-  }, [source, cite.page, cite.quote, cite.label?.kind, cite.label?.number]);
+  }, [source, cite.page, cite.quote, cite.context, cite.label?.kind, cite.label?.number]);
 
   const shown = browse ?? located?.page ?? cite.page;
   const onCitedPage = located !== null && shown === located.page;
@@ -114,6 +120,7 @@ export function CitationPeek({ cite, source, captions, onOpen, onClose }: Props)
   }, [source, located, shown, zoom]);
 
   const lastPage = source?.numPages ?? 0;
+  const approx = phase === "ready" && onCitedPage && located.approx;
   const noteMissing = phase === "ready" && onCitedPage && located.asked && !located.rects;
   const pageOnly = phase === "ready" && onCitedPage && !located.asked;
   const message =
@@ -121,11 +128,13 @@ export function CitationPeek({ cite, source, captions, onOpen, onClose }: Props)
       ? "No PDF for this paper"
       : phase === "error"
         ? "The preview could not be drawn"
-        : noteMissing
-          ? "Passage not located"
-          : pageOnly
-            ? "Page only: no passage was cited"
-            : null;
+        : approx
+          ? "Closest match: not an exact quote"
+          : noteMissing
+            ? "Passage not located"
+            : pageOnly
+              ? "Page only: no passage was cited"
+              : null;
   const rects = onCitedPage && phase === "ready" ? (located.rects ?? []) : [];
   return (
     <aside className="citation-peek" aria-label="Preview of the paper">
@@ -181,7 +190,7 @@ export function CitationPeek({ cite, source, captions, onOpen, onClose }: Props)
           {rects.map(([x, y, w, h]) => (
             <span
               key={`${x}-${y}`}
-              className="peek-highlight"
+              className={approx ? "peek-highlight approx" : "peek-highlight"}
               style={{
                 left: `${x * 100}%`,
                 top: `${y * 100}%`,

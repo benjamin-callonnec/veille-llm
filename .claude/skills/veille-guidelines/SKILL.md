@@ -50,7 +50,7 @@ Spec de référence : `docs/superpowers/specs/2026-11-21-veille-llm-design.md`.
   git, affichés dans une `<iframe sandbox="allow-scripts">` (sans `allow-same-origin`) avec une CSP
   sans réseau (`web/src/reader/viewer/csp.ts`). Ne jamais ajouter `allow-same-origin`.
 - Le pont injecté dans l'iframe (`FRAME_BRIDGE`) n'envoie à l'application que des touches (`V`, Échap) et
-  des citations (page, extrait, figure), jamais de HTML ; le parent valide chaque champ (`parseCite`) et
+  des citations (page, extrait, figure, et jusqu'à 400 caractères de texte autour de la citation, pour retrouver le passage le plus proche), jamais de HTML ; le parent valide chaque champ (`parseCite`) et
   n'accepte que les messages de l'iframe elle-même.
 
 ## Qualité

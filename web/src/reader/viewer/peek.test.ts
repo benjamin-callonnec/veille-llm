@@ -19,6 +19,23 @@ test("a page alone, an extract and a figure are accepted", () => {
   });
 });
 
+test("the text around a citation is kept to find the closest passage, trimmed and capped", () => {
+  const context = "Accuracy rises 12% on GSM8K with sampled reasoning";
+  expect(parseCite(cite({ page: 4, context }), 10)).toEqual({ page: 4, context });
+  expect(parseCite(cite({ page: 4, context: `  ${context}  ` }), 10)?.valueOf()).toEqual({
+    page: 4,
+    context,
+  });
+  const long = parseCite(cite({ page: 4, context: "word ".repeat(200) }), 10);
+  expect(
+    typeof long === "object" && long !== null && "context" in long ? long.context?.length : 0,
+  ).toBeLessThanOrEqual(400);
+  // too short to mean anything: dropped, the citation itself stays
+  expect(parseCite(cite({ page: 4, context: "short" }), 10)).toEqual({ page: 4 });
+  // not a string: the whole message is refused
+  expect(parseCite(cite({ page: 4, context: 5 }), 10)).toBeNull();
+});
+
 test("a click elsewhere in the page closes the preview", () => {
   expect(parseCite(cite(null), 10)).toBe("close");
 });

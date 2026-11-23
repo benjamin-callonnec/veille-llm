@@ -311,3 +311,71 @@ test("without a PDF there is no navigation to offer", () => {
     (screen.getByRole("button", { name: "Previous page" }) as HTMLButtonElement).disabled,
   ).toBe(true);
 });
+
+// --- the closest passage ---------------------------------------------------------------------
+
+const PAGE_TEXT = [
+  ["We introduce a retrieval module that ranks", "passages before the reader model sees them."],
+  ["On GSM8K the accuracy rises by 12% when the", "reasoning steps are sampled several times."],
+];
+const withParagraphs = () => {
+  const source = new FakeSource({ numPages: 5 });
+  source.textLayer = async () => ({
+    text: PAGE_TEXT.flat().join(" "),
+    boxes: PAGE_TEXT.flatMap((lines, p) =>
+      lines.map((text, l) => ({ text, x: 60, y: 100 + p * 120 + l * 14, width: 480, height: 12 })),
+    ),
+  });
+  return source;
+};
+const CONTEXT = "Accuracy rises 12% on GSM8K with sampled reasoning";
+
+test("a page-only citation with the slide text highlights the closest passage, marked as such", async () => {
+  setup({ page: 2, context: CONTEXT }, { source: withParagraphs() });
+  await waitFor(() => expect(highlights().length).toBeGreaterThan(0));
+  expect(status()).toBe("Closest match: not an exact quote");
+  expect(highlights()[0]?.classList.contains("approx")).toBe(true);
+  expect(Number.parseFloat((highlights()[0] as HTMLElement).style.top)).toBeCloseTo(
+    (220 / 800) * 100,
+    0,
+  );
+});
+
+test("an extract that is not on the page falls back to the closest passage", async () => {
+  setup(
+    { page: 2, quote: "a sentence the paper never wrote", context: CONTEXT },
+    { source: withParagraphs() },
+  );
+  await waitFor(() => expect(status()).toBe("Closest match: not an exact quote"));
+  expect(highlights().length).toBeGreaterThan(0);
+});
+
+test("an exact extract wins: plain highlight, no closest-match note", async () => {
+  setup(
+    { page: 2, quote: "the accuracy rises by 12% when the", context: CONTEXT },
+    { source: withParagraphs() },
+  );
+  await waitFor(() => expect(highlights().length).toBeGreaterThan(0));
+  expect(status()).toBeNull();
+  expect(highlights()[0]?.classList.contains("approx")).toBe(false);
+});
+
+test("nothing close enough: the usual notes, never a wrong passage", async () => {
+  setup(
+    { page: 2, context: "Quantum entanglement of photons in a vacuum chamber" },
+    { source: withParagraphs() },
+  );
+  await waitFor(() => expect(status()).toBe("Page only: no passage was cited"));
+  expect(highlights()).toHaveLength(0);
+  cleanup();
+  setup(
+    {
+      page: 2,
+      quote: "words that are nowhere on this page",
+      context: "Quantum entanglement of photons",
+    },
+    { source: withParagraphs() },
+  );
+  await waitFor(() => expect(status()).toBe("Passage not located"));
+  expect(highlights()).toHaveLength(0);
+});

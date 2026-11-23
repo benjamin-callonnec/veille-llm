@@ -597,6 +597,13 @@
   background: color-mix(in srgb, var(--accent) 35%, transparent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
 }
+.peek-highlight.approx {
+  /* only the closest passage, not an exact quote: dashed, and lighter */
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow: none;
+  outline: 2px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 1px;
+}
 .citation-peek [role="status"] {
   margin: 8px 12px;
   font-size: 13px;
