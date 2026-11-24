@@ -67,3 +67,8 @@ def test_deploy_job_only_publishes_and_never_runs_third_party_code():
     assert job["permissions"] == {"pages": "write", "id-token": "write"}
     assert all("run" not in s for s in job["steps"])
     assert [s["uses"] for s in job["steps"]] == ["actions/deploy-pages@v4"]
+
+
+def test_the_pipeline_step_gets_the_read_only_workflow_token_for_the_github_search():
+    step = next(s for s in DOC["jobs"]["core"]["steps"] if "veille-core run" in s.get("run", ""))
+    assert step["env"]["GITHUB_TOKEN"] == "${{ secrets.GITHUB_TOKEN }}"
