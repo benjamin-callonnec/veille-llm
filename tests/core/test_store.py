@@ -3,7 +3,7 @@ import sqlite3
 import pytest
 
 from veille_llm.hf import Signal
-from veille_llm.models import Enrichment, Item, Verdict
+from veille_llm.models import Enrichment, Item, Mention, Verdict
 from veille_llm.store import Store
 
 NOW = "2026-11-21T12:00:00Z"
@@ -431,3 +431,65 @@ def test_stale_hooks_and_refresh_keep_the_category_that_consolidation_chose():
         "Consolidated",
     )
     assert store.stale_hooks(current, 10) == []
+
+
+def publish(store, it, type_="paper"):
+    store.upsert_items([it], NOW)
+    store.save_verdicts([Verdict(it.id, True, 7, type_, "h")])
+    store.save_enrichments([Enrichment(it.id, "Agents", "Hook.")])
+
+
+def repo(name: str, topics=("mcp", "agents"), stars=10) -> Item:
+    return Item(
+        f"github:{name}",
+        "github",
+        "github",
+        name,
+        "A repo",
+        f"https://github.com/{name}",
+        ["o"],
+        "2026-11-20T10:00:00Z",
+        github_stars=stars,
+        topics=topics,
+    )
+
+
+def test_topics_are_stored_and_read_back(store):
+    store.upsert_items([repo("o/r")], NOW)
+    assert store.pending_classification()[0].topics == ("mcp", "agents")
+
+
+def test_topic_counts_come_from_published_repos_only(store):
+    publish(store, repo("o/a", ("mcp", "agents")), "github")
+    publish(store, repo("o/b", ("mcp",)), "github")
+    store.upsert_items([repo("o/unpublished", ("games",))], NOW)
+    assert store.topic_counts("2026-11-01T00:00:00Z") == {"mcp": 2, "agents": 1}
+    assert store.topic_counts("2026-11-21T00:00:00Z") == {}
+
+
+def test_mentions_are_exported_with_the_item_most_points_first(store):
+    publish(store, item("a"))
+    store.save_mentions(
+        [
+            Mention("a", "https://news.ycombinator.com/item?id=1", "Low", 120, NOW),
+            Mention("a", "https://news.ycombinator.com/item?id=2", "High", 400, NOW),
+        ]
+    )
+    (exported,) = store.published_items("2026-01-01T00:00:00Z")
+    assert exported["mentions"] == [
+        {"title": "High", "url": "https://news.ycombinator.com/item?id=2", "points": 400},
+        {"title": "Low", "url": "https://news.ycombinator.com/item?id=1", "points": 120},
+    ]
+
+
+def test_saving_a_mention_again_only_ever_raises_its_points(store):
+    publish(store, item("a"))
+    url = "https://news.ycombinator.com/item?id=1"
+    store.save_mentions([Mention("a", url, "T", 300, NOW)])
+    store.save_mentions([Mention("a", url, "T", 100, NOW), Mention("a", url, "T", 350, NOW)])
+    assert store.published_items("2026-01-01T00:00:00Z")[0]["mentions"][0]["points"] == 350
+
+
+def test_an_item_without_mentions_exports_an_empty_list(store):
+    publish(store, item("a"))
+    assert store.published_items("2026-01-01T00:00:00Z")[0]["mentions"] == []

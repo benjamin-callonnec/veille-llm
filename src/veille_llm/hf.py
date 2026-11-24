@@ -14,7 +14,7 @@ class Signal(NamedTuple):
     github_stars: int = 0
 
 
-def _count(value: object) -> int:
+def as_count(value: object) -> int:
     """A count from a payload we do not control: what int() reads, never below 0, else 0."""
     try:
         return max(0, int(value))  # type: ignore[call-overload]
@@ -25,7 +25,7 @@ def _count(value: object) -> int:
 def parse_signals(payload: list[dict]) -> dict[str, Signal]:
     return {
         item["paper"]["id"]: Signal(
-            _count(item["paper"].get("upvotes")), _count(item["paper"].get("githubStars"))
+            as_count(item["paper"].get("upvotes")), as_count(item["paper"].get("githubStars"))
         )
         for item in payload
         if "id" in item.get("paper", {})

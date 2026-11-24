@@ -1,0 +1,76 @@
+"""GitHub repositories in the LLM agents / harnesses domain: parsing and topic choice."""
+
+from __future__ import annotations
+
+from veille_llm.hf import as_count
+from veille_llm.models import Item
+
+# The domain of the GitHub section. The LLM still rejects off-domain repos (games, Java...).
+SEED_TOPICS: tuple[str, ...] = (
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "agent-skills",
+    "claude-skills",
+    "coding-agent",
+    "llm-agent",
+    "ai-agents",
+    "agentic-ai",
+    "agent-framework",
+)
+MAX_TOPICS = 15  # the Search API allows 30 requests a minute with a token
+MIN_TOPIC_COUNT = 2  # a topic seen on a single published repo is not a trend yet
+# Topics on most repos of any domain: searching them only brings off-domain repos.
+STOP_TOPICS = frozenset(
+    {"ai", "llm", "llms", "openai", "chatgpt", "gpt", "python", "typescript", "javascript",
+     "rust", "go", "golang", "java", "react", "nodejs", "cli", "machine-learning",
+     "deep-learning", "artificial-intelligence", "generative-ai", "open-source"}
+)  # fmt: skip
+
+
+def dynamic_topics(
+    counts: dict[str, int], *, seed: tuple[str, ...] = SEED_TOPICS, limit: int = MAX_TOPICS
+) -> list[str]:
+    """The seed, then the topics most seen on the published repos, up to the limit."""
+    learned = sorted(
+        (
+            t
+            for t, n in counts.items()
+            if n >= MIN_TOPIC_COUNT and t not in seed and t not in STOP_TOPICS
+        ),
+        key=lambda t: (-counts[t], t),
+    )
+    return [*seed, *learned][:limit]
+
+
+def _usable(raw: dict) -> bool:
+    """A live repo (no fork, no archive) with a name, an https link and a creation date."""
+    name, url = raw.get("full_name"), raw.get("html_url")
+    return (
+        not raw.get("fork")
+        and not raw.get("archived")
+        and isinstance(name, str)
+        and name.count("/") == 1
+        and isinstance(raw.get("created_at"), str)
+        and isinstance(url, str)
+        and url.startswith("https://github.com/")
+    )
+
+
+def parse_repo(raw: dict, published: str | None = None) -> Item | None:
+    """A repo from the GitHub API, or None for a fork, an archive or a malformed payload."""
+    if not _usable(raw):
+        return None
+    name, topics = raw["full_name"], raw.get("topics")
+    return Item(
+        id=f"github:{name.lower()}",
+        source="github",
+        kind="github",
+        title=name,
+        summary=" ".join(str(raw.get("description") or "").split())[:2000],
+        url=raw["html_url"],
+        authors=[name.split("/")[0]],
+        published=published or raw["created_at"],
+        github_stars=as_count(raw.get("stargazers_count")),
+        topics=tuple(t for t in topics if isinstance(t, str)) if isinstance(topics, list) else (),
+    )

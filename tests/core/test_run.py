@@ -399,3 +399,100 @@ def test_a_patch_bump_of_the_pipeline_never_recomputes():
     major, minor, patch = PIPELINE_VERSION.split(".")
     stored = Provenance("m", "p", f"{major}.{minor}.{int(patch) + 3}")
     assert not outdated(stored, Provenance("m", "p", PIPELINE_VERSION))
+
+
+def hn_story(story_id, url, points=200):
+    from veille_llm.hn import Story
+
+    return Story(story_id, f"Story {story_id}", url, points, "pg", "2026-11-20T09:00:00Z")
+
+
+def gh_repo(name, stars=100):
+    return Item(
+        f"github:{name}", "github", "github", name, "An agent harness", f"https://github.com/{name}",
+        [], "2026-11-15T00:00:00Z", github_stars=stars, topics=("mcp",),
+    )  # fmt: skip
+
+
+def test_run_routes_hn_stories_to_news_repos_and_papers(tmp_path):
+    store, out = Store(":memory:"), tmp_path / "c.json"
+    stories = [
+        hn_story("1", "https://blog.example.com/a"),
+        hn_story("2", "https://github.com/o/found"),
+        hn_story("3", "https://github.com/o/searched"),
+    ]
+    looked_up = []
+
+    def lookup(name, published):
+        looked_up.append((name, published))
+        return gh_repo(name)
+
+    run(
+        store, out, [gh_repo("o/searched")], Llm(),
+        stories=lambda days: stories, lookup=lookup,
+    )  # fmt: skip
+    items = {i["id"]: i for i in json.loads(out.read_text())["items"]}
+    assert set(items) == {"hn:1", "github:o/found", "github:o/searched"}
+    assert looked_up == [("o/found", "2026-11-20T09:00:00Z")]  # the searched one is not fetched
+    assert items["github:o/found"]["type"] == "github"
+    assert [m["url"] for m in items["github:o/found"]["mentions"]] == [
+        "https://news.ycombinator.com/item?id=2"
+    ]
+    assert items["hn:1"]["mentions"][0]["points"] == 200
+
+
+def test_a_failing_repo_lookup_or_hn_outage_never_stops_the_run(tmp_path):
+    def lookup(name, published):
+        raise RuntimeError("github down")
+
+    def down(days):
+        raise RuntimeError("algolia down")
+
+    store, out = Store(":memory:"), tmp_path / "c.json"
+    report = run(
+        store, out, [news("a")], Llm(),
+        stories=lambda days: [hn_story("2", "https://github.com/o/r")], lookup=lookup,
+    )  # fmt: skip
+    assert report.stopped is None and [i["id"] for i in json.loads(out.read_text())["items"]] == [
+        "rss:a"
+    ]
+    report = run(store, out, [], Llm(), stories=down, lookup=lookup)
+    assert [s.name for s in report.sources if not s.ok] == ["hackernews"]
+
+
+def test_run_refreshes_the_stars_of_repos_already_known(tmp_path):
+    store, out = Store(":memory:"), tmp_path / "c.json"
+    run(store, out, [gh_repo("o/r", stars=100)], Llm())
+    run(store, out, [gh_repo("o/r", stars=900)], Llm())
+    assert json.loads(out.read_text())["items"][0]["github_stars"] == 900
+
+
+def test_a_renamed_repo_keeps_its_discussion(tmp_path):
+    store, out = Store(":memory:"), tmp_path / "c.json"
+    run(
+        store, out, [], Llm(),
+        stories=lambda days: [hn_story("2", "https://github.com/old/tool")],
+        lookup=lambda name, published: gh_repo("new/tool"),
+    )  # fmt: skip
+    (repo,) = json.loads(out.read_text())["items"]
+    assert repo["id"] == "github:new/tool" and len(repo["mentions"]) == 1
+
+
+def test_an_hn_story_about_a_collected_article_does_not_duplicate_it(tmp_path):
+    store, out = Store(":memory:"), tmp_path / "c.json"
+    run(store, out, [news("a")], Llm(), stories=lambda days: [hn_story("5", "https://e.com/a")])
+    (only,) = json.loads(out.read_text())["items"]
+    assert only["id"] == "rss:a" and only["mentions"][0]["points"] == 200
+
+
+def test_a_repo_already_known_is_not_looked_up_again(tmp_path):
+    store, out = Store(":memory:"), tmp_path / "c.json"
+    run(store, out, [gh_repo("o/r")], Llm())
+    looked_up = []
+    run(
+        store, out, [], Llm(),
+        stories=lambda days: [hn_story("9", "https://github.com/o/r")],
+        lookup=lambda name, published: looked_up.append(name),
+    )  # fmt: skip
+    assert looked_up == []
+    assert json.loads(out.read_text())["items"][0]["mentions"][0]["points"] == 200

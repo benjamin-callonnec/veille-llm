@@ -35,6 +35,8 @@ jobs:
       - name: Run the pipeline (fails visibly if the LLM stops)
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # read-only (contents: read): raises the GitHub Search API limit to 30 requests a minute
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run veille-core run --db veille.db --out build/catalogue.json
       - uses: actions/upload-artifact@v4
         if: ${{ always() && hashFiles('veille.db') != '' }}

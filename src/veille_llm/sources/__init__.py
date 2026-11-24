@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import TypeVar
 
 from veille_llm.models import Item
 
 Source = Callable[[int], list[Item]]  # argument: number of days to look back
+T = TypeVar("T")
 
 # Verified on 2026-11-21. Anthropic and Meta AI have no official feed (404): skipped in v1.
 RSS_FEEDS: dict[str, str] = {
@@ -25,8 +27,10 @@ class SourceReport:
     error: str | None
 
 
-def collect_all(sources: dict[str, Source], days: int) -> tuple[list[Item], list[SourceReport]]:
-    items: list[Item] = []
+def collect_all(
+    sources: Mapping[str, Callable[[int], list[T]]], days: int
+) -> tuple[list[T], list[SourceReport]]:
+    items: list[T] = []
     reports: list[SourceReport] = []
     for name, source in sources.items():
         try:

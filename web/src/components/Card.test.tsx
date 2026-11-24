@@ -13,6 +13,7 @@ const item = (over: Partial<Item>): Item => ({
   published: "2026-11-20T00:00:00Z",
   upvotes: 0,
   github_stars: 0,
+  mentions: [],
   score: 7,
   type: "paper",
   category: "Agents",
@@ -99,4 +100,39 @@ test("the card shows the GitHub stars of the linked repo, and nothing when there
   cleanup();
   render(<Card item={item({ github_stars: 0 })} />);
   expect(screen.queryByText(/GitHub stars/)).toBeNull();
+});
+
+test("a text post does not list its own discussion twice", () => {
+  const url = "https://news.ycombinator.com/item?id=7";
+  render(
+    <Card item={item({ type: "news", url, mentions: [{ title: "Ask HN", url, points: 150 }] })} />,
+  );
+  expect(screen.queryByRole("list", { name: "Discussions" })).toBeNull();
+});
+
+test("a repo card shows the GitHub section, its stars and its top three discussions", () => {
+  const mention = (n: number) => ({
+    title: `Story ${n}`,
+    url: `https://news.ycombinator.com/item?id=${n}`,
+    points: 100 * n,
+  });
+  render(
+    <Card
+      item={item({
+        type: "github",
+        url: "https://github.com/o/r",
+        github_stars: 420,
+        mentions: [mention(4), mention(3), mention(2), mention(1)],
+      })}
+    />,
+  );
+  expect(screen.getByText("GitHub")).toBeTruthy();
+  expect(screen.getByText("420 GitHub stars")).toBeTruthy();
+  const links = screen.getAllByRole("link", { name: /Story/ });
+  expect(links.map((l) => l.getAttribute("href"))).toEqual([
+    "https://news.ycombinator.com/item?id=4",
+    "https://news.ycombinator.com/item?id=3",
+    "https://news.ycombinator.com/item?id=2",
+  ]);
+  expect(screen.getByText(/400 points/)).toBeTruthy();
 });

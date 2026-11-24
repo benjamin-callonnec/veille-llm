@@ -1,4 +1,11 @@
-export type ItemType = "paper" | "news" | "benchmark";
+export type ItemType = "paper" | "news" | "benchmark" | "github";
+
+/** A discussion pointing at the item (a Hacker News story), most points first. */
+export interface Mention {
+  title: string;
+  url: string;
+  points: number;
+}
 export type SortKey = "trending" | "date" | "score";
 
 export interface Item {
@@ -12,6 +19,7 @@ export interface Item {
   upvotes: number;
   /** Stars of the repo Hugging Face links to the paper (0 when none, or in older catalogues). */
   github_stars: number;
+  mentions: Mention[];
   score: number;
   type: ItemType;
   category: string;
@@ -34,12 +42,25 @@ export interface Filters {
 }
 
 export const DEFAULT_FILTERS: Filters = { categories: [], types: [], query: "", sort: "trending" };
-export const TYPES: ItemType[] = ["paper", "news", "benchmark"];
+export const TYPES: ItemType[] = ["paper", "news", "benchmark", "github"];
+export const TYPE_LABELS: Record<ItemType, string> = {
+  paper: "Paper",
+  news: "News",
+  benchmark: "Benchmark",
+  github: "GitHub",
+};
 export const FALLBACK_CATEGORY = "Other";
 const SORTS: SortKey[] = ["trending", "date", "score"];
 
 const isStr = (v: unknown): v is string => typeof v === "string";
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+function parseMention(raw: unknown): Mention | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  if (!isStr(r.title) || !isStr(r.url) || !isNum(r.points) || !safeUrl(r.url)) return null;
+  return { title: r.title, url: r.url, points: Math.max(0, r.points) };
+}
 
 function parseItem(raw: unknown): Item | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -67,6 +88,9 @@ function parseItem(raw: unknown): Item | null {
     published: r.published,
     upvotes: isNum(r.upvotes) ? r.upvotes : 0,
     github_stars: isNum(r.github_stars) ? Math.max(0, r.github_stars) : 0,
+    mentions: Array.isArray(r.mentions)
+      ? r.mentions.map(parseMention).filter((m): m is Mention => m !== null)
+      : [],
     score: Math.min(10, Math.max(0, r.score)),
     type: r.type as ItemType,
     category: r.category,

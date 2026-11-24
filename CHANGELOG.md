@@ -5,6 +5,17 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-24
+
+### Added
+- Sources (#47): Hacker News stories (Algolia API, at least 100 points over the last two days, no topic filter: the LLM decides). A story about a GitHub repo, an arXiv paper or an article already collected becomes a discussion attached to that item; every other story is a news item.
+- Catalogue (#47): a new GitHub section for repos about LLM agents and harnesses (MCP servers, skills, coding agents...). Repos created in the last 30 days are searched by topic and sorted by stars, which are refreshed every run. The topics are a seed list plus the topics most seen on published repos (generic ones like python or llm are never learned). A repo shared on Hacker News joins even when the search missed it, and the LLM rejects anything outside the domain.
+- Catalogue (#47): each card lists its top three Hacker News discussions with their points.
+
+### Changed
+- Pipeline version 1.1.1: classification knows repositories (always typed `github`, kept only within the agents domain), so stored verdicts are recomputed gradually.
+- The daily workflow gives the pipeline the read-only workflow token for the GitHub Search API.
+
 ## [0.19.0] - 2026-11-23
 
 ### Added
