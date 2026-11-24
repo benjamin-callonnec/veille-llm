@@ -186,7 +186,15 @@ h1 {
 .card-readable:hover {
   border-color: var(--accent);
 }
-.card h2 a {
+.card h2 a,
+.card .mentions a {
   position: relative;
   z-index: 2;
+}
+.mentions {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.85rem;
 }

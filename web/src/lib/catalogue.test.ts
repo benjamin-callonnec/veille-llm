@@ -23,6 +23,7 @@ const item = (over: Partial<Item>): Item => ({
   published: "2026-11-20T00:00:00Z",
   upvotes: 0,
   github_stars: 0,
+  mentions: [],
   score: 5,
   type: "paper",
   category: "Agents",
@@ -294,5 +295,31 @@ describe("hasArxivPdf", () => {
     "",
   ])("rejects %s", (url) => {
     expect(hasArxivPdf(url)).toBe(false);
+  });
+});
+
+describe("GitHub section and mentions", () => {
+  const parse = (items: unknown[]) =>
+    parseCatalogue({ generated_at: "", window_days: 30, categories: [], items }).items;
+
+  test("a repo of type github is kept", () => {
+    expect(parse([item({ id: "github:o/r", type: "github" })]).map((i) => i.type)).toEqual([
+      "github",
+    ]);
+  });
+
+  test("mentions default to none in older catalogues and keep only safe, well-formed ones", () => {
+    const { mentions: _drop, ...old } = item({ id: "old" });
+    const good = { title: "Show HN", url: "https://news.ycombinator.com/item?id=1", points: 300 };
+    const [before, now] = parse([
+      old,
+      {
+        ...old,
+        id: "new",
+        mentions: [good, { ...good, url: "javascript:alert(1)" }, { title: 3 }, null, "x"],
+      },
+    ]);
+    expect(before?.mentions).toEqual([]);
+    expect(now?.mentions).toEqual([good]);
   });
 });

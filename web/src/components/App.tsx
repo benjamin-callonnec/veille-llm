@@ -6,12 +6,12 @@ import {
   chipCategories,
   countsByCategory,
   type SortKey,
+  TYPE_LABELS,
   TYPES,
 } from "../lib/catalogue";
 import { Card } from "./Card";
 
 const SORT_LABELS: Record<SortKey, string> = { trending: "Trending", date: "Date", score: "Score" };
-const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }) {
   const { catalogue, error } = useCatalogue(load);
@@ -109,7 +109,7 @@ export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }
           </fieldset>
           <fieldset className="chips">
             <legend>Type</legend>
-            {TYPES.map((t) => chip(t, "types", capitalise(t)))}
+            {TYPES.map((t) => chip(t, "types", TYPE_LABELS[t]))}
           </fieldset>
           {shown.length === 0 ? (
             <p className="muted">No items match these filters.</p>

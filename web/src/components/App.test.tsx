@@ -14,6 +14,7 @@ const item = (over: Partial<Item>): Item => ({
   published: "2026-11-20T00:00:00Z",
   upvotes: 3,
   github_stars: 0,
+  mentions: [],
   score: 7,
   type: "paper",
   category: "Agents",
