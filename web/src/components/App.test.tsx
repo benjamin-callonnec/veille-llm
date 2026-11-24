@@ -256,3 +256,10 @@ test("a favorite gone from the catalogue still shows from its saved copy", async
   );
   expect(screen.queryByText("Gone from the catalogue")).toBeNull();
 });
+
+test("the Favorites chip sits in the same row as the types", async () => {
+  render(<App load={loader([item({})])} favorites={favoritesApi([])} />);
+  const row = (await screen.findByText("Type")).closest("fieldset") as HTMLElement;
+  expect(within(row).getByRole("button", { name: /^Favorites/ })).toBeTruthy();
+  expect(within(row).getByRole("button", { name: "GitHub" })).toBeTruthy();
+});
