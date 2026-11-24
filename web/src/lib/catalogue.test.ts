@@ -240,6 +240,7 @@ describe("hash state", () => {
       types: ["paper"],
       query: "kv cache",
       sort: "date" as const,
+      favorites: true,
     };
     expect(readHash(writeHash(f))).toEqual(f);
   });
@@ -248,7 +249,13 @@ describe("hash state", () => {
   });
   test("ignores garbage: unknown sort or type, empty values", () => {
     const f = readHash("#sort=evil&type=paper,hack&cat=,A,&q=");
-    expect(f).toEqual({ categories: ["A"], types: ["paper"], query: "", sort: "trending" });
+    expect(f).toEqual({
+      categories: ["A"],
+      types: ["paper"],
+      query: "",
+      favorites: false,
+      sort: "trending",
+    });
   });
 });
 

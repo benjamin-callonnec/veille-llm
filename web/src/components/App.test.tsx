@@ -204,3 +204,50 @@ test("the catalogue header is the shared page head, next to the logo", async () 
   const heading = await screen.findByRole("heading", { name: "LLM watch" });
   expect(heading.closest("header")?.className).toContain("page-head");
 });
+
+const favoritesApi = (ids: string[], saved: Item[] = []) => {
+  const state = { ids: [...ids] };
+  return {
+    list: async () =>
+      state.ids.map((id) => ({
+        item_id: id,
+        item: saved.find((s) => s.id === id) ?? null,
+        added_at: "x",
+      })),
+    add: async (id: string) => {
+      state.ids = [id, ...state.ids];
+    },
+    remove: async (id: string) => {
+      state.ids = state.ids.filter((i) => i !== id);
+    },
+  };
+};
+
+test("without the reader there is no star and no Favorites filter", async () => {
+  render(<App load={loader([item({})])} favorites={null} />);
+  await screen.findByText("A bold hook.");
+  expect(screen.queryByRole("button", { name: /favorite/i })).toBeNull();
+});
+
+test("a star adds a card to the favorites, and the Favorites filter shows only them", async () => {
+  const user = userEvent.setup();
+  const items = [item({ id: "a", title: "First" }), item({ id: "b", title: "Second" })];
+  render(<App load={loader(items)} favorites={favoritesApi([])} />);
+  await user.click(await screen.findByRole("button", { name: 'Add "Second" to favorites' }));
+  expect(
+    screen
+      .getByRole("button", { name: 'Remove "Second" from favorites' })
+      .getAttribute("aria-pressed"),
+  ).toBe("true");
+  await user.click(screen.getByRole("button", { name: /^Favorites/ }));
+  expect(screen.queryByText("First")).toBeNull();
+  expect(screen.getByText("Second")).toBeTruthy();
+  expect(window.location.hash).toContain("fav=1");
+});
+
+test("a favorite gone from the catalogue still shows from its saved copy", async () => {
+  window.location.hash = "#fav=1";
+  const gone = item({ id: "old", title: "Gone from the catalogue" });
+  render(<App load={loader([item({ id: "a" })])} favorites={favoritesApi(["old"], [gone])} />);
+  expect(await screen.findByText("Gone from the catalogue")).toBeTruthy();
+});

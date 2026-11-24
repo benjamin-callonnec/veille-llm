@@ -198,3 +198,18 @@ h1 {
   color: var(--muted);
   font-size: 0.85rem;
 }
+
+/* The favorite star (local reader build only): top right, above the reader overlay link. */
+.card-star {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+}
+.card:has(.card-star) h2 {
+  padding-right: 32px;
+}
+.star-btn[aria-pressed="true"] .icon {
+  color: var(--accent);
+  fill: currentColor;
+}

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 export type IconName =
   | "send"
+  | "star"
   | "stop"
   | "plus"
   | "copy"
@@ -140,6 +141,7 @@ const SHAPES: Record<IconName, ReactNode> = {
   ),
   sparkle: <path d="M12 4l1.8 5.2L19 11l-5.2 1.8L12 18l-1.8-5.2L5 11l5.2-1.8z" />,
   outline: <path d="M4 6h16M4 12h16M4 18h10" />,
+  star: <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />,
   settings: (
     <>
       <circle cx="12" cy="12" r="3" />

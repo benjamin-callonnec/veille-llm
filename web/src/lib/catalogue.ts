@@ -39,9 +39,17 @@ export interface Filters {
   types: string[];
   query: string;
   sort: SortKey;
+  /** Only the local reader's favorites (#48); ignored where there are none. */
+  favorites: boolean;
 }
 
-export const DEFAULT_FILTERS: Filters = { categories: [], types: [], query: "", sort: "trending" };
+export const DEFAULT_FILTERS: Filters = {
+  categories: [],
+  types: [],
+  query: "",
+  sort: "trending",
+  favorites: false,
+};
 export const TYPES: ItemType[] = ["paper", "news", "benchmark", "github"];
 export const TYPE_LABELS: Record<ItemType, string> = {
   paper: "Paper",
@@ -62,7 +70,7 @@ function parseMention(raw: unknown): Mention | null {
   return { title: r.title, url: r.url, points: Math.max(0, r.points) };
 }
 
-function parseItem(raw: unknown): Item | null {
+export function parseItem(raw: unknown): Item | null {
   if (typeof raw !== "object" || raw === null) return null;
   const r = raw as Record<string, unknown>;
   if (
@@ -216,6 +224,7 @@ export function writeHash(f: Filters): string {
   if (f.types.length) p.set("type", f.types.join(","));
   if (f.query) p.set("q", f.query);
   if (f.sort !== "trending") p.set("sort", f.sort);
+  if (f.favorites) p.set("fav", "1");
   const text = p.toString();
   return text ? `#${text}` : "";
 }
@@ -229,5 +238,6 @@ export function readHash(hash: string): Filters {
     types: list("type").filter((t) => TYPES.includes(t as ItemType)),
     query: p.get("q") ?? "",
     sort: SORTS.includes(sort) ? sort : "trending",
+    favorites: p.get("fav") === "1",
   };
 }
