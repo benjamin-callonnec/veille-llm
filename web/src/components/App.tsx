@@ -130,10 +130,7 @@ export function App({
           <fieldset className="chips">
             <legend>Type</legend>
             {TYPES.map((t) => chip(t, "types", TYPE_LABELS[t]))}
-          </fieldset>
-          {favoritesApi && (
-            <fieldset className="chips">
-              <legend>Saved</legend>
+            {favoritesApi && (
               <button
                 type="button"
                 className="chip"
@@ -142,8 +139,8 @@ export function App({
               >
                 Favorites<span className="count"> {favorites.ids.size}</span>
               </button>
-            </fieldset>
-          )}
+            )}
+          </fieldset>
           {shown.length === 0 ? (
             <p className="muted">No items match these filters.</p>
           ) : (
