@@ -12,8 +12,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from veille_llm.github import dynamic_topics
 from veille_llm.hf import Signal
+from veille_llm.hn import Story, route_stories
 from veille_llm.llm import DEFAULT_MODEL, RawReply, Runner, claude_runner
+from veille_llm.models import Item
 from veille_llm.pipeline.categorize import enrich_pending, refresh_stale_hooks
 from veille_llm.pipeline.classify import BATCH_SIZE, classify_pending, reclassify_stale
 from veille_llm.pipeline.consolidate import consolidate
@@ -23,7 +26,9 @@ from veille_llm.pipeline.progress import Progress
 from veille_llm.pipeline.version import classify_provenance, hooks_provenance
 from veille_llm.sources import RSS_FEEDS, Source, SourceReport, collect_all
 from veille_llm.sources.arxiv_source import arxiv_source
+from veille_llm.sources.github_source import github_source, repo_lookup
 from veille_llm.sources.hf_source import hf_signals, with_signals
+from veille_llm.sources.hn_source import hn_stories
 from veille_llm.sources.rss_source import rss_source
 from veille_llm.store import Store
 
@@ -52,6 +57,38 @@ class RunReport:
     merged: int = 0
     reassigned: int = 0
     refreshed: int = 0
+
+
+Lookup = Callable[[str, str], Item | None]  # ("owner/repo", story date) -> the repo or None
+
+
+def _collect_hn(
+    store: Store,
+    stories: Callable[[int], list[Story]],
+    lookup: Lookup | None,
+    days: int,
+    collected: list[Item],
+    progress: Progress,
+) -> tuple[list[Item], list[SourceReport]]:
+    """HN news, plus the repos HN found that the topic search missed; mentions saved now."""
+    found, reports = collect_all({"hackernews": stories}, days)
+    routed = route_stories(found)
+    have = {i.id for i in collected}
+    names = [n for n in routed.repos if f"github:{n}" not in have]
+    known = store.known_ids([f"github:{n}" for n in names])
+    repos = []
+    for name in names:
+        if f"github:{name}" in known or lookup is None:
+            continue
+        try:
+            repo = lookup(name, routed.repos[name])
+        except Exception as exc:  # noqa: BLE001 - one repo never blocks the run
+            progress.info(f"repo lookup {name}: FAILED ({type(exc).__name__})")
+            continue
+        if repo:
+            repos.append(repo)
+    store.save_mentions(routed.mentions)
+    return routed.news + repos, reports
 
 
 class _Meter:
@@ -83,13 +120,26 @@ async def run_pipeline(
     max_batches: int | None = None,
     progress: Progress | None = None,
     heartbeat_seconds: float = 60.0,
+    stories: Callable[[int], list[Story]] | None = None,
+    lookup: Lookup | None = None,
 ) -> RunReport:
     progress = progress or Progress(io.StringIO())  # silent unless the caller wants output
     progress.start()
     heartbeat = asyncio.create_task(progress.heartbeat(heartbeat_seconds))
     try:
         return await _run(
-            store, sources, days, now, out, runner, signals, model, max_batches, progress
+            store,
+            sources,
+            days,
+            now,
+            out,
+            runner,
+            signals,
+            model,
+            max_batches,
+            progress,
+            stories,
+            lookup,
         )
     finally:
         heartbeat.cancel()
@@ -106,6 +156,8 @@ async def _run(
     model: str,
     max_batches: int | None,
     progress: Progress,
+    stories: Callable[[int], list[Story]] | None = None,
+    lookup: Lookup | None = None,
 ) -> RunReport:
     report = RunReport()
     meter = _Meter(runner or claude_runner)
@@ -115,15 +167,19 @@ async def _run(
 
     progress.group("Collect")
     items, report.sources = collect_all(sources, days)
+    if stories is not None:
+        extra, hn_reports = _collect_hn(store, stories, lookup, days, items, progress)
+        items += extra
+        report.sources += hn_reports
     report.collected = len(items)
     for source in report.sources:
         state = "ok" if source.ok else f"FAILED ({source.error})"
         progress.info(f"source {source.name}: {source.count} items, {state}")
     if signals is not None:
         items = with_signals(items, signals())
-        store.refresh_signals(
-            {i.id: Signal(i.upvotes, i.github_stars) for i in items if i.upvotes or i.github_stars}
-        )
+    store.refresh_signals(  # known items keep their row: only their counts move
+        {i.id: Signal(i.upvotes, i.github_stars) for i in items if i.upvotes or i.github_stars}
+    )
     fresh = deterministic_filter(
         items, known_ids=store.known_ids([i.id for i in items]), now=now, days=days
     )
@@ -310,10 +366,12 @@ def main(
     args = parser.parse_args(argv)
 
     live = sources is None
+    store = Store(args.db)
     if live:
+        since = (datetime.now(UTC) - timedelta(days=CATALOGUE_DAYS)).strftime(_STAMP)
         sources = {"arxiv": lambda days: arxiv_source(days)}
         sources.update({name: rss_source(name, url) for name, url in RSS_FEEDS.items()})
-    store = Store(args.db)
+        sources["github"] = github_source(dynamic_topics(store.topic_counts(since)))
     progress = Progress(sys.stdout, github=os.environ.get("GITHUB_ACTIONS") == "true")
     try:
         report = asyncio.run(
@@ -328,6 +386,8 @@ def main(
                 max_batches=args.max_batches,
                 signals=hf_signals if live else None,
                 progress=progress,
+                stories=hn_stories if live else None,
+                lookup=repo_lookup if live else None,
             )
         )
     finally:

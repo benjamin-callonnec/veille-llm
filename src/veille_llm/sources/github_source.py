@@ -10,13 +10,12 @@ import urllib.request
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
-from veille_llm.github import parse_repo
+from veille_llm.github import WINDOW_DAYS, parse_repo
 from veille_llm.models import Item
 from veille_llm.retry import retry_call
 from veille_llm.sources import Source
 
 API = "https://api.github.com"
-WINDOW_DAYS = 30  # a repo stays a candidate for a month after its creation
 MIN_STARS = 50
 PER_TOPIC = 30
 

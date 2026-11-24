@@ -18,6 +18,7 @@ SEED_TOPICS: tuple[str, ...] = (
     "agentic-ai",
     "agent-framework",
 )
+WINDOW_DAYS = 30  # a repo stays a candidate for a month after its creation
 MAX_TOPICS = 15  # the Search API allows 30 requests a minute with a token
 MIN_TOPIC_COUNT = 2  # a topic seen on a single published repo is not a trend yet
 

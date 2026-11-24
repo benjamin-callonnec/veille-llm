@@ -284,3 +284,16 @@ def test_a_half_that_still_fails_is_counted_as_skipped_and_the_other_half_is_kep
     outcome = asyncio.run(classify_pending(store, runner=run))
     assert outcome.classified == 2 and outcome.skipped_batches == 1
     assert len(store.pending_classification()) == 2  # still pending: retried on a later run
+
+
+def test_a_repo_is_always_typed_github_and_its_topics_and_stars_reach_the_llm():
+    repo = Item(
+        "github:o/r", "github", "github", "o/r", "MCP server", "https://github.com/o/r", [],
+        "2026-11-20T10:00:00Z", github_stars=300, topics=("mcp",),
+    )  # fmt: skip
+    llm = Script(reply([{**entry("github:o/r"), "type": "news"}, entry("p")]))
+    verdicts = asyncio.run(classify_batch([repo, make("p")], runner=llm))
+    assert [v.type for v in verdicts] == ["github", "paper"]
+    data = json.loads(llm.prompts[0].split("<data>")[1].split("</data>")[0])
+    assert data[0]["topics"] == ["mcp"] and data[0]["github_stars"] == 300
+    assert "topics" not in data[1]

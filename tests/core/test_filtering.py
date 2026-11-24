@@ -59,3 +59,9 @@ def test_keyword_needs_word_boundaries():
 
 def test_empty_input_returns_empty():
     assert keep([]) == []
+
+
+def test_keeps_repos_for_a_month_since_the_github_window_is_longer():
+    repo = make("github:o/r", kind="github", published="2026-11-01T00:00:00Z")
+    stale = make("github:o/old", kind="github", published="2026-10-01T00:00:00Z")
+    assert keep([repo, stale]) == ["github:o/r"]

@@ -47,6 +47,10 @@ INSTRUCTIONS = (
     "You triage items for a personal watch on LLM research and news: model architectures "
     "(transformers and alternatives), training and inference methods, agents, reasoning, "
     "retrieval and knowledge graphs, benchmarks, and public announcements from AI labs. "
+    "Items of kind github are repositories: they are interesting only when they help build or "
+    "use LLM agents (agent harnesses, coding agents, MCP servers, agent skills, prompts and "
+    "tooling for Claude Code and similar); reject any other repository however popular "
+    "(games, generic web or Java frameworks, unrelated libraries). "
     "For each item in the data, decide if it is interesting for that watch, give it a score "
     "from 0 (irrelevant) to 10 (essential), a type (paper, news or benchmark) and a short "
     "category_hint (at most 40 characters, a few words). Return one entry per item as "
@@ -64,23 +68,28 @@ class ClassifyOutcome:
     capped: bool = False
 
 
+def _entry(item: Item) -> dict:
+    entry = {
+        "id": item.id,
+        "title": item.title,
+        "summary": item.summary[:SUMMARY_MAX],
+        "source": item.source,
+        "kind": item.kind,
+    }
+    if item.kind == "github":
+        entry.update(topics=list(item.topics), github_stars=item.github_stars)
+    return entry
+
+
 async def classify_batch(
     items: list[Item], *, runner: Runner | None = None, model: str = DEFAULT_MODEL
 ) -> list[Verdict]:
-    data = [
-        {
-            "id": i.id,
-            "title": i.title,
-            "summary": i.summary[:SUMMARY_MAX],
-            "source": i.source,
-            "kind": i.kind,
-        }
-        for i in items
-    ]
+    data = [_entry(i) for i in items]
     result = await complete_json(
         INSTRUCTIONS, CLASSIFY_SCHEMA, data=data, model=model, runner=runner
     )
     known = {i.id for i in items}
+    repos = {i.id for i in items if i.kind == "github"}  # the section is decided by the kind
     seen: set[str] = set()
     verdicts = []
     for entry in result.data["items"]:
@@ -92,7 +101,7 @@ async def classify_batch(
                 item_id=entry["id"],
                 interesting=entry["interesting"],
                 score=entry["score"],
-                type=entry["type"],
+                type="github" if entry["id"] in repos else entry["type"],
                 category_hint=entry["category_hint"][:40],
             )
         )
