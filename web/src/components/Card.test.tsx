@@ -102,6 +102,14 @@ test("the card shows the GitHub stars of the linked repo, and nothing when there
   expect(screen.queryByText(/GitHub stars/)).toBeNull();
 });
 
+test("a text post does not list its own discussion twice", () => {
+  const url = "https://news.ycombinator.com/item?id=7";
+  render(
+    <Card item={item({ type: "news", url, mentions: [{ title: "Ask HN", url, points: 150 }] })} />,
+  );
+  expect(screen.queryByRole("list", { name: "Discussions" })).toBeNull();
+});
+
 test("a repo card shows the GitHub section, its stars and its top three discussions", () => {
   const mention = (n: number) => ({
     title: `Story ${n}`,

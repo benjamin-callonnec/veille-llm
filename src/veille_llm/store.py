@@ -419,7 +419,7 @@ class Store:
             "WHERE i.status = 'published' AND i.published >= ? ORDER BY i.published DESC",
             (since,),
         )
-        mentions = self._mentions()
+        mentions = self._mentions(since)
         out = []
         for row in rows:
             item, rest = _item(row[:_ITEM_WIDTH]), row[_ITEM_WIDTH:]
@@ -444,10 +444,15 @@ class Store:
             )
         return out
 
-    def _mentions(self) -> dict[str, list[dict]]:
+    def _mentions(self, since: str) -> dict[str, list[dict]]:
+        """Mentions of the published items of the window only: the table keeps every story."""
         out: dict[str, list[dict]] = {}
         rows = self._conn.execute(
-            "SELECT item_id, title, url, points FROM mentions ORDER BY points DESC, url"
+            "SELECT m.item_id, m.title, m.url, m.points FROM mentions m "
+            "JOIN items i ON i.id = m.item_id "
+            "WHERE i.status = 'published' AND i.published >= ? "
+            "ORDER BY m.points DESC, m.url",
+            (since,),
         )
         for item_id, title, url, points in rows:
             out.setdefault(item_id, []).append({"title": title, "url": url, "points": points})

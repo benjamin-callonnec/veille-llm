@@ -68,6 +68,10 @@ def test_dynamic_topics_add_the_most_frequent_topics_seen_twice_after_the_seed()
     ]
 
 
+def test_dynamic_topics_never_learn_generic_topics():
+    assert dynamic_topics({"python": 9, "llm": 9, "agent-harness": 2}, seed=()) == ["agent-harness"]
+
+
 def test_dynamic_topics_never_go_past_the_limit():
     assert dynamic_topics({"x": 3}, limit=3) == list(SEED_TOPICS[:3])
 
@@ -94,9 +98,15 @@ def test_github_source_searches_recent_starred_repos_per_topic_without_duplicate
     assert (q["sort"], q["order"]) == (["stars"], ["desc"])
 
 
-def test_github_source_skips_a_failing_topic_but_fails_when_every_topic_fails():
+def test_github_source_dates_repos_by_their_discovery_so_the_newsletter_sees_them():
+    items = github_source(["mcp"], fetch=answers({"mcp": [raw("o/a")]}, []), now=NOW)(7)
+    assert items[0].published == "2026-11-21T12:00:00Z"
+
+
+def test_github_source_skips_a_failing_topic_says_so_and_fails_when_every_topic_fails(capsys):
     fetch = answers({"mcp": [raw("o/a")]}, [])
     assert len(github_source(["mcp", "broken"], fetch=fetch, now=NOW)(7)) == 1
+    assert "topic broken: HTTPError" in capsys.readouterr().err
     with pytest.raises(urllib.error.HTTPError):
         github_source(["broken"], fetch=fetch, now=NOW)(7)
 

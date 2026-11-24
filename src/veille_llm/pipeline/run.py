@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dataclasses
 import io
 import os
 import sys
@@ -72,7 +73,7 @@ def _collect_hn(
 ) -> tuple[list[Item], list[SourceReport]]:
     """HN news, plus the repos HN found that the topic search missed; mentions saved now."""
     found, reports = collect_all({"hackernews": stories}, days)
-    routed = route_stories(found)
+    routed = route_stories(found, {i.url: i.id for i in collected})
     have = {i.id for i in collected}
     names = [n for n in routed.repos if f"github:{n}" not in have]
     known = store.known_ids([f"github:{n}" for n in names])
@@ -87,6 +88,9 @@ def _collect_hn(
             continue
         if repo:
             repos.append(repo)
+            if repo.id != f"github:{name}":  # renamed or moved: the API follows the redirect
+                moved = [m for m in routed.mentions if m.item_id == f"github:{name}"]
+                routed.mentions.extend(dataclasses.replace(m, item_id=repo.id) for m in moved)
     store.save_mentions(routed.mentions)
     return routed.news + repos, reports
 
@@ -129,17 +133,17 @@ async def run_pipeline(
     try:
         return await _run(
             store,
-            sources,
-            days,
-            now,
-            out,
-            runner,
-            signals,
-            model,
-            max_batches,
-            progress,
-            stories,
-            lookup,
+            sources=sources,
+            days=days,
+            now=now,
+            out=out,
+            runner=runner,
+            signals=signals,
+            model=model,
+            max_batches=max_batches,
+            progress=progress,
+            stories=stories,
+            lookup=lookup,
         )
     finally:
         heartbeat.cancel()
@@ -147,6 +151,7 @@ async def run_pipeline(
 
 async def _run(
     store: Store,
+    *,
     sources: dict[str, Source],
     days: int,
     now: datetime,
@@ -156,8 +161,8 @@ async def _run(
     model: str,
     max_batches: int | None,
     progress: Progress,
-    stories: Callable[[int], list[Story]] | None = None,
-    lookup: Lookup | None = None,
+    stories: Callable[[int], list[Story]] | None,
+    lookup: Lookup | None,
 ) -> RunReport:
     report = RunReport()
     meter = _Meter(runner or claude_runner)

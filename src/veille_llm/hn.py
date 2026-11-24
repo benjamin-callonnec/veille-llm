@@ -82,12 +82,15 @@ def arxiv_of(url: str) -> str | None:
     return match.group(1) if match else None
 
 
-def route_stories(stories: list[Story]) -> Routed:
-    """A story about a repo or a paper is a mention on it; any other story is news."""
-    routed = Routed([], [], {})
+def route_stories(stories: list[Story], collected: dict[str, str] | None = None) -> Routed:
+    """A story about a repo, a paper or an article collected elsewhere (`collected`: url -> id)
+    is a mention on it; any other story is news."""
+    routed, collected = Routed([], [], {}), collected or {}
     for s in stories:
         repo, paper = repo_of(s.url), arxiv_of(s.url)
-        if repo:
+        if s.url in collected:
+            target = collected[s.url]
+        elif repo:
             target = f"github:{repo}"
             routed.repos[repo] = min(s.published, routed.repos.get(repo, s.published))
         elif paper:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta
 
-from veille_llm.github import WINDOW_DAYS
 from veille_llm.models import Item
 
 PREFILTER = re.compile(
@@ -28,14 +27,12 @@ def _parse(timestamp: str) -> datetime:
 def deterministic_filter(
     items: list[Item], *, known_ids: set[str], now: datetime, days: int
 ) -> list[Item]:
+    cutoff = now - timedelta(days=days)
     seen_ids: set[str] = set()
     seen_titles: set[str] = set()
     kept = []
     for item in items:
-        window = max(days, WINDOW_DAYS) if item.kind == "github" else days
-        if item.id in known_ids or item.id in seen_ids:
-            continue
-        if _parse(item.published) < now - timedelta(days=window):
+        if item.id in known_ids or item.id in seen_ids or _parse(item.published) < cutoff:
             continue
         title_key = _normalise(item.title)
         if title_key in seen_titles:

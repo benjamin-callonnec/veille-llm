@@ -73,6 +73,14 @@ def test_a_story_about_an_arxiv_paper_is_a_mention_on_the_paper():
     assert routed.mentions == [Mention("arxiv:2511.01234", discussion("4"), "Story 4", 150, WHEN)]
 
 
+def test_a_story_about_an_article_already_collected_is_a_mention_on_it():
+    routed = route_stories(
+        [story("9", "https://openai.com/news/x")], {"https://openai.com/news/x": "rss:ab"}
+    )
+    assert routed.news == []
+    assert routed.mentions == [Mention("rss:ab", discussion("9"), "Story 9", 150, WHEN)]
+
+
 def test_the_repo_date_is_its_first_story():
     early = Story("5", "A", "https://github.com/o/r", 100, "pg", "2026-11-19T00:00:00Z")
     routed = route_stories([story("6", "https://github.com/o/r"), early])

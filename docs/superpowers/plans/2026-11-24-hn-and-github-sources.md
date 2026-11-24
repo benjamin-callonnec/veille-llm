@@ -27,22 +27,23 @@ repositories in the LLM agents / harnesses domain get their own catalogue sectio
   points only ever raised. No foreign key: a mention can wait for its paper.
 - `catalogue.json`: each item gets `mentions: [{title, url, points}]`, most points first.
 - GitHub item: id `github:<owner>/<repo>` (lower case), source `github`, kind `github`, title
-  `owner/repo`, summary = description, published = creation date (search) or the HN story date
+  `owner/repo`, summary = description, published = discovery date (search) or the HN story date
   (discovery), `github_stars`, `topics`.
 
 ## Tasks
 
-- [ ] 1. Store: `topics` column, `mentions` table, `save_mentions`, `topic_counts`, mentions in
+- [x] 1. Store: `topics` column, `mentions` table, `save_mentions`, `topic_counts`, mentions in
   the export, stars refreshed for every collected item.
-- [ ] 2. `hn.py` (pure): `Story`, `parse_stories`, `route_stories` -> news items, mentions, repos
-  to look up. `sources/hn_source.py`: fetch with retry.
-- [ ] 3. `github.py` (pure): `parse_repo`, `search_query`, `dynamic_topics`.
+- [x] 2. `hn.py` (pure): `Story`, `parse_stories`, `route_stories` -> news items, mentions, repos
+  to look up; a story about an article collected in the same run is a mention on it.
+  `sources/hn_source.py`: fetch with retry.
+- [x] 3. `github.py` (pure): `parse_repo`, `dynamic_topics` (seed + learned topics, generic ones stopped).
   `sources/github_source.py`: topic search and single-repo lookup, token from `GITHUB_TOKEN`.
-- [ ] 4. Pipeline: HN and GitHub wired into `run_pipeline` and `main`; `deterministic_filter`
-  keeps `github` items over 30 days; classification forces type `github` on repos and states
+- [x] 4. Pipeline: HN and GitHub wired into `run_pipeline` and `main`; repos dated by discovery,
+  so `deterministic_filter` is unchanged; classification forces type `github` on repos and states
   the domain; pipeline version bump.
-- [ ] 5. Workflow: `GITHUB_TOKEN` passed to the pipeline step.
-- [ ] 6. Front: type `github`, `mentions` parsed and shown on the card.
+- [x] 5. Workflow: `GITHUB_TOKEN` passed to the pipeline step.
+- [x] 6. Front: type `github`, `mentions` parsed and shown on the card.
 
 ## Not in scope
 

@@ -18,9 +18,14 @@ SEED_TOPICS: tuple[str, ...] = (
     "agentic-ai",
     "agent-framework",
 )
-WINDOW_DAYS = 30  # a repo stays a candidate for a month after its creation
 MAX_TOPICS = 15  # the Search API allows 30 requests a minute with a token
 MIN_TOPIC_COUNT = 2  # a topic seen on a single published repo is not a trend yet
+# Topics on most repos of any domain: searching them only brings off-domain repos.
+STOP_TOPICS = frozenset(
+    {"ai", "llm", "llms", "openai", "chatgpt", "gpt", "python", "typescript", "javascript",
+     "rust", "go", "golang", "java", "react", "nodejs", "cli", "machine-learning",
+     "deep-learning", "artificial-intelligence", "generative-ai", "open-source"}
+)  # fmt: skip
 
 
 def dynamic_topics(
@@ -28,7 +33,11 @@ def dynamic_topics(
 ) -> list[str]:
     """The seed, then the topics most seen on the published repos, up to the limit."""
     learned = sorted(
-        (t for t, n in counts.items() if n >= MIN_TOPIC_COUNT and t not in seed),
+        (
+            t
+            for t, n in counts.items()
+            if n >= MIN_TOPIC_COUNT and t not in seed and t not in STOP_TOPICS
+        ),
         key=lambda t: (-counts[t], t),
     )
     return [*seed, *learned][:limit]

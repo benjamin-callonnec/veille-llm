@@ -467,6 +467,24 @@ def test_run_refreshes_the_stars_of_repos_already_known(tmp_path):
     assert json.loads(out.read_text())["items"][0]["github_stars"] == 900
 
 
+def test_a_renamed_repo_keeps_its_discussion(tmp_path):
+    store, out = Store(":memory:"), tmp_path / "c.json"
+    run(
+        store, out, [], Llm(),
+        stories=lambda days: [hn_story("2", "https://github.com/old/tool")],
+        lookup=lambda name, published: gh_repo("new/tool"),
+    )  # fmt: skip
+    (repo,) = json.loads(out.read_text())["items"]
+    assert repo["id"] == "github:new/tool" and len(repo["mentions"]) == 1
+
+
+def test_an_hn_story_about_a_collected_article_does_not_duplicate_it(tmp_path):
+    store, out = Store(":memory:"), tmp_path / "c.json"
+    run(store, out, [news("a")], Llm(), stories=lambda days: [hn_story("5", "https://e.com/a")])
+    (only,) = json.loads(out.read_text())["items"]
+    assert only["id"] == "rss:a" and only["mentions"][0]["points"] == 200
+
+
 def test_a_repo_already_known_is_not_looked_up_again(tmp_path):
     store, out = Store(":memory:"), tmp_path / "c.json"
     run(store, out, [gh_repo("o/r")], Llm())

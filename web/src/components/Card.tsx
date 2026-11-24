@@ -7,6 +7,8 @@ const date = (iso: string) =>
 
 export function Card({ item }: { item: Item }) {
   const href = safeUrl(item.url);
+  // a text post's link is its own discussion: listing it again says nothing
+  const mentions = item.mentions.filter((m) => m.url !== item.url).slice(0, MAX_MENTIONS);
   const read = hasArxivPdf(item.url) ? readerUrl(item.id, import.meta.env.VITE_READER_URL) : null;
   return (
     <article className={read ? "card card-readable" : "card"}>
@@ -40,9 +42,9 @@ export function Card({ item }: { item: Item }) {
         {item.upvotes > 0 && <span>{item.upvotes} upvotes</span>}
         {item.github_stars > 0 && <span>{item.github_stars} GitHub stars</span>}
       </p>
-      {item.mentions.length > 0 && (
+      {mentions.length > 0 && (
         <ul className="mentions" aria-label="Discussions">
-          {item.mentions.slice(0, MAX_MENTIONS).map((m) => (
+          {mentions.map((m) => (
             <li key={m.url}>
               <a href={m.url} rel="noopener noreferrer" target="_blank">
                 {m.title}
