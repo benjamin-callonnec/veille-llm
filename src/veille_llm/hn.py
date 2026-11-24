@@ -18,6 +18,7 @@ _NOT_OWNERS = {
     "marketplace", "orgs", "pricing", "search", "settings", "sponsors", "topics", "trending",
 }  # fmt: skip
 # shortcut: new-style arXiv ids only; old ones (cs/0101001) stay news, rare on HN today.
+_NAME = re.compile(r"^(?!\.{1,2}$)[A-Za-z0-9_.-]{1,100}$")
 _ARXIV_PATH = re.compile(r"^/(?:abs|pdf)/(\d{4}\.\d{4,5})(?:v\d+)?(?:\.pdf)?/?$")
 
 
@@ -67,7 +68,10 @@ def repo_of(url: str) -> str | None:
     parts = [p for p in parsed.path.split("/") if p]
     if len(parts) < 2 or parts[0].lower() in _NOT_OWNERS:
         return None
-    return f"{parts[0]}/{parts[1].removesuffix('.git')}".lower()
+    owner, repo = parts[0], parts[1].removesuffix(".git")
+    if not (_NAME.match(owner) and _NAME.match(repo)):
+        return None
+    return f"{owner}/{repo}".lower()
 
 
 def arxiv_of(url: str) -> str | None:

@@ -91,3 +91,12 @@ def test_hn_stories_asks_for_stories_above_the_points_over_at_most_two_days():
     assert "tags=story" in url
     assert "points%3E%3D100" in url
     assert f"created_at_i%3E{EPOCH - 2 * 86400}" in url
+
+
+def test_only_valid_owner_and_repo_names_count_as_repos():
+    for url in [
+        "https://github.com/../etc",
+        "https://github.com/o/%2e%2e",
+        "https://github.com/o/a b",
+    ]:
+        assert route_stories([story("8", url)]).repos == {}
