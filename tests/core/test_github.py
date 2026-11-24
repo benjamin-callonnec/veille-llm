@@ -112,3 +112,11 @@ def test_repo_lookup_fetches_one_repo_and_returns_none_when_it_is_gone():
         "2026-11-20T00:00:00Z"
     )
     assert repo_lookup("gone/repo", "2026-11-20T00:00:00Z", fetch=fetch) is None
+
+
+def test_repo_lookup_raises_other_errors_for_the_run_to_log():
+    def fetch(url):
+        raise urllib.error.HTTPError(url, 403, "rate limited", {}, None)
+
+    with pytest.raises(urllib.error.HTTPError):
+        repo_lookup("o/r", "2026-11-20T00:00:00Z", fetch=fetch)

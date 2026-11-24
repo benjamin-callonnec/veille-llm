@@ -465,3 +465,16 @@ def test_run_refreshes_the_stars_of_repos_already_known(tmp_path):
     run(store, out, [gh_repo("o/r", stars=100)], Llm())
     run(store, out, [gh_repo("o/r", stars=900)], Llm())
     assert json.loads(out.read_text())["items"][0]["github_stars"] == 900
+
+
+def test_a_repo_already_known_is_not_looked_up_again(tmp_path):
+    store, out = Store(":memory:"), tmp_path / "c.json"
+    run(store, out, [gh_repo("o/r")], Llm())
+    looked_up = []
+    run(
+        store, out, [], Llm(),
+        stories=lambda days: [hn_story("9", "https://github.com/o/r")],
+        lookup=lambda name, published: looked_up.append(name),
+    )  # fmt: skip
+    assert looked_up == []
+    assert json.loads(out.read_text())["items"][0]["mentions"][0]["points"] == 200

@@ -34,25 +34,34 @@ def dynamic_topics(
     return [*seed, *learned][:limit]
 
 
+def _usable(raw: dict) -> bool:
+    """A live repo (no fork, no archive) with a name, an https link and a creation date."""
+    name, url = raw.get("full_name"), raw.get("html_url")
+    return (
+        not raw.get("fork")
+        and not raw.get("archived")
+        and isinstance(name, str)
+        and name.count("/") == 1
+        and isinstance(raw.get("created_at"), str)
+        and isinstance(url, str)
+        and url.startswith("https://github.com/")
+    )
+
+
 def parse_repo(raw: dict, published: str | None = None) -> Item | None:
     """A repo from the GitHub API, or None for a fork, an archive or a malformed payload."""
-    name, url, created = raw.get("full_name"), raw.get("html_url"), raw.get("created_at")
-    if raw.get("fork") or raw.get("archived"):
+    if not _usable(raw):
         return None
-    if not isinstance(name, str) or name.count("/") != 1 or not isinstance(created, str):
-        return None
-    if not isinstance(url, str) or not url.startswith("https://github.com/"):
-        return None
-    topics = raw.get("topics")
+    name, topics = raw["full_name"], raw.get("topics")
     return Item(
         id=f"github:{name.lower()}",
         source="github",
         kind="github",
         title=name,
         summary=" ".join(str(raw.get("description") or "").split())[:2000],
-        url=url,
+        url=raw["html_url"],
         authors=[name.split("/")[0]],
-        published=published or created,
+        published=published or raw["created_at"],
         github_stars=as_count(raw.get("stargazers_count")),
         topics=tuple(t for t in topics if isinstance(t, str)) if isinstance(topics, list) else (),
     )
