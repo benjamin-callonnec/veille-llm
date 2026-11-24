@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import type { FavoritesApi } from "../hooks/useFavorites";
 import type { ChatApi, StoredMessage } from "./chat/api";
 import { FakeSource } from "./pdf/fakeSource";
 import { PdfOpenError, type PdfSource } from "./pdf/source";
@@ -98,6 +99,20 @@ const fakeApi = () => {
   return { api, rows };
 };
 
+const fakeFavorites = (ids: string[] = []) => {
+  const state = { ids: [...ids] };
+  const api: FavoritesApi = {
+    list: async () => state.ids.map((id) => ({ item_id: id, item: null, added_at: "x" })),
+    add: async (id) => {
+      state.ids = [id, ...state.ids];
+    },
+    remove: async (id) => {
+      state.ids = state.ids.filter((i) => i !== id);
+    },
+  };
+  return Object.assign(api, { state });
+};
+
 const setup = (
   opts: {
     open?: () => Promise<PdfSource>;
@@ -109,6 +124,7 @@ const setup = (
     captions?: Caption[];
     captionsApi?: (item: string) => Promise<Caption[]>;
     reports?: () => Promise<ReportMeta[]>;
+    favorites?: FavoritesApi;
   } = {},
 ) => {
   const { api, rows } = fakeApi();
@@ -124,6 +140,7 @@ const setup = (
       chatApi={opts.chat ?? chat.api}
       captionsApi={opts.captionsApi ?? (async () => opts.captions ?? [])}
       reportsApi={opts.reports ?? (async () => [])}
+      favoritesApi={opts.favorites ?? fakeFavorites()}
     />,
   );
   return { api, rows, open, chatSent: chat.sent, ...utils };
@@ -740,4 +757,26 @@ test("a figure citation still works after the captions failed once", async () =>
   cite("3"); // asked again, not stuck on the failure
   await waitFor(() => expect(captionsApi).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(screen.queryByText("The preview could not be drawn")).toBeNull());
+});
+
+test("the star in the header adds the paper to the favorites and removes it", async () => {
+  const favorites = fakeFavorites();
+  setup({ favorites });
+  await userEvent.click(await screen.findByRole("button", { name: "Add to favorites" }));
+  expect(await screen.findByRole("button", { name: "Remove from favorites" })).toBeTruthy();
+  expect(favorites.state.ids).toEqual(["a1"]);
+  await userEvent.click(screen.getByRole("button", { name: "Remove from favorites" }));
+  await waitFor(() => expect(favorites.state.ids).toEqual([]));
+});
+
+test("S toggles the favorite, never while typing", async () => {
+  const favorites = fakeFavorites(["a1"]);
+  setup({ favorites });
+  await screen.findByRole("button", { name: "Remove from favorites" });
+  const box = await screen.findByRole("textbox");
+  await userEvent.type(box, "s");
+  expect(favorites.state.ids).toEqual(["a1"]);
+  box.blur();
+  await userEvent.keyboard("s");
+  await waitFor(() => expect(favorites.state.ids).toEqual([]));
 });
