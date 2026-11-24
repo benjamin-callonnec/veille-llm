@@ -639,6 +639,23 @@ def create_app(
             return unknown("unknown_note")
         return Response(status_code=204)
 
+    @app.get("/api/favorites")
+    def list_favorites() -> list[dict]:
+        return store.favorites()
+
+    @app.put("/api/favorites/{item_id}", status_code=204)
+    def add_favorite(item_id: str):  # noqa: ANN202
+        found = current_items().get(item_id)
+        if found is None:
+            return unknown()
+        store.add_favorite(item_id, found)  # the copy outlives the item in the catalogue
+        return Response(status_code=204)
+
+    @app.delete("/api/favorites/{item_id}", status_code=204)
+    def remove_favorite(item_id: str) -> Response:
+        store.remove_favorite(item_id)
+        return Response(status_code=204)
+
     @app.get("/api/skills")
     def list_skills() -> list[dict]:
         return [
