@@ -366,3 +366,17 @@ def test_favorites_are_listed_newest_first_and_survive_the_item_leaving_the_cata
     os.utime(catalogue, ns=(1, 1))  # a new mtime: the server reloads the catalogue
     assert [f["item_id"] for f in client.get("/api/favorites").json()] == ["b1", "a1"]
     assert client.get("/api/favorites").json()[1]["item"]["title"] == "A paper"
+
+
+def test_a_github_item_with_a_slash_in_its_id_can_be_a_favorite(tmp_path, calls):
+    path = tmp_path / "gh.json"
+    repo = {"id": "github:o/r", "title": "o/r", "hook": "h", "url": "https://github.com/o/r"}
+    path.write_text(json.dumps({"items": [repo]}), encoding="utf-8")
+    client = TestClient(
+        create_app(tmp_path / "gh-data", path, fetch=lambda url: PDF),
+        base_url="http://127.0.0.1:8765",
+    )
+    assert client.put("/api/favorites/github%3Ao%2Fr").status_code == 204
+    assert [f["item_id"] for f in client.get("/api/favorites").json()] == ["github:o/r"]
+    assert client.delete("/api/favorites/github%3Ao%2Fr").status_code == 204
+    assert client.get("/api/favorites").json() == []

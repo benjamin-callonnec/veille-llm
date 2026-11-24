@@ -38,7 +38,8 @@ export function App({
     if (!onlyFavorites) return all;
     const live = all.filter((i) => favorites.ids.has(i.id));
     const present = new Set(live.map((i) => i.id));
-    return [...live, ...favorites.saved.filter((i) => !present.has(i.id))];
+    const gone = favorites.saved.filter((i) => favorites.ids.has(i.id) && !present.has(i.id));
+    return [...live, ...gone];
   }, [all, onlyFavorites, favorites.ids, favorites.saved]);
 
   const counts = useMemo(() => countsByCategory(items, filters), [items, filters]);
@@ -81,7 +82,7 @@ export function App({
         <h1>LLM watch</h1>
         <p className="muted" aria-live="polite">
           {catalogue
-            ? `Updated ${new Date(catalogue.generated_at).toLocaleDateString("en-US")} · ${shown.length} of ${all.length} items`
+            ? `Updated ${new Date(catalogue.generated_at).toLocaleDateString("en-US")} · ${shown.length} of ${items.length} items`
             : error
               ? ""
               : "Loading…"}

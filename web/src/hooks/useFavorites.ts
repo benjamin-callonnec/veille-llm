@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type Item, parseItem } from "../lib/catalogue";
 
 /** The local reader's favorites (#48). The public catalogue has no server: no favorites there. */
@@ -48,14 +48,19 @@ function parse(raw: unknown): Saved {
 
 export function useFavorites(api: FavoritesApi | null) {
   const [state, setState] = useState<Saved>({ ids: new Set(), saved: [] });
-  const [error, setError] = useState(false);
+  const ids = useRef(state.ids); // what the user last asked for, read by the next toggle
+  ids.current = state.ids;
+  // One change at a time, in click order: a slow PUT never lands after the DELETE that follows.
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const pending = useRef(0);
 
   const reload = useCallback(async () => {
     if (!api) return;
     try {
-      setState(parse(await api.list()));
+      const next = parse(await api.list());
+      if (pending.current === 0) setState(next); // never undo a click still on its way
     } catch {
-      setError(true);
+      // keep what we show: the next change or page load tries again
     }
   }, [api]);
 
@@ -64,23 +69,28 @@ export function useFavorites(api: FavoritesApi | null) {
   }, [reload]);
 
   const toggle = useCallback(
-    async (id: string) => {
-      if (!api) return;
-      const on = !state.ids.has(id);
-      const ids = new Set(state.ids);
-      if (on) ids.add(id);
-      else ids.delete(id);
-      setState((s) => ({ ...s, ids })); // the star answers at once, the server follows
-      try {
-        await (on ? api.add(id) : api.remove(id));
-        setError(false);
-      } catch {
-        setError(true);
-      }
-      await reload(); // the server's list is the truth, and it brings the saved copies
+    (id: string) => {
+      if (!api) return Promise.resolve();
+      const on = !ids.current.has(id);
+      const next = new Set(ids.current);
+      if (on) next.add(id);
+      else next.delete(id);
+      ids.current = next;
+      setState((s) => ({ ...s, ids: next })); // the star answers at once, the server follows
+      pending.current += 1;
+      queue.current = queue.current.then(async () => {
+        try {
+          await (on ? api.add(id) : api.remove(id));
+        } catch {
+          // the reload below shows the server's truth again
+        }
+        pending.current -= 1;
+        await reload(); // the server's list is the truth, and it brings the saved copies
+      });
+      return queue.current;
     },
-    [api, state.ids, reload],
+    [api, reload],
   );
 
-  return { ids: state.ids, saved: state.saved, toggle, error };
+  return { ids: state.ids, saved: state.saved, toggle };
 }

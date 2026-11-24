@@ -250,4 +250,9 @@ test("a favorite gone from the catalogue still shows from its saved copy", async
   const gone = item({ id: "old", title: "Gone from the catalogue" });
   render(<App load={loader([item({ id: "a" })])} favorites={favoritesApi(["old"], [gone])} />);
   expect(await screen.findByText("Gone from the catalogue")).toBeTruthy();
+  expect(screen.getByText(/1 of 1 items/)).toBeTruthy();
+  await userEvent.click(
+    screen.getByRole("button", { name: 'Remove "Gone from the catalogue" from favorites' }),
+  );
+  expect(screen.queryByText("Gone from the catalogue")).toBeNull();
 });

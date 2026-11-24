@@ -643,7 +643,7 @@ def create_app(
     def list_favorites() -> list[dict]:
         return store.favorites()
 
-    @app.put("/api/favorites/{item_id}", status_code=204)
+    @app.put("/api/favorites/{item_id:path}", status_code=204)  # github ids hold a /
     def add_favorite(item_id: str):  # noqa: ANN202
         found = current_items().get(item_id)
         if found is None:
@@ -651,7 +651,7 @@ def create_app(
         store.add_favorite(item_id, found)  # the copy outlives the item in the catalogue
         return Response(status_code=204)
 
-    @app.delete("/api/favorites/{item_id}", status_code=204)
+    @app.delete("/api/favorites/{item_id:path}", status_code=204)
     def remove_favorite(item_id: str) -> Response:
         store.remove_favorite(item_id)
         return Response(status_code=204)

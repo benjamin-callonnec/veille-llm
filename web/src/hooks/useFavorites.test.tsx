@@ -41,13 +41,30 @@ test("loads the favorites, then adds and removes one", async () => {
   expect([...result.current.ids]).toEqual(["b"]);
 });
 
-test("a failed change is undone from the server's list and reported", async () => {
+test("a failed change is undone from the server's list", async () => {
   const api = { ...fakeApi(["a"]), add: async () => Promise.reject(new Error("down")) };
   const { result } = renderHook(() => useFavorites(api));
   await waitFor(() => expect(result.current.ids.size).toBe(1));
   await act(() => result.current.toggle("b"));
   expect([...result.current.ids]).toEqual(["a"]);
-  expect(result.current.error).toBe(true);
+});
+
+test("quick toggles reach the server in order and the star ends where the user left it", async () => {
+  const api = fakeApi();
+  const slowAdd = api.add;
+  api.add = async (id) => {
+    await new Promise((r) => setTimeout(r, 30)); // a slow PUT must not land after the DELETE
+    await slowAdd(id);
+  };
+  const { result } = renderHook(() => useFavorites(api));
+  await act(async () => {
+    void result.current.toggle("a");
+  });
+  await act(async () => {
+    await result.current.toggle("a");
+  });
+  await waitFor(() => expect(api.ids).toEqual([]));
+  await waitFor(() => expect(result.current.ids.size).toBe(0));
 });
 
 test("malformed saved copies are dropped, their ids are kept", async () => {

@@ -777,6 +777,18 @@ test("S toggles the favorite, never while typing", async () => {
   await userEvent.type(box, "s");
   expect(favorites.state.ids).toEqual(["a1"]);
   box.blur();
+  await userEvent.keyboard("{Shift>}s{/Shift}");
+  expect(favorites.state.ids).toEqual(["a1"]);
   await userEvent.keyboard("s");
   await waitFor(() => expect(favorites.state.ids).toEqual([]));
+});
+
+test("S does nothing while the viewer covers the paper", async () => {
+  const favorites = fakeFavorites(["a1"]);
+  setup({ favorites });
+  await screen.findByRole("button", { name: "Remove from favorites" });
+  await userEvent.keyboard("v");
+  await userEvent.keyboard("s");
+  await new Promise((r) => setTimeout(r, 20));
+  expect(favorites.state.ids).toEqual(["a1"]);
 });

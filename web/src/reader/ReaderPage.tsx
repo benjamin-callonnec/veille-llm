@@ -110,12 +110,17 @@ export function ReaderPage({
   const favorite = favorites.ids.has(itemId);
   const toggleFavorite = useRef(() => {});
   toggleFavorite.current = () => void favorites.toggle(itemId);
+  const viewerShown = useRef(viewerOpen);
+  viewerShown.current = viewerOpen;
 
-  // S stars or unstars the paper, unless you are typing or holding a modifier (like V)
+  // S stars or unstars the paper, unless you are typing, holding a modifier, or the viewer
+  // covers the paper (the star would change out of sight)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const other = e.altKey || e.ctrlKey || e.metaKey || e.repeat || e.defaultPrevented;
+      const other =
+        e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.repeat || e.defaultPrevented;
       if (e.key.toLowerCase() !== "s" || other || isTyping(e.target)) return;
+      if (viewerShown.current) return;
       toggleFavorite.current();
     };
     window.addEventListener("keydown", onKey);
