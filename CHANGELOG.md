@@ -5,6 +5,11 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-11-24
+
+### Changed
+- Catalogue (#48): the Favorites chip sits in the same row as Paper, News, Benchmark and GitHub (local reader build only).
+
 ## [0.21.0] - 2026-11-24
 
 ### Added
