@@ -9,7 +9,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from veille_llm.hf import Signal
-from veille_llm.models import LEGACY, Enrichment, Item, Provenance, Verdict, content_hash
+from veille_llm.models import (
+    LEGACY,
+    Enrichment,
+    Item,
+    Mention,
+    Provenance,
+    Verdict,
+    content_hash,
+)
 from veille_llm.pipeline.version import outdated
 
 _SCHEMA = """
@@ -40,6 +48,15 @@ CREATE TABLE IF NOT EXISTS enrichments (
     brief TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS categories (name TEXT PRIMARY KEY);
+-- No foreign key: a mention of an arXiv paper can arrive before the paper itself.
+CREATE TABLE IF NOT EXISTS mentions (
+    item_id TEXT NOT NULL,
+    url TEXT NOT NULL,
+    title TEXT NOT NULL,
+    points INTEGER NOT NULL,
+    published TEXT NOT NULL,
+    PRIMARY KEY (item_id, url)
+);
 -- Weekly newsletter progress: counts only, this database is public (never addresses).
 CREATE TABLE IF NOT EXISTS newsletter (
     week TEXT PRIMARY KEY,
@@ -48,7 +65,10 @@ CREATE TABLE IF NOT EXISTS newsletter (
 );
 """
 
-_ITEM_COLUMNS = "id, source, kind, title, summary, url, authors, published, upvotes, github_stars"
+_ITEM_COLUMNS = (
+    "id, source, kind, title, summary, url, authors, published, upvotes, github_stars, topics"
+)
+_ITEM_WIDTH = 11  # number of columns in _ITEM_COLUMNS
 
 
 def _item(row: sqlite3.Row | tuple) -> Item:
@@ -63,6 +83,7 @@ def _item(row: sqlite3.Row | tuple) -> Item:
         published=row[7],
         upvotes=row[8],
         github_stars=row[9],
+        topics=tuple(json.loads(row[10])),
     )
 
 
@@ -96,6 +117,7 @@ class Store:
             "items": [
                 ("content_hash", "TEXT NOT NULL DEFAULT ''"),
                 ("github_stars", "INTEGER NOT NULL DEFAULT 0"),
+                ("topics", "TEXT NOT NULL DEFAULT '[]'"),
             ],
         }
         for table in ("verdicts", "enrichments"):
@@ -144,8 +166,8 @@ class Store:
                         status = "duplicate"
                 self._conn.execute(
                     "INSERT INTO items (id, source, kind, title, summary, url, authors, "
-                    "published, upvotes, github_stars, first_seen, status, content_hash) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                    "published, upvotes, github_stars, topics, first_seen, status, content_hash) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                     "ON CONFLICT(id) DO UPDATE SET upvotes = MAX(upvotes, excluded.upvotes), "
                     "github_stars = MAX(github_stars, excluded.github_stars)",
                     (
@@ -159,6 +181,7 @@ class Store:
                         i.published,
                         i.upvotes,
                         i.github_stars,
+                        json.dumps(list(i.topics)),
                         now,
                         status,
                         digest,
@@ -215,8 +238,9 @@ class Store:
             sql += f" LIMIT {int(limit)}"
         out = []
         for row in self._conn.execute(sql):
-            item = _item(row[:10])
-            out.append((item, Verdict(item.id, bool(row[10]), row[11], row[12], row[13])))
+            item = _item(row[:_ITEM_WIDTH])
+            v = row[_ITEM_WIDTH:]
+            out.append((item, Verdict(item.id, bool(v[0]), v[1], v[2], v[3])))
         return out
 
     def save_enrichments(
@@ -252,8 +276,8 @@ class Store:
         )
         out = []
         for row in rows:
-            if outdated(Provenance(row[10], row[11], row[12]), current):
-                out.append(_item(row[:10]))
+            if outdated(Provenance(*row[_ITEM_WIDTH:]), current):
+                out.append(_item(row[:_ITEM_WIDTH]))
                 if len(out) >= limit:
                     break
         return out
@@ -272,10 +296,10 @@ class Store:
         )
         out = []
         for row in rows:
-            if outdated(Provenance(row[17], row[18], row[19]), current):
-                item = _item(row[:10])
-                verdict = Verdict(item.id, bool(row[10]), row[11], row[12], row[13])
-                out.append((item, verdict, Enrichment(item.id, row[14], row[15], row[16])))
+            item, rest = _item(row[:_ITEM_WIDTH]), row[_ITEM_WIDTH:]
+            if outdated(Provenance(*rest[7:10]), current):
+                verdict = Verdict(item.id, bool(rest[0]), rest[1], rest[2], rest[3])
+                out.append((item, verdict, Enrichment(item.id, *rest[4:7])))
                 if len(out) >= limit:
                     break
         return out
@@ -395,9 +419,10 @@ class Store:
             "WHERE i.status = 'published' AND i.published >= ? ORDER BY i.published DESC",
             (since,),
         )
+        mentions = self._mentions()
         out = []
         for row in rows:
-            item = _item(row[:10])
+            item, rest = _item(row[:_ITEM_WIDTH]), row[_ITEM_WIDTH:]
             out.append(
                 {
                     "id": item.id,
@@ -409,11 +434,44 @@ class Store:
                     "published": item.published,
                     "upvotes": item.upvotes,
                     "github_stars": item.github_stars,
-                    "score": row[10],
-                    "type": row[11],
-                    "category": row[12],
-                    "hook": row[13],
-                    "brief": row[14],
+                    "score": rest[0],
+                    "type": rest[1],
+                    "category": rest[2],
+                    "hook": rest[3],
+                    "brief": rest[4],
+                    "mentions": mentions.get(item.id, []),
                 }
             )
         return out
+
+    def _mentions(self) -> dict[str, list[dict]]:
+        out: dict[str, list[dict]] = {}
+        rows = self._conn.execute(
+            "SELECT item_id, title, url, points FROM mentions ORDER BY points DESC, url"
+        )
+        for item_id, title, url, points in rows:
+            out.setdefault(item_id, []).append({"title": title, "url": url, "points": points})
+        return out
+
+    def save_mentions(self, mentions: list[Mention]) -> None:
+        with self._conn:
+            for m in mentions:
+                self._conn.execute(
+                    "INSERT INTO mentions (item_id, url, title, points, published) "
+                    "VALUES (?,?,?,?,?) "
+                    "ON CONFLICT(item_id, url) DO UPDATE SET points = MAX(points, excluded.points)",
+                    (m.item_id, m.url, m.title, m.points, m.published),
+                )
+
+    def topic_counts(self, since: str) -> dict[str, int]:
+        """How often each topic appears on the published repos of the window."""
+        rows = self._conn.execute(
+            "SELECT topics FROM items WHERE kind = 'github' AND status = 'published' "
+            "AND published >= ?",
+            (since,),
+        )
+        counts: dict[str, int] = {}
+        for (topics,) in rows:
+            for topic in json.loads(topics):
+                counts[topic] = counts.get(topic, 0) + 1
+        return counts

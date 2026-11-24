@@ -9,14 +9,26 @@ from dataclasses import dataclass
 class Item:
     id: str  # "arxiv:<id>" or "rss:<16 hex of sha1(url)>"
     source: str
-    kind: str  # "paper" or "news"
+    kind: str  # "paper", "news" or "github"
     title: str
     summary: str
     url: str
     authors: list[str]
     published: str  # ISO 8601 UTC, e.g. 2026-11-20T10:00:00Z
     upvotes: int = 0
-    github_stars: int = 0  # stars of the repo Hugging Face links to the paper
+    github_stars: int = 0  # stars of the repo itself, or of the repo HF links to the paper
+    topics: tuple[str, ...] = ()  # GitHub topics of a repo; empty for other kinds
+
+
+@dataclass(frozen=True)
+class Mention:
+    """A discussion pointing at an item (a Hacker News story): why people care about it."""
+
+    item_id: str
+    url: str
+    title: str
+    points: int
+    published: str
 
 
 @dataclass(frozen=True)
