@@ -1,11 +1,19 @@
 import { hasArxivPdf, type Item, readerUrl, safeUrl, TYPE_LABELS } from "../lib/catalogue";
+import { IconButton } from "./Icon";
 
 const MAX_MENTIONS = 3;
 
 const date = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
 
-export function Card({ item }: { item: Item }) {
+export function Card({
+  item,
+  favorite,
+}: {
+  item: Item;
+  /** The star, only where favorites exist (the local reader build). */
+  favorite?: { on: boolean; onToggle: () => void };
+}) {
   const href = safeUrl(item.url);
   // a text post's link is its own discussion: listing it again says nothing
   const mentions = item.mentions.filter((m) => m.url !== item.url).slice(0, MAX_MENTIONS);
@@ -19,6 +27,19 @@ export function Card({ item }: { item: Item }) {
           href={read}
           aria-label={`Open "${item.title}" in the reader`}
           title="Read in the reader"
+        />
+      )}
+      {favorite && (
+        <IconButton
+          icon="star"
+          className="star-btn card-star"
+          label={
+            favorite.on
+              ? `Remove "${item.title}" from favorites`
+              : `Add "${item.title}" to favorites`
+          }
+          pressed={favorite.on}
+          onClick={favorite.onToggle}
         />
       )}
       <h2>

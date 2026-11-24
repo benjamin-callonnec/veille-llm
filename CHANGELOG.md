@@ -5,6 +5,11 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-24
+
+### Added
+- Reader (#48): favorites, kept locally in `.local/reader/`. A star on every card of the local catalogue (papers, news, benchmarks, GitHub repos) and a Favorites filter (`fav=1` in the address) show only the saved items. A favorite that has left the catalogue still shows, from the copy saved when it was added. In the reader, a star next to the title and the `S` key add or remove the paper (listed in the shortcuts panel). The public catalogue on GitHub Pages has neither star nor filter.
+
 ## [0.20.0] - 2026-11-24
 
 ### Added

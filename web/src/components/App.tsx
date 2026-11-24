@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { fetchCatalogue, useCatalogue } from "../hooks/useCatalogue";
+import { type FavoritesApi, httpFavorites, useFavorites } from "../hooks/useFavorites";
 import { useFilters } from "../hooks/useFilters";
 import {
   applyFilters,
@@ -13,14 +14,33 @@ import { Card } from "./Card";
 
 const SORT_LABELS: Record<SortKey, string> = { trending: "Trending", date: "Date", score: "Score" };
 
-export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }) {
+// Favorites live in the local reader: only the build that has it can keep them.
+const READER_FAVORITES = import.meta.env.VITE_READER_URL ? httpFavorites : null;
+
+export function App({
+  load = fetchCatalogue,
+  favorites: favoritesApi = READER_FAVORITES,
+}: {
+  load?: () => Promise<unknown>;
+  favorites?: FavoritesApi | null;
+}) {
   const { catalogue, error } = useCatalogue(load);
-  const items = useMemo(() => catalogue?.items ?? [], [catalogue]);
+  const favorites = useFavorites(favoritesApi);
+  const all = useMemo(() => catalogue?.items ?? [], [catalogue]);
   const known = useMemo(
-    () => (catalogue ? new Set(items.map((i) => i.category)) : null),
-    [catalogue, items],
+    () => (catalogue ? new Set(all.map((i) => i.category)) : null),
+    [catalogue, all],
   );
   const { filters, setFilters, toggle } = useFilters(known);
+  const onlyFavorites = favoritesApi !== null && filters.favorites;
+  // a favorite gone from the catalogue still shows, from the copy saved with it
+  const items = useMemo(() => {
+    if (!onlyFavorites) return all;
+    const live = all.filter((i) => favorites.ids.has(i.id));
+    const present = new Set(live.map((i) => i.id));
+    const gone = favorites.saved.filter((i) => favorites.ids.has(i.id) && !present.has(i.id));
+    return [...live, ...gone];
+  }, [all, onlyFavorites, favorites.ids, favorites.saved]);
 
   const counts = useMemo(() => countsByCategory(items, filters), [items, filters]);
   const shown = useMemo(() => applyFilters(items, filters), [items, filters]);
@@ -111,10 +131,33 @@ export function App({ load = fetchCatalogue }: { load?: () => Promise<unknown> }
             <legend>Type</legend>
             {TYPES.map((t) => chip(t, "types", TYPE_LABELS[t]))}
           </fieldset>
+          {favoritesApi && (
+            <fieldset className="chips">
+              <legend>Saved</legend>
+              <button
+                type="button"
+                className="chip"
+                aria-pressed={filters.favorites}
+                onClick={() => setFilters((f) => ({ ...f, favorites: !f.favorites }))}
+              >
+                Favorites<span className="count"> {favorites.ids.size}</span>
+              </button>
+            </fieldset>
+          )}
           {shown.length === 0 ? (
             <p className="muted">No items match these filters.</p>
           ) : (
-            shown.map((item) => <Card key={item.id} item={item} />)
+            shown.map((item) => (
+              <Card
+                key={item.id}
+                item={item}
+                favorite={
+                  favoritesApi
+                    ? { on: favorites.ids.has(item.id), onToggle: () => favorites.toggle(item.id) }
+                    : undefined
+                }
+              />
+            ))
           )}
         </main>
       )}

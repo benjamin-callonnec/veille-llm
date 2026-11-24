@@ -38,6 +38,10 @@ export const READER_SHORTCUTS: ShortcutGroup[] = [
     ],
   },
   {
+    title: "Paper",
+    entries: [{ keys: ["S"], label: "Add to or remove from the favorites" }],
+  },
+  {
     title: "Viewer",
     entries: [
       { keys: ["V"], label: "Open or close the viewer" },

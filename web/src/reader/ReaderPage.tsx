@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { IconButton } from "../components/Icon";
+import { type FavoritesApi, httpFavorites, useFavorites } from "../hooks/useFavorites";
 import { isTyping } from "../lib/platform";
 import { formatModel } from "../lib/time";
 import { type ChatApi, httpChatApi } from "./chat/api";
@@ -65,6 +67,8 @@ interface Props {
   health?: () => Promise<{ model?: string }>;
   /** Where the reports the tutor wrote come from (the API by default). */
   reportsApi?(item: string): Promise<ReportMeta[]>;
+  /** Where the favorites are kept (the API by default). */
+  favoritesApi?: FavoritesApi;
 }
 
 export function ReaderPage({
@@ -76,6 +80,7 @@ export function ReaderPage({
   captionsApi = fetchCaptions,
   health = fetchHealth,
   reportsApi = listReports,
+  favoritesApi = httpFavorites,
 }: Props) {
   const [item, setItem] = useState<ReaderItem | null>(null);
   const [error, setError] = useState<string | null>(
@@ -101,6 +106,26 @@ export function ReaderPage({
     setViewerOpen(true);
   }, [reload]);
   const chat = useChat(itemId, chatApi, undefined, onReport);
+  const favorites = useFavorites(favoritesApi);
+  const favorite = favorites.ids.has(itemId);
+  const toggleFavorite = useRef(() => {});
+  toggleFavorite.current = () => void favorites.toggle(itemId);
+  const viewerShown = useRef(viewerOpen);
+  viewerShown.current = viewerOpen;
+
+  // S stars or unstars the paper, unless you are typing, holding a modifier, or the viewer
+  // covers the paper (the star would change out of sight)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const other =
+        e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.repeat || e.defaultPrevented;
+      if (e.key.toLowerCase() !== "s" || other || isTyping(e.target)) return;
+      if (viewerShown.current) return;
+      toggleFavorite.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const [model, setModel] = useState("");
 
   // V opens or closes the viewer, unless you are typing or holding a modifier (like H, home)
@@ -255,7 +280,16 @@ export function ReaderPage({
   return (
     <div className="reader-shell">
       <header className="page-head reader-head">
-        <h1>{item.title}</h1>
+        <div className="reader-title">
+          <h1>{item.title}</h1>
+          <IconButton
+            icon="star"
+            className="star-btn"
+            label={favorite ? "Remove from favorites" : "Add to favorites"}
+            pressed={favorite}
+            onClick={() => toggleFavorite.current()}
+          />
+        </div>
         <p className="hook">
           <strong>{item.hook}</strong>
         </p>

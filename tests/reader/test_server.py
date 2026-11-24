@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 from fastapi.testclient import TestClient
@@ -328,3 +329,54 @@ def test_structure_of_a_paper_without_pdf_is_404(client):
     response = client.get("/api/items/b1/structure")
     assert response.status_code == 404
     assert response.json() == {"reason": "no_pdf"}
+
+
+def test_favorites_start_empty_and_keep_a_copy_of_the_catalogue_item(client):
+    assert client.get("/api/favorites").json() == []
+    assert client.put("/api/favorites/b1").status_code == 204
+    (fav,) = client.get("/api/favorites").json()
+    assert fav["item_id"] == "b1" and fav["item"] == ITEMS[1] and fav["added_at"]
+
+
+def test_adding_a_favorite_twice_keeps_one_entry_and_its_first_date(client):
+    client.put("/api/favorites/a1")
+    first = client.get("/api/favorites").json()
+    client.put("/api/favorites/a1")
+    assert client.get("/api/favorites").json() == first
+
+
+def test_only_catalogue_items_can_become_favorites(client):
+    assert client.put("/api/favorites/nope").status_code == 404
+    assert client.get("/api/favorites").json() == []
+
+
+def test_removing_a_favorite_is_idempotent(client):
+    client.put("/api/favorites/a1")
+    assert client.delete("/api/favorites/a1").status_code == 204
+    assert client.delete("/api/favorites/a1").status_code == 204
+    assert client.get("/api/favorites").json() == []
+
+
+def test_favorites_are_listed_newest_first_and_survive_the_item_leaving_the_catalogue(
+    client, catalogue
+):
+    client.put("/api/favorites/a1")
+    client.put("/api/favorites/b1")
+    catalogue.write_text(json.dumps({"items": []}), encoding="utf-8")
+    os.utime(catalogue, ns=(1, 1))  # a new mtime: the server reloads the catalogue
+    assert [f["item_id"] for f in client.get("/api/favorites").json()] == ["b1", "a1"]
+    assert client.get("/api/favorites").json()[1]["item"]["title"] == "A paper"
+
+
+def test_a_github_item_with_a_slash_in_its_id_can_be_a_favorite(tmp_path, calls):
+    path = tmp_path / "gh.json"
+    repo = {"id": "github:o/r", "title": "o/r", "hook": "h", "url": "https://github.com/o/r"}
+    path.write_text(json.dumps({"items": [repo]}), encoding="utf-8")
+    client = TestClient(
+        create_app(tmp_path / "gh-data", path, fetch=lambda url: PDF),
+        base_url="http://127.0.0.1:8765",
+    )
+    assert client.put("/api/favorites/github%3Ao%2Fr").status_code == 204
+    assert [f["item_id"] for f in client.get("/api/favorites").json()] == ["github:o/r"]
+    assert client.delete("/api/favorites/github%3Ao%2Fr").status_code == 204
+    assert client.get("/api/favorites").json() == []

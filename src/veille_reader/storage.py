@@ -134,6 +134,13 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (report_id, version)
     );
     """,
+    """
+    CREATE TABLE favorites (
+        item_id TEXT PRIMARY KEY,
+        item TEXT NOT NULL,
+        added_at TEXT NOT NULL
+    );
+    """,
 ]
 MAX_VERSIONS = 50  # versions kept per report; older ones are purged
 MAX_HTML_CHARS = 400_000
@@ -459,6 +466,25 @@ class ReaderStore:
                 "DELETE FROM memory_notes WHERE id = ? AND item_id = ?", (note_id, item_id)
             )
         return cursor.rowcount > 0
+
+    def favorites(self) -> list[dict]:
+        """Newest first, each with the copy of its catalogue item taken when it was added."""
+        rows = self._con.execute(
+            "SELECT item_id, item, added_at FROM favorites ORDER BY rowid DESC"
+        )
+        return [{"item_id": r[0], "item": json.loads(r[1]), "added_at": r[2]} for r in rows]
+
+    def add_favorite(self, item_id: str, item: dict) -> None:
+        """Idempotent: a favorite added again keeps its first copy and date."""
+        with self._con:
+            self._con.execute(
+                "INSERT OR IGNORE INTO favorites (item_id, item, added_at) VALUES (?, ?, ?)",
+                (item_id, json.dumps(item), self._now()),
+            )
+
+    def remove_favorite(self, item_id: str) -> None:
+        with self._con:
+            self._con.execute("DELETE FROM favorites WHERE item_id = ?", (item_id,))
 
     def limit_raised(self, conversation_id: int) -> bool:
         row = self._con.execute(
