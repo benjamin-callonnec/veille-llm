@@ -5,6 +5,11 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.21.2] - 2026-11-25
+
+### Fixed
+- Reader chat: while an answer streams, the conversation no longer jumps back to the bottom if you scrolled up to keep reading. It follows the stream only when you are at the bottom, and resumes when you send a message, start a quiz or open a conversation.
+
 ## [0.21.1] - 2026-11-24
 
 ### Changed
