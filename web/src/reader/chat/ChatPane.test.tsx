@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ChatApi, Conversation, StoredMessage } from "./api";
@@ -306,4 +306,29 @@ test("a quiz card answers for the paper of the chat even when the pane got no it
   render(<QuizHost api={api} quizApi={{ start: vi.fn(), answer } as never} />);
   await userEvent.click(await screen.findByRole("button", { name: /a1x/ }));
   await waitFor(() => expect(answer).toHaveBeenCalledWith("a1", 9, { choice: 0 }));
+});
+
+test("streaming does not drag the feed down once the user scrolled up", async () => {
+  let open: () => void = () => {};
+  const gate = new Promise<void>((r) => {
+    open = r;
+  });
+  const { container } = render(<Host api={makeApi(gate)} onGo={() => {}} />);
+  await userEvent.type(await screen.findByRole("textbox", { name: "Message" }), "Q{Enter}");
+  await screen.findByText("The answer");
+  const feed = container.querySelector(".chat-feed") as HTMLElement;
+  // jsdom has no layout: fake a 1000px feed in a 200px viewport, scrolled to the top
+  let top = 0;
+  Object.defineProperties(feed, {
+    scrollHeight: { value: 1000 },
+    clientHeight: { value: 200 },
+    scrollTop: { get: () => top, set: (v: number) => (top = v) },
+  });
+  fireEvent.scroll(feed);
+  open();
+  await screen.findByRole("button", { name: "p.3" });
+  expect(top).toBe(0);
+  // sending a new message brings the reader back to the bottom
+  await userEvent.type(screen.getByRole("textbox", { name: "Message" }), "Again{Enter}");
+  await waitFor(() => expect(top).toBe(1000));
 });

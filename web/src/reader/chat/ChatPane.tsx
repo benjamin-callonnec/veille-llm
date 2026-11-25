@@ -64,6 +64,7 @@ export function ChatPane({
   const [quizError, setQuizError] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   async function startQuiz() {
+    follow.current = true;
     setQuizBusy(true);
     setQuizError(false);
     try {
@@ -79,10 +80,17 @@ export function ChatPane({
   }
 
   const feed = useRef<HTMLDivElement>(null);
+  // follow the stream only while the reader is at the bottom; scrolling up releases it
+  const follow = useRef(true);
+  const convId = chat.current?.id;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: opening a conversation starts at the bottom
+  useEffect(() => {
+    follow.current = true;
+  }, [convId]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll when content grows
   useEffect(() => {
     const el = feed.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && follow.current) el.scrollTop = el.scrollHeight;
   }, [
     chat.messages.length,
     chat.assistant?.answer,
@@ -95,6 +103,7 @@ export function ChatPane({
   // the answer to a dictated message is read aloud, the answer to a typed one is not
   const [voiceReply, setVoiceReply] = useState(false);
   const send = async (text: string, files: File[] = [], voice = false, skill?: string) => {
+    follow.current = true;
     setVoiceReply(voice);
     setAttachError(null);
     let images: Awaited<ReturnType<typeof toPayload>>[];
@@ -165,7 +174,14 @@ export function ChatPane({
           }}
         />
       </div>
-      <div className="chat-feed" ref={feed}>
+      <div
+        className="chat-feed"
+        ref={feed}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+        }}
+      >
         {chat.messages.length === 0 && !chat.assistant && (
           <p className="muted chat-empty">
             Select a passage in the PDF to ask about it, or type a question below.
