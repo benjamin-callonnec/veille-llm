@@ -64,7 +64,7 @@ export function ChatPane({
   const [quizError, setQuizError] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   async function startQuiz() {
-    follow.current = true;
+    stick();
     setQuizBusy(true);
     setQuizError(false);
     try {
@@ -82,10 +82,15 @@ export function ChatPane({
   const feed = useRef<HTMLDivElement>(null);
   // follow the stream only while the reader is at the bottom; scrolling up releases it
   const follow = useRef(true);
+  const [away, setAway] = useState(false); // scrolled up: show the way back down
+  const stick = () => {
+    follow.current = true;
+    setAway(false);
+  };
   const convId = chat.current?.id;
   // biome-ignore lint/correctness/useExhaustiveDependencies: opening a conversation starts at the bottom
   useEffect(() => {
-    follow.current = true;
+    stick();
   }, [convId]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll when content grows
   useEffect(() => {
@@ -103,7 +108,7 @@ export function ChatPane({
   // the answer to a dictated message is read aloud, the answer to a typed one is not
   const [voiceReply, setVoiceReply] = useState(false);
   const send = async (text: string, files: File[] = [], voice = false, skill?: string) => {
-    follow.current = true;
+    stick();
     setVoiceReply(voice);
     setAttachError(null);
     let images: Awaited<ReturnType<typeof toPayload>>[];
@@ -174,106 +179,124 @@ export function ChatPane({
           }}
         />
       </div>
-      <div
-        className="chat-feed"
-        ref={feed}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-        }}
-      >
-        {chat.messages.length === 0 && !chat.assistant && (
-          <p className="muted chat-empty">
-            Select a passage in the PDF to ask about it, or type a question below.
-          </p>
-        )}
-        {chat.messages.map((m, i) =>
-          m.kind === "quiz" ? (
-            <QuizCard
-              key={`${m.id}-${m.seq}`}
-              itemId={itemId}
-              content={m.content}
-              api={quizApi}
-              onCite={onCite}
-            />
-          ) : m.kind === "notice" ? (
-            <p key={`${m.id}-${m.seq}`} className="compaction-note">
-              {String(m.content.text ?? "")}
+      <div className="chat-feed-wrap">
+        <div
+          className="chat-feed"
+          ref={feed}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+            setAway(!follow.current);
+          }}
+        >
+          {chat.messages.length === 0 && !chat.assistant && (
+            <p className="muted chat-empty">
+              Select a passage in the PDF to ask about it, or type a question below.
             </p>
-          ) : m.kind === "ask" ? (
-            <AskCard
-              key={`${m.id}-${m.seq}`}
-              card={toAsk(m.content) ?? { id: "", question: "", options: [], status: "expired" }}
-              onAnswer={async (text) => {
-                await answerAsk(String(m.content.id), text);
-                await chat.refresh();
-              }}
-            />
-          ) : m.kind === "memory" ? (
-            <p key={`${m.id}-${m.seq}`} className="memory-line">
-              {m.content.action === "saved"
-                ? `The tutor saved a note: ${String(m.content.text ?? "")}`
-                : "The tutor removed a note."}
-            </p>
-          ) : m.role === "system" ? (
-            <CompactionNote key={`${m.id}-${m.seq}`} summary={String(m.content.summary ?? "")} />
-          ) : m.role === "user" ? (
-            <UserMessage
-              key={`${m.id}-${m.seq}`}
-              message={m}
-              itemId={chat.itemId}
-              onGo={onGo}
-              onRetry={i === lastUser && !chat.streaming ? () => chat.regenerate() : undefined}
-            />
-          ) : (
-            <StoredAssistantMessage
-              key={`${m.id}-${m.seq}`}
-              content={m.content}
-              createdAt={m.created_at}
+          )}
+          {chat.messages.map((m, i) =>
+            m.kind === "quiz" ? (
+              <QuizCard
+                key={`${m.id}-${m.seq}`}
+                itemId={itemId}
+                content={m.content}
+                api={quizApi}
+                onCite={onCite}
+              />
+            ) : m.kind === "notice" ? (
+              <p key={`${m.id}-${m.seq}`} className="compaction-note">
+                {String(m.content.text ?? "")}
+              </p>
+            ) : m.kind === "ask" ? (
+              <AskCard
+                key={`${m.id}-${m.seq}`}
+                card={toAsk(m.content) ?? { id: "", question: "", options: [], status: "expired" }}
+                onAnswer={async (text) => {
+                  await answerAsk(String(m.content.id), text);
+                  await chat.refresh();
+                }}
+              />
+            ) : m.kind === "memory" ? (
+              <p key={`${m.id}-${m.seq}`} className="memory-line">
+                {m.content.action === "saved"
+                  ? `The tutor saved a note: ${String(m.content.text ?? "")}`
+                  : "The tutor removed a note."}
+              </p>
+            ) : m.role === "system" ? (
+              <CompactionNote key={`${m.id}-${m.seq}`} summary={String(m.content.summary ?? "")} />
+            ) : m.role === "user" ? (
+              <UserMessage
+                key={`${m.id}-${m.seq}`}
+                message={m}
+                itemId={chat.itemId}
+                onGo={onGo}
+                onRetry={i === lastUser && !chat.streaming ? () => chat.regenerate() : undefined}
+              />
+            ) : (
+              <StoredAssistantMessage
+                key={`${m.id}-${m.seq}`}
+                content={m.content}
+                createdAt={m.created_at}
+                onCite={onCite}
+                onRaise={
+                  i === chat.messages.length - 1 && !chat.streaming
+                    ? () => chat.regenerate({ raiseLimit: true })
+                    : undefined
+                }
+              />
+            ),
+          )}
+          {chat.assistant && (
+            <AssistantMessage
+              state={chat.assistant}
+              onToggleThinking={chat.toggleThinking}
               onCite={onCite}
-              onRaise={
-                i === chat.messages.length - 1 && !chat.streaming
-                  ? () => chat.regenerate({ raiseLimit: true })
-                  : undefined
+              onAnswerAsk={answerAsk}
+              autoRead={voiceReply}
+            />
+          )}
+          {suggestions.length > 1 && (
+            <ul className="suggestions" aria-label="Suggested questions">
+              {suggestions.slice(1).map((q) => (
+                <li key={q}>
+                  <button type="button" className="suggestion" onClick={() => pick(q)}>
+                    {q}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {quizBusy && <p className="muted chat-empty">Writing a question from the paper…</p>}
+          {quizError && (
+            <p role="alert" className="chat-error">
+              The quiz could not be made. Try again.
+            </p>
+          )}
+          {attachError && (
+            <p role="alert" className="chat-error">
+              {attachError}
+            </p>
+          )}
+          {chat.error && (
+            <p role="alert" className="chat-error">
+              Something went wrong with the chat.
+            </p>
+          )}
+        </div>
+        {away && (
+          <IconButton
+            className="chat-to-bottom"
+            icon="arrow-down"
+            label="Scroll to bottom"
+            onClick={() => {
+              const el = feed.current;
+              if (el) {
+                el.scrollTop = el.scrollHeight;
+                el.focus(); // the button is about to unmount: keep keyboard focus in the pane
               }
-            />
-          ),
-        )}
-        {chat.assistant && (
-          <AssistantMessage
-            state={chat.assistant}
-            onToggleThinking={chat.toggleThinking}
-            onCite={onCite}
-            onAnswerAsk={answerAsk}
-            autoRead={voiceReply}
+              stick();
+            }}
           />
-        )}
-        {suggestions.length > 1 && (
-          <ul className="suggestions" aria-label="Suggested questions">
-            {suggestions.slice(1).map((q) => (
-              <li key={q}>
-                <button type="button" className="suggestion" onClick={() => pick(q)}>
-                  {q}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {quizBusy && <p className="muted chat-empty">Writing a question from the paper…</p>}
-        {quizError && (
-          <p role="alert" className="chat-error">
-            The quiz could not be made. Try again.
-          </p>
-        )}
-        {attachError && (
-          <p role="alert" className="chat-error">
-            {attachError}
-          </p>
-        )}
-        {chat.error && (
-          <p role="alert" className="chat-error">
-            Something went wrong with the chat.
-          </p>
         )}
       </div>
       <Composer

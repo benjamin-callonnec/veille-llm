@@ -7,6 +7,9 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [0.21.2] - 2026-11-25
 
+### Added
+- Reader chat: a discreet arrow at the bottom of the conversation brings you back down once you scrolled up.
+
 ### Fixed
 - Reader chat: while an answer streams, the conversation no longer jumps back to the bottom if you scrolled up to keep reading. It follows the stream only when you are at the bottom, and resumes when you send a message, start a quiz or open a conversation.
 

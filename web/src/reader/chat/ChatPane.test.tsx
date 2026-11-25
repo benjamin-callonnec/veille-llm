@@ -332,3 +332,24 @@ test("streaming does not drag the feed down once the user scrolled up", async ()
   await userEvent.type(screen.getByRole("textbox", { name: "Message" }), "Again{Enter}");
   await waitFor(() => expect(top).toBe(1000));
 });
+
+test("a discreet arrow brings you back to the bottom once you scrolled up", async () => {
+  const { container } = render(<Host api={makeApi(Promise.resolve())} onGo={() => {}} />);
+  await userEvent.type(await screen.findByRole("textbox", { name: "Message" }), "Q{Enter}");
+  await screen.findByRole("button", { name: "p.3" });
+  const feed = container.querySelector(".chat-feed") as HTMLElement;
+  let top = 800; // at the bottom of a 1000px feed in a 200px viewport
+  Object.defineProperties(feed, {
+    scrollHeight: { value: 1000 },
+    clientHeight: { value: 200 },
+    scrollTop: { get: () => top, set: (v: number) => (top = v) },
+  });
+  fireEvent.scroll(feed);
+  expect(screen.queryByRole("button", { name: "Scroll to bottom" })).toBeNull();
+  top = 100;
+  fireEvent.scroll(feed);
+  await userEvent.click(screen.getByRole("button", { name: "Scroll to bottom" }));
+  expect(top).toBe(1000);
+  fireEvent.scroll(feed);
+  expect(screen.queryByRole("button", { name: "Scroll to bottom" })).toBeNull();
+});
