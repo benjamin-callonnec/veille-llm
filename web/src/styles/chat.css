@@ -63,8 +63,32 @@
   height: 24px;
 }
 
+.chat-feed-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+}
+.icon-btn.chat-to-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  background: var(--bubble);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  opacity: 0.85;
+}
+.icon-btn.chat-to-bottom:hover,
+.icon-btn.chat-to-bottom:focus-visible {
+  opacity: 1;
+}
+.chat-feed:focus {
+  outline: none;
+}
 .chat-feed {
   flex: 1;
+  min-width: 0;
   overflow: auto;
   padding: 44px 20px 12px;
   display: flex;
