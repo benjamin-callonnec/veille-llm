@@ -5,6 +5,14 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-11-27
+
+### Added
+- Reader reports (#46): a citation that names several pages, `[p.1, p.8]`, becomes one clickable button per page. The `present` skill now asks for one citation per page.
+
+### Changed
+- Freshness alert (#40): `freshness.yml` also watches `weekly` and alerts when no run succeeded for 8 days.
+
 ## [0.21.2] - 2026-11-25
 
 ### Added
