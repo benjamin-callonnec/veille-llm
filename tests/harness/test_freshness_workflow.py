@@ -18,7 +18,12 @@ def test_it_only_reads_runs_and_holds_no_secret():
     assert "pull_request" not in WORKFLOW
 
 
-def test_it_asks_for_the_latest_successful_daily_run_and_checks_its_age():
-    assert "--workflow daily.yml" in WORKFLOW
+def test_it_watches_daily_within_30_hours_and_weekly_within_8_days():
+    matrix = DOC["jobs"]["check"]["strategy"]["matrix"]["include"]
+    assert {(m["workflow"], m["hours"]) for m in matrix} == {("daily", 30), ("weekly", 192)}
+
+
+def test_it_asks_for_the_latest_successful_run_and_checks_its_age():
+    assert "--workflow ${{ matrix.workflow }}.yml" in WORKFLOW
     assert "--status success" in WORKFLOW
     assert "PYTHONPATH=src python3 -m veille_llm.freshness" in WORKFLOW

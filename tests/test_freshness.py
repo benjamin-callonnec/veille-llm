@@ -27,7 +27,7 @@ def test_an_old_successful_run_is_stale():
 
 
 def test_no_run_at_all_is_stale():
-    assert check([], NOW, 30) == (False, "no successful run found")
+    assert check([], NOW, 30) == (False, "no successful daily run found")
 
 
 def test_only_the_latest_run_counts():
@@ -50,3 +50,9 @@ def test_main_reads_runs_on_stdin_and_answers_by_exit_code(monkeypatch):
     assert main([]) == 0
     monkeypatch.setattr(freshness.sys, "stdin", io.StringIO(runs))
     assert main(["--max-hours", "2"]) == 1
+
+
+def test_the_message_names_the_workflow_it_watches(capsys, monkeypatch):
+    monkeypatch.setattr("sys.stdin", io.StringIO("[]"))
+    assert freshness.main(["--name", "weekly"]) == 1
+    assert "weekly" in capsys.readouterr().out
