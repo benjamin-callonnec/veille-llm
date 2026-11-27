@@ -80,6 +80,14 @@ def test_arxiv_source_retries_a_503_then_converts_items():
     assert len(calls) == 2
 
 
+def test_arxiv_source_keeps_the_comment():
+    feed = ARXIV_FEED.replace(
+        "</entry>", "<arxiv:comment>ICML 2026 oral</arxiv:comment></entry>"
+    ).replace("<feed ", '<feed xmlns:arxiv="http://arxiv.org/schemas/atom" ')
+    (paper,) = arxiv_source(7, fetch=lambda start, size: feed, sleep=lambda s: None, now=NOW)
+    assert paper.comment == "ICML 2026 oral"
+
+
 def test_arxiv_source_gives_up_after_three_503_without_raising_to_collect_all():
     def fetch(start, page_size):
         raise http_error(503)

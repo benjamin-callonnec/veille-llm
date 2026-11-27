@@ -21,6 +21,7 @@ def _to_item(paper: Paper) -> Item:
         url=paper.url,
         authors=paper.authors,
         published=paper.published,
+        comment=paper.comment,
     )
 
 

@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 API_URL = "https://export.arxiv.org/api/query"
 CATEGORIES = ("cs.CL", "cs.LG", "cs.AI")
 _ATOM = "{http://www.w3.org/2005/Atom}"
+_ARXIV = "{http://arxiv.org/schemas/atom}"
 _VERSION = re.compile(r"v\d+$")
 
 
@@ -24,6 +25,7 @@ class Paper:
     authors: list[str]
     published: str
     url: str
+    comment: str = ""  # the authors' note, e.g. "Accepted at NeurIPS 2026"
 
 
 def _clean(text: str | None) -> str:
@@ -46,6 +48,7 @@ def parse_feed(xml_text: str) -> list[Paper]:
                 ],
                 published=entry.findtext(f"{_ATOM}published", ""),
                 url=f"https://arxiv.org/abs/{arxiv_id}",
+                comment=_clean(entry.findtext(f"{_ARXIV}comment")),
             )
         )
     return papers

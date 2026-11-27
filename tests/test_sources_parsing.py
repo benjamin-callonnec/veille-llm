@@ -51,3 +51,26 @@ def test_parse_signals_reads_the_github_stars_of_the_linked_repo():
         {"paper": {"id": "c", "githubStars": "oops"}},  # malformed: a signal is never fatal
     ]
     assert parse_signals(payload) == {"a": Signal(3, 162), "b": Signal(1, 0), "c": Signal(0, 0)}
+
+
+COMMENT_FEED = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/2611.05678v1</id>
+    <published>2026-11-20T10:00:00Z</published>
+    <title>Scaling agents</title>
+    <summary>S.</summary>
+    <author><name>Ada Lovelace</name></author>
+    <arxiv:comment>Accepted at  NeurIPS 2026</arxiv:comment>
+  </entry>
+</feed>"""
+
+
+def test_parse_feed_reads_the_arxiv_comment():
+    (paper,) = parse_feed(COMMENT_FEED)
+    assert paper.comment == "Accepted at NeurIPS 2026"
+
+
+def test_parse_feed_comment_is_empty_when_absent():
+    (paper,) = parse_feed(FEED)
+    assert paper.comment == ""
