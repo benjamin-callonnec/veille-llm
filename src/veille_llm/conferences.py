@@ -32,7 +32,10 @@ class Conference:
 
 def _edition(label: str, year: int) -> re.Pattern[str]:
     """`label` and this year ("2026", "'26", "26"): last year's edition must not match."""
-    return re.compile(rf"\b(?:{label})\W{{0,3}}(?:20)?{year % 100}\b", re.IGNORECASE)
+    short = (
+        year % 100
+    )  # "26" alone is a page count ("NeurIPS, 26 pages"): it needs "20" or an apostrophe
+    return re.compile(rf"\b(?:{label})\W{{0,3}}(?:20{short}|['\u2019]{short})\b", re.IGNORECASE)
 
 
 # Dates from the official sites, checked on 2026-11-27 (main conference and workshops).
@@ -64,6 +67,4 @@ def prioritise(
     items: list[Item], now: datetime, calendar: Sequence[Conference] = CONFERENCES
 ) -> list[Item]:
     """Items tied to an active conference first; each group keeps its order."""
-    tied = [i for i in items if conference_of(i.comment, now, calendar)]
-    rest = [i for i in items if not conference_of(i.comment, now, calendar)]
-    return tied + rest
+    return sorted(items, key=lambda i: conference_of(i.comment, now, calendar) is None)  # stable

@@ -80,3 +80,22 @@ def test_the_real_calendar_is_well_formed():
         assert conference.start <= conference.end
         assert not conference.pattern.search("")
         assert conference.pattern.flags & re.IGNORECASE
+
+
+def test_real_patterns_need_the_year_not_a_page_count():
+    neurips, icml = (
+        CONFERENCES[0].pattern,
+        [c for c in CONFERENCES if c.name == "ICML 2027"][0].pattern,
+    )
+    for comment in (
+        "NeurIPS 2026",
+        "NeurIPS'26",
+        "NeurIPS\u201926 Workshop",
+        "accepted to nips 2026",
+    ):
+        assert neurips.search(comment), comment
+    for comment in ("NeurIPS, 26 pages", "NeurIPS 2025", "NeurIPS template, 26 pages"):
+        assert not neurips.search(comment), comment
+    assert icml.search("ICML 2027 poster") and not icml.search(
+        "Accepted to ICML. 27 pages, 8 figures"
+    )
