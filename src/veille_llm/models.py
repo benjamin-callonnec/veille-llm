@@ -18,6 +18,7 @@ class Item:
     upvotes: int = 0
     github_stars: int = 0  # stars of the repo itself, or of the repo HF links to the paper
     topics: tuple[str, ...] = ()  # GitHub topics of a repo; empty for other kinds
+    comment: str = ""  # arXiv comment of a paper; empty for other kinds
 
 
 @dataclass(frozen=True)

@@ -10,8 +10,11 @@ Each merge of `develop` into `main` gets a version (see `.claude/skills/release`
 ### Added
 - Reader reports (#46): a citation that names several pages, `[p.1, p.8]`, becomes one clickable button per page. The `present` skill now asks for one citation per page.
 
+- Conferences (#49): the weekly mail opens with an "Around NeurIPS 2026" section (up to 5 papers) when a big conference (NeurIPS, ICLR, CVPR, ICML, ACL) is close or just over, chosen from the arXiv comment ("Accepted at …"). In the daily run, papers tied to an active conference are classified first and skip the keyword prefilter. The daily budget is unchanged.
+
 ### Changed
 - Freshness alert (#40): `freshness.yml` also watches `weekly` and alerts when no run succeeded for 8 days.
+- Pipeline version 1.1.2 (patch): the prefilter and the classification order changed, no stored result is recomputed.
 
 ## [0.21.2] - 2026-11-25
 

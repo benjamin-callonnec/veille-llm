@@ -132,3 +132,43 @@ def test_items_dated_in_the_future_are_never_selected():
     store.save_verdicts([Verdict("future", True, 9, "paper", "h")])
     store.save_enrichments([Enrichment("future", "Cat", "Hook.", "Brief.")])
     assert go(store, Mailer()).nothing_to_send
+
+
+def test_the_dry_run_mail_carries_a_conference_section_without_duplicates(tmp_path):
+    store = Store(":memory:")
+    top = [
+        Item(
+            f"t{k}",
+            "src",
+            "paper",
+            f"Top{k}",
+            "S",
+            f"https://e.com/t{k}",
+            [],
+            "2026-11-20T00:00:00Z",
+        )
+        for k in range(8)
+    ]
+    tied = Item(
+        "tied",
+        "arxiv",
+        "paper",
+        "TiedPaper",
+        "S",
+        "https://e.com/tied",
+        [],
+        "2026-11-20T00:00:00Z",
+        comment="Accepted at NeurIPS 2026",
+    )
+    store.upsert_items([*top, tied], STAMP)
+    store.save_verdicts(
+        [Verdict(i.id, True, 9 if i in top else 1, "paper", "h") for i in [*top, tied]]
+    )
+    store.save_enrichments(
+        [Enrichment(i.id, "Cat", f"Hook {i.id}.", "Brief.") for i in [*top, tied]]
+    )
+    go(store, None, dry_run=True, out_dir=tmp_path)
+    text = (tmp_path / "newsletter.txt").read_text()
+    assert "Around NeurIPS 2026" in text
+    assert text.count("TiedPaper") == 1  # in the section only, never twice
+    assert "Accepted at" not in text  # the raw comment never reaches the mail

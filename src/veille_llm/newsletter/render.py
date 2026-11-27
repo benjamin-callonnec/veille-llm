@@ -1,5 +1,6 @@
 """Render the weekly mail (subject, HTML and text) from the selected items."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -7,6 +8,7 @@ from urllib.parse import urlparse
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from veille_llm.newsletter.select import Section
 from veille_llm.newsletter.subscribers import parse_addresses
 
 _TEMPLATES = Path(__file__).parent / "templates"
@@ -42,12 +44,20 @@ def _env() -> Environment:
     return env
 
 
-def render(items: list[dict], *, week: str, contact: str, now: datetime) -> Mail:
+def render(
+    items: list[dict],
+    *,
+    week: str,
+    contact: str,
+    now: datetime,
+    sections: Sequence[Section] = (),
+) -> Mail:
     valid, _ = parse_addresses(contact)
     if len(valid) != 1:
         raise ValueError("the unsubscribe contact must be one plain address")
     context = {
         "items": items,
+        "sections": sections,
         "week": week,
         "contact": valid[0],
         "date": now.strftime("%B %d, %Y").replace(" 0", " "),

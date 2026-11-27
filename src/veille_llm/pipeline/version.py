@@ -20,8 +20,8 @@ import re
 import sys
 from pathlib import Path
 
-PIPELINE_VERSION = "1.1.1"
-SOURCES_HASH = "da91df6414549d13"
+PIPELINE_VERSION = "1.1.2"
+SOURCES_HASH = "42d4b879ad409859"
 
 # Relative to src/veille_llm: the files whose changes can alter a stored result.
 RESULT_FILES = (

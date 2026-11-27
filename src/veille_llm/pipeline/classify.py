@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 
+from veille_llm.conferences import prioritise
 from veille_llm.llm import (
     DEFAULT_MODEL,
     LlmError,
@@ -116,9 +118,12 @@ async def classify_pending(
     max_batches: int | None = None,
     on_batch: Callable[[int, int], None] | None = None,
     provenance: Provenance = LEGACY,
+    now: datetime | None = None,
 ) -> ClassifyOutcome:
     outcome = ClassifyOutcome()
     pending = store.pending_classification()
+    if now is not None:  # papers tied to an active conference go first, whatever their age
+        pending = prioritise(pending, now)
     total = -(-len(pending) // BATCH_SIZE)
     if max_batches is not None:
         total = min(total, max_batches)

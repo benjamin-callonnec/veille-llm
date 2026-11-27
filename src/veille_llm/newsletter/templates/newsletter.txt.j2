@@ -1,6 +1,24 @@
 LLM watch - {{ date }}
 The {{ items|length }} best items of the week ({{ week }})
 
+{% for section in sections %}
+Around {{ section.conference }}
+
+{% for item in section.items %}
+- {{ item.hook }}
+{% if item.brief %}
+   {{ item.brief }}
+{% endif %}
+{% set href = item.url|safe_url %}
+   {{ item.title }}{% if href %}: {{ href }}{% endif %}
+
+
+{% endfor %}
+{% endfor %}
+{% if sections %}
+The best of the week
+
+{% endif %}
 {% for item in items %}
 {{ loop.index }}. {{ item.hook }}
    {% if item.category != 'Other' %}{{ item.category }} / {% endif %}{{ item.type }}

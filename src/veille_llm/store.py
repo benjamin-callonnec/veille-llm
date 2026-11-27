@@ -66,9 +66,10 @@ CREATE TABLE IF NOT EXISTS newsletter (
 """
 
 _ITEM_COLUMNS = (
-    "id, source, kind, title, summary, url, authors, published, upvotes, github_stars, topics"
+    "id, source, kind, title, summary, url, authors, published, upvotes, github_stars, topics, "
+    "comment"
 )
-_ITEM_WIDTH = 11  # number of columns in _ITEM_COLUMNS
+_ITEM_WIDTH = 12  # number of columns in _ITEM_COLUMNS
 
 
 def _item(row: sqlite3.Row | tuple) -> Item:
@@ -84,6 +85,7 @@ def _item(row: sqlite3.Row | tuple) -> Item:
         upvotes=row[8],
         github_stars=row[9],
         topics=tuple(json.loads(row[10])),
+        comment=row[11],
     )
 
 
@@ -118,6 +120,7 @@ class Store:
                 ("content_hash", "TEXT NOT NULL DEFAULT ''"),
                 ("github_stars", "INTEGER NOT NULL DEFAULT 0"),
                 ("topics", "TEXT NOT NULL DEFAULT '[]'"),
+                ("comment", "TEXT NOT NULL DEFAULT ''"),
             ],
         }
         for table in ("verdicts", "enrichments"):
@@ -166,8 +169,8 @@ class Store:
                         status = "duplicate"
                 self._conn.execute(
                     "INSERT INTO items (id, source, kind, title, summary, url, authors, "
-                    "published, upvotes, github_stars, topics, first_seen, status, content_hash) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                    "published, upvotes, github_stars, topics, comment, first_seen, status, "
+                    "content_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                     "ON CONFLICT(id) DO UPDATE SET upvotes = MAX(upvotes, excluded.upvotes), "
                     "github_stars = MAX(github_stars, excluded.github_stars)",
                     (
@@ -182,12 +185,23 @@ class Store:
                         i.upvotes,
                         i.github_stars,
                         json.dumps(list(i.topics)),
+                        i.comment,
                         now,
                         status,
                         digest,
                     ),
                 )
         return len({i.id for i in items} - existing)
+
+    def comments(self, ids: list[str]) -> dict[str, str]:
+        """The non-empty arXiv comments of these items."""
+        if not ids:
+            return {}
+        marks = ",".join("?" * len(ids))
+        rows = self._conn.execute(
+            f"SELECT id, comment FROM items WHERE id IN ({marks}) AND comment != ''", ids
+        )
+        return dict(rows)
 
     def refresh_signals(self, signals: dict[str, Signal]) -> None:
         """Raise (never lower) the upvotes and GitHub stars of known items, any status."""

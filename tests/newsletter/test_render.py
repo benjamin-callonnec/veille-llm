@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 from veille_llm.newsletter.render import render
+from veille_llm.newsletter.select import Section
 
 NOW = datetime(2026, 11, 23, 8, 0, tzinfo=UTC)
 
@@ -90,3 +91,48 @@ def test_the_other_category_is_not_shown_as_a_label():
     mail = build([item(category="Other")])
     assert "Other" not in mail.html and "Other" not in mail.text
     assert "paper" in mail.html.lower()
+
+
+HTML_BEFORE_SECTIONS = "8e64bafe5faa0e3a183e98bff22a2fa377feebc967f539e9ffb8fbe382efda78"
+TEXT_BEFORE_SECTIONS = (
+    "LLM watch - November 23, 2026\nThe 1 best items of the week (2026-W48)\n\n1. A bold hook.\n"
+    "Agents / paper\n   A brief.\n   A paper: https://example.com/a\n\n--\n"
+    "You get this because the author added you by hand.\n"
+    "To stop receiving it, write to me@example.org."
+)
+
+
+def test_without_sections_the_mail_is_unchanged():
+    import hashlib
+
+    mail = build(sections=[])
+    assert mail.text == TEXT_BEFORE_SECTIONS
+    assert hashlib.sha256(mail.html.encode()).hexdigest() == HTML_BEFORE_SECTIONS
+
+
+def test_a_section_adds_a_block_named_after_the_conference_in_both_versions():
+    section = Section("NeurIPS 2026", [item(id="c", title="Conf paper", hook="Conf hook.")])
+    mail = build(sections=[section])
+    for body in (mail.text, mail.html):
+        assert "Around NeurIPS 2026" in body
+        assert "Conf hook." in body and "Conf paper" in body
+    assert mail.subject == "LLM watch · 2026-W48 · 1 items"  # the subject is untouched
+
+
+def test_the_conference_name_is_escaped_in_html():
+    mail = build(sections=[Section("<b>X</b> 2026", [item(id="c")])])
+    assert "<b>X</b>" not in mail.html and "&lt;b&gt;X&lt;/b&gt;" in mail.html
+
+
+def test_the_conference_section_comes_before_the_weekly_items():
+    mail = build(sections=[Section("NeurIPS 2026", [item(id="c", hook="Conf hook.")])])
+    for body in (mail.text, mail.html):
+        assert body.index("Around NeurIPS 2026") < body.index("A bold hook.")
+
+
+def test_a_heading_separates_the_weekly_items_from_the_section_only_when_there_is_one():
+    with_section = build(sections=[Section("NeurIPS 2026", [item(id="c")])])
+    assert (
+        "The best of the week" in with_section.text and "The best of the week" in with_section.html
+    )
+    assert "The best of the week" not in build().text

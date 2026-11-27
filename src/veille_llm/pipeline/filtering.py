@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta
 
+from veille_llm.conferences import conference_of
 from veille_llm.models import Item
 
 PREFILTER = re.compile(
@@ -38,7 +39,8 @@ def deterministic_filter(
         if title_key in seen_titles:
             continue
         if item.kind == "paper" and item.upvotes < MIN_UPVOTES:
-            if not PREFILTER.search(f"{item.title} {item.summary}"):
+            keyword = PREFILTER.search(f"{item.title} {item.summary}")
+            if not keyword and not conference_of(item.comment, now):  # accepted at a big venue
                 continue
         seen_ids.add(item.id)
         seen_titles.add(title_key)
