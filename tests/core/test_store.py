@@ -1,3 +1,4 @@
+import dataclasses
 import sqlite3
 
 import pytest
@@ -493,3 +494,44 @@ def test_saving_a_mention_again_only_ever_raises_its_points(store):
 def test_an_item_without_mentions_exports_an_empty_list(store):
     publish(store, item("a"))
     assert store.published_items("2026-01-01T00:00:00Z")[0]["mentions"] == []
+
+
+def test_comment_round_trips_through_pending_classification(store):
+    store.upsert_items([dataclasses.replace(item("a"), comment="ICML 2026 oral")], NOW)
+    (got,) = store.pending_classification()
+    assert got.comment == "ICML 2026 oral"
+
+
+def test_comments_returns_only_non_empty_comments_for_the_ids(store):
+    store.upsert_items(
+        [dataclasses.replace(item("a"), comment="NeurIPS 2026"), item("b"), item("c")], NOW
+    )
+    assert store.comments(["a", "b", "zzz"]) == {"a": "NeurIPS 2026"}
+    assert store.comments([]) == {}
+
+
+def test_a_database_without_the_comment_column_is_migrated(tmp_path):
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(
+        "CREATE TABLE items (id TEXT PRIMARY KEY, source TEXT NOT NULL, kind TEXT NOT NULL,"
+        " title TEXT NOT NULL, summary TEXT NOT NULL, url TEXT NOT NULL, authors TEXT NOT NULL,"
+        " published TEXT NOT NULL, upvotes INTEGER NOT NULL DEFAULT 0, first_seen TEXT NOT NULL,"
+        " status TEXT NOT NULL DEFAULT 'new');"
+        "INSERT INTO items VALUES ('old','s','paper','T','S','u','[]','2026-11-20T00:00:00Z',4,"
+        "'2026-11-20T00:00:00Z','new');"
+    )
+    old.commit()
+    old.close()
+    store = Store(path)
+    (got,) = store.pending_classification()
+    assert got.comment == ""
+    assert store.comments(["old"]) == {}
+
+
+def test_catalogue_items_do_not_expose_the_comment(store):
+    store.upsert_items([dataclasses.replace(item("a"), comment="NeurIPS 2026")], NOW)
+    store.save_verdicts([verdict("a")])
+    store.save_enrichments([Enrichment("a", "Cat", "Hook.", "A brief.")])
+    (published,) = store.published_items("2026-01-01T00:00:00Z")
+    assert "comment" not in published
