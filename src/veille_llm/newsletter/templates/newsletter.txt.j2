@@ -1,17 +1,6 @@
 LLM watch - {{ date }}
 The {{ items|length }} best items of the week ({{ week }})
 
-{% for item in items %}
-{{ loop.index }}. {{ item.hook }}
-   {% if item.category != 'Other' %}{{ item.category }} / {% endif %}{{ item.type }}
-{% if item.brief %}
-   {{ item.brief }}
-{% endif %}
-{% set href = item.url|safe_url %}
-   {{ item.title }}{% if href %}: {{ href }}{% endif %}
-
-
-{% endfor %}
 {% for section in sections %}
 Around {{ section.conference }}
 
@@ -25,6 +14,21 @@ Around {{ section.conference }}
 
 
 {% endfor %}
+{% endfor %}
+{% if sections %}
+The best of the week
+
+{% endif %}
+{% for item in items %}
+{{ loop.index }}. {{ item.hook }}
+   {% if item.category != 'Other' %}{{ item.category }} / {% endif %}{{ item.type }}
+{% if item.brief %}
+   {{ item.brief }}
+{% endif %}
+{% set href = item.url|safe_url %}
+   {{ item.title }}{% if href %}: {{ href }}{% endif %}
+
+
 {% endfor %}
 --
 You get this because the author added you by hand.

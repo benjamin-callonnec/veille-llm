@@ -122,3 +122,17 @@ def test_a_section_adds_a_block_named_after_the_conference_in_both_versions():
 def test_the_conference_name_is_escaped_in_html():
     mail = build(sections=[Section("<b>X</b> 2026", [item(id="c")])])
     assert "<b>X</b>" not in mail.html and "&lt;b&gt;X&lt;/b&gt;" in mail.html
+
+
+def test_the_conference_section_comes_before_the_weekly_items():
+    mail = build(sections=[Section("NeurIPS 2026", [item(id="c", hook="Conf hook.")])])
+    for body in (mail.text, mail.html):
+        assert body.index("Around NeurIPS 2026") < body.index("A bold hook.")
+
+
+def test_a_heading_separates_the_weekly_items_from_the_section_only_when_there_is_one():
+    with_section = build(sections=[Section("NeurIPS 2026", [item(id="c")])])
+    assert (
+        "The best of the week" in with_section.text and "The best of the week" in with_section.html
+    )
+    assert "The best of the week" not in build().text

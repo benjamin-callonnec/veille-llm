@@ -10,25 +10,8 @@
     <div style="max-width:640px;margin:0 auto;padding:24px 16px;">
       <h1 style="margin:0 0 4px;font-size:24px;">LLM watch</h1>
       <p style="margin:0 0 24px;color:#5f5f5a;font:14px/1.4 system-ui,sans-serif;">{{ date }} · the {{ items|length }} best items of the week</p>
-{% for item in items %}
-      <div style="margin:0 0 24px;padding:16px;background:#ffffff;border:1px solid #e3e3dc;border-radius:10px;">
-        <p style="margin:0 0 6px;color:#5f5f5a;font:12px/1.3 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.04em;">{% if item.category != 'Other' %}{{ item.category }} · {% endif %}{{ item.type }}</p>
-        <p style="margin:0 0 8px;font-size:18px;line-height:1.35;"><strong>{{ item.hook }}</strong></p>
-{% if item.brief %}
-        <p style="margin:0 0 10px;color:#3a3a37;">{{ item.brief }}</p>
-{% endif %}
-        <p style="margin:0;font:14px/1.4 system-ui,sans-serif;">
-{% set href = item.url|safe_url %}
-{% if href %}
-          <a href="{{ href }}" style="color:#2f5fd0;">{{ item.title }}</a>
-{% else %}
-          {{ item.title }}
-{% endif %}
-        </p>
-      </div>
-{% endfor %}
 {% for section in sections %}
-      <h2 style="margin:32px 0 12px;font-size:18px;">Around {{ section.conference }}</h2>
+      <h2 style="margin:0 0 12px;font-size:18px;">Around {{ section.conference }}</h2>
 {% for item in section.items %}
       <div style="margin:0 0 24px;padding:16px;background:#ffffff;border:1px solid #e3e3dc;border-radius:10px;">
         <p style="margin:0 0 8px;font-size:18px;line-height:1.35;"><strong>{{ item.hook }}</strong></p>
@@ -45,6 +28,26 @@
         </p>
       </div>
 {% endfor %}
+{% endfor %}
+{% if sections %}
+      <h2 style="margin:8px 0 12px;font-size:18px;">The best of the week</h2>
+{% endif %}
+{% for item in items %}
+      <div style="margin:0 0 24px;padding:16px;background:#ffffff;border:1px solid #e3e3dc;border-radius:10px;">
+        <p style="margin:0 0 6px;color:#5f5f5a;font:12px/1.3 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.04em;">{% if item.category != 'Other' %}{{ item.category }} · {% endif %}{{ item.type }}</p>
+        <p style="margin:0 0 8px;font-size:18px;line-height:1.35;"><strong>{{ item.hook }}</strong></p>
+{% if item.brief %}
+        <p style="margin:0 0 10px;color:#3a3a37;">{{ item.brief }}</p>
+{% endif %}
+        <p style="margin:0;font:14px/1.4 system-ui,sans-serif;">
+{% set href = item.url|safe_url %}
+{% if href %}
+          <a href="{{ href }}" style="color:#2f5fd0;">{{ item.title }}</a>
+{% else %}
+          {{ item.title }}
+{% endif %}
+        </p>
+      </div>
 {% endfor %}
       <p style="margin:32px 0 0;color:#5f5f5a;font:12px/1.5 system-ui,sans-serif;">
         You get this because the author added you by hand.
