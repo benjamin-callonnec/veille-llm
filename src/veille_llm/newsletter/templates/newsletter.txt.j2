@@ -12,6 +12,20 @@ The {{ items|length }} best items of the week ({{ week }})
 
 
 {% endfor %}
+{% for section in sections %}
+Around {{ section.conference }}
+
+{% for item in section.items %}
+- {{ item.hook }}
+{% if item.brief %}
+   {{ item.brief }}
+{% endif %}
+{% set href = item.url|safe_url %}
+   {{ item.title }}{% if href %}: {{ href }}{% endif %}
+
+
+{% endfor %}
+{% endfor %}
 --
 You get this because the author added you by hand.
 To stop receiving it, write to {{ contact }}.

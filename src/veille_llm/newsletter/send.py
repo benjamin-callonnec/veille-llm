@@ -10,7 +10,7 @@ from email.message import EmailMessage
 from pathlib import Path
 
 from veille_llm.newsletter.render import Mail, render
-from veille_llm.newsletter.select import MIN_ITEMS, select_items, week_id
+from veille_llm.newsletter.select import MIN_ITEMS, select_items, select_sections, week_id
 from veille_llm.newsletter.smtp import Mailer, RecipientRefused
 from veille_llm.store import Store
 
@@ -64,7 +64,8 @@ def send_newsletter(
     if not items or len(items) < MIN_ITEMS:
         result.nothing_to_send = True  # quiet week: no mail, no error, no marker
         return result
-    mail = render(items, week=week, contact=contact, now=now)
+    sections = select_sections(store, now, exclude={i["id"] for i in items})
+    mail = render(items, week=week, contact=contact, now=now, sections=sections)
 
     if dry_run:
         out = out_dir or Path("build")
