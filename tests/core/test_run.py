@@ -496,3 +496,26 @@ def test_a_repo_already_known_is_not_looked_up_again(tmp_path):
     )  # fmt: skip
     assert looked_up == []
     assert json.loads(out.read_text())["items"][0]["mentions"][0]["points"] == 200
+
+
+def test_run_classifies_a_conference_paper_before_newer_items_fill_the_budget(tmp_path):
+    tied = Item(
+        "arxiv:t",
+        "arxiv",
+        "paper",
+        "LLM agents at scale",
+        "S",
+        "https://e.com/t",
+        [],
+        "2026-11-15T10:00:00Z",
+        comment="Accepted at NeurIPS 2026",
+    )
+    llm = Llm()
+    run(
+        Store(":memory:"),
+        tmp_path / "c.json",
+        [*[news(f"{n:02d}") for n in range(31)], tied],
+        llm,
+        max_batches=2,
+    )
+    assert "arxiv:t" in llm.classified_ids

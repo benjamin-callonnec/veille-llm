@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import UTC, datetime
 
 from veille_llm.llm import LlmError, LlmLimitError, RawReply
 from veille_llm.models import Item, Verdict
@@ -297,3 +298,37 @@ def test_a_repo_is_always_typed_github_and_its_topics_and_stars_reach_the_llm():
     data = json.loads(llm.prompts[0].split("<data>")[1].split("</data>")[0])
     assert data[0]["topics"] == ["mcp"] and data[0]["github_stars"] == 300
     assert "topics" not in data[1]
+
+
+def _tied_and_newer():
+    """Twenty newer items and one older item whose comment names an active conference."""
+    newer = [
+        Item(f"n{n:02d}", "src", "paper", "T", "S", "https://e.com/x", [], "2026-11-20T10:00:00Z")
+        for n in range(20)
+    ]
+    tied = Item(
+        "tied", "src", "paper", "T", "S", "https://e.com/x", [], "2026-11-10T10:00:00Z",
+        comment="Accepted at NeurIPS 2026",
+    )  # fmt: skip
+    return [*newer, tied]
+
+
+def _first_batch_ids(now):
+    store = Store(":memory:")
+    store.upsert_items(_tied_and_newer(), NOW)
+    seen = []
+
+    async def run(prompt, options):
+        seen.extend(ids_in_prompt(prompt))
+        return reply([entry(i) for i in ids_in_prompt(prompt)])
+
+    asyncio.run(classify_pending(store, runner=run, max_batches=1, now=now))
+    return seen
+
+
+def test_classify_pending_takes_conference_items_first_when_given_now():
+    assert "tied" in _first_batch_ids(datetime(2026, 11, 21, 12, tzinfo=UTC))
+
+
+def test_classify_pending_keeps_newest_first_without_now():
+    assert "tied" not in _first_batch_ids(None)

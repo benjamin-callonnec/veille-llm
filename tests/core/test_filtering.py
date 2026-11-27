@@ -1,3 +1,4 @@
+import dataclasses
 from datetime import UTC, datetime
 
 from veille_llm.models import Item
@@ -59,3 +60,8 @@ def test_keyword_needs_word_boundaries():
 
 def test_empty_input_returns_empty():
     assert keep([]) == []
+
+
+def test_keeps_a_keywordless_paper_tied_to_an_active_conference():
+    tied = dataclasses.replace(make("t"), comment="Accepted at NeurIPS 2026")  # window is open
+    assert keep([tied, make("plain")]) == ["t"]

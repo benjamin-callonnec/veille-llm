@@ -219,6 +219,7 @@ async def _run(
         max_batches=classify_cap,
         on_batch=classify_progress,
         provenance=classify_provenance(model),
+        now=now,
     )
     progress.endgroup()
     report.classified = classified.classified
