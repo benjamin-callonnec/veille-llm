@@ -20,7 +20,7 @@ export function withCsp(html: string, head = ""): string {
  * app nothing else (never HTML: a page, an extract, a figure, the short text around a citation, or a key):
  * - the page has the keyboard focus, so V and Escape never reach the app: they are passed up
  *   (not in a field, not with a modifier: Cmd+V is a paste);
- * - the citations `[p.4]`, `[p.4 "extract"]`, `[p.4 Figure 2]` of the text become buttons that
+ * - the citations `[p.4]`, `[p.4 "extract"]`, `[p.4 Figure 2]` and the page lists `[p.1, p.8]` (one button per page) of the text become buttons that
  *   show only `[p.4]` (the extract or the figure stays in the data of the button) (also the
  *   ones the report adds later: the page is watched); a click
  *   or Enter sends the citation up, a click anywhere else tells the app to close its preview.
@@ -29,7 +29,11 @@ export function withCsp(html: string, head = ""): string {
 const BRIDGE_JS = String.raw`(function(){
 if(window.__veilleBridge)return;window.__veilleBridge=1;
 function post(m){parent.postMessage(m,"*")}
-var RE=/\[p\.(\d{1,4})(?:\s+(?:["\u201c]([^"\u201d]{3,300})["\u201d]|(Figure|Table|Fig\.?)\s+(\d+(?:\.\d+)?)))?\s*\]/g;
+var RE=/\[p\.(\d{1,4})(?:\s+(?:["\u201c]([^"\u201d]{3,300})["\u201d]|(Figure|Table|Fig\.?)\s+(\d+(?:\.\d+)?)))?\s*\]|\[(p\.\d{1,4}(?:\s*(?:,|and)\s*p\.\d{1,4})+)\s*\]/g;
+function chip(p,q,k,n){var s=document.createElement("span");s.className="veille-cite";s.tabIndex=0;s.setAttribute("role","button");
+s.setAttribute("data-p",p);if(q)s.setAttribute("data-q",q);
+if(k){s.setAttribute("data-k",k.charAt(0).toLowerCase()==="t"?"table":"figure");s.setAttribute("data-n",n)}
+s.textContent="[p."+p+"]";return s}
 function around(s){var b=s.closest("li,p,td,th,figcaption,blockquote,h1,h2,h3,h4")||s.closest("section")||s.parentNode;
 var c=b&&b.cloneNode?b.cloneNode(true):null;
 if(c)c.querySelectorAll("style,script,noscript,title,desc").forEach(function(e){e.remove()});
@@ -43,10 +47,9 @@ if(!par||!par.closest||par.closest("script,style,textarea,svg,title,option,selec
 if(n.nodeValue.indexOf("[p.")>-1)nodes.push(n)}
 nodes.forEach(function(t){var text=t.nodeValue,last=0,frag=document.createDocumentFragment(),m;RE.lastIndex=0;
 while((m=RE.exec(text))){frag.appendChild(document.createTextNode(text.slice(last,m.index)));
-var s=document.createElement("span");s.className="veille-cite";s.tabIndex=0;s.setAttribute("role","button");
-s.setAttribute("data-p",m[1]);if(m[2])s.setAttribute("data-q",m[2]);
-if(m[3]){s.setAttribute("data-k",m[3].charAt(0).toLowerCase()==="t"?"table":"figure");s.setAttribute("data-n",m[4])}
-s.textContent="[p."+m[1]+"]";frag.appendChild(s);last=RE.lastIndex}
+if(m[5]){m[5].match(/\d+/g).forEach(function(d,i){if(i)frag.appendChild(document.createTextNode(", "));frag.appendChild(chip(d))})}
+else frag.appendChild(chip(m[1],m[2],m[3],m[4]));
+last=RE.lastIndex}
 if(last){frag.appendChild(document.createTextNode(text.slice(last)));t.parentNode.replaceChild(frag,t)}})}
 function wrap(){
 var st=document.createElement("style");st.textContent=".veille-cite{text-decoration:underline dotted;cursor:pointer}";

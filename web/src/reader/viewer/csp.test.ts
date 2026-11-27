@@ -47,6 +47,7 @@ beforeAll(() => {
     <svg id="chart" viewBox="0 0 10 10"><title>Chart [p.13]</title><text id="label">Accuracy 91% [p.5 Table 2]</text></svg>
     <select id="pick"><option>Option [p.14]</option></select>
     <section id="slide"><style>.card{color:red}</style><div>The cited claim lives in a bare block [p.15]</div></section>
+    <p id="pages">Both [p.21, p.22] and [p.23 and p.24], not [p.25, p.x] nor [p.26, ] nor [p.27, p.28 "mixed quote"]</p>
     <p id="plain">No citation here, just [p.x] and [brackets].</p>
     <textarea id="area">[p.9]</textarea>
     <style>/* [p.9] */</style>
@@ -74,6 +75,10 @@ test("every citation form becomes a button with its data", () => {
     "[p.9]",
     "[p.11]",
     "[p.15]",
+    "[p.21]",
+    "[p.22]",
+    "[p.23]",
+    "[p.24]",
   ]);
   expect(chips.every((c) => c.getAttribute("role") === "button" && c.tabIndex === 0)).toBe(true);
   expect(chip("[p.5]")?.dataset.q).toBe("an exact quote here");
@@ -149,7 +154,7 @@ test("installing it twice in the same page changes nothing", async () => {
   chip("[p.4]")?.click();
   await flush();
   expect(seen).toEqual([{ veilleCite: { page: 4 } }]);
-  expect(document.querySelectorAll(".veille-cite")).toHaveLength(8);
+  expect(document.querySelectorAll(".veille-cite")).toHaveLength(12);
 });
 
 test("a citation also sends the text around it (without the citations) to find the closest passage", async () => {
@@ -205,4 +210,18 @@ test("the text around a citation never includes the css or scripts of its slide"
   expect(seen).toEqual([
     { veilleCite: { page: 15, context: "The cited claim lives in a bare block" } },
   ]);
+});
+
+test("a list of pages becomes one button per page, a doubtful list stays as text", async () => {
+  const pages = document.getElementById("pages");
+  expect([...pages!.querySelectorAll(".veille-cite")].map((e) => e.textContent)).toEqual([
+    "[p.21]",
+    "[p.22]",
+    "[p.23]",
+    "[p.24]",
+  ]);
+  expect(pages?.textContent).toContain('[p.25, p.x] nor [p.26, ] nor [p.27, p.28 "mixed quote"]');
+  chip("[p.22]")?.click();
+  await flush();
+  expect(seen).toEqual([{ veilleCite: { page: 22, context: expect.stringContaining("Both") } }]);
 });

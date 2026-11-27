@@ -277,3 +277,7 @@ def test_the_export_shows_page_only_citations(client):
     assert "It rises [p.4]." in text and "an exact quote here" not in text
     # the stored report keeps the quote: the preview needs it
     assert "an exact quote here" in client.get(f"/api/items/a1/reports/{r['id']}").json()["html"]
+
+
+def test_plain_citations_leave_a_page_list_alone():
+    assert plain_citations("A [p.1, p.8] B [p.1 and p.4]") == "A [p.1, p.8] B [p.1 and p.4]"
