@@ -15,7 +15,7 @@ A = Conference(
 )
 B = Conference(
     "Beta 2026",
-    re.compile(r"beta\W{0,3}(20)?26|alpha", re.I),
+    re.compile(r"beta\W{0,3}(20)?26", re.I),
     date(2026, 12, 11),
     date(2026, 12, 13),
 )
